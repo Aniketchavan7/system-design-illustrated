@@ -78,30 +78,30 @@ All explanations here are written from scratch in plain language. The books are 
 
 | # | Concept | Status | What you'll learn | Read more |
 | :-: | :--- | :-: | :--- | :--- |
-| 01 | [Client–server networking](./01-client-server-networking/) | 🟡 | TCP vs UDP, HTTP/1.1 → 2 → 3, WebSockets, gRPC | UDS: reliable & secure links, APIs |
-| 02 | [DNS](./02-domain-name-system/) | 🟡 | How `google.com` turns into an IP address | UDS: discovery |
-| 03 | [Load balancing](./03-load-balancing/) | 🟡 | L4 vs L7, round-robin, least-connections, health checks | UDS: network load balancing · WSSE ch 3 |
-| 04 | [API gateways & proxies](./04-api-gateways-and-proxies/) | 🟡 | Reverse proxies, TLS termination, auth at the edge | WSSE ch 4 |
+| 01 | [Client–server networking](./01-client-server-networking/) | ✅ | TCP vs UDP, HTTP/1.1 → 2 → 3, WebSockets, gRPC | UDS: reliable & secure links, APIs |
+| 02 | [DNS](./02-domain-name-system/) | ✅ | How `google.com` turns into an IP address | UDS: discovery |
+| 03 | [Load balancing](./03-load-balancing/) | ✅ | L4 vs L7, round-robin, least-connections, health checks | UDS: network load balancing · WSSE ch 3 |
+| 04 | [API gateways & proxies](./04-api-gateways-and-proxies/) | ✅ | Reverse proxies, TLS termination, auth at the edge | WSSE ch 4 |
 | 05 | [Rate limiting](./05-rate-limiting/) | ✅ | Token bucket, leaky bucket, fixed & sliding windows | SDI-1 ch 4 · UDS: upstream resiliency |
 
 ### Part 2 · Storing data
 
 | # | Concept | Status | What you'll learn | Read more |
 | :-: | :--- | :-: | :--- | :--- |
-| 06 | [SQL vs NoSQL](./06-relational-and-non-relational-databases/) | 🟡 | Relational, document, key-value, column, graph — when to use which | DDIA ch 2 · WSSE ch 5 |
-| 09 | [Storage engines & indexes](./09-storage-engines-and-indexing/) | 🟡 | B-trees vs LSM-trees, WAL, Bloom filters | DDIA ch 3 |
+| 06 | [SQL vs NoSQL](./06-relational-and-non-relational-databases/) | ✅ | Relational, document, key-value, column, graph — when to use which | DDIA ch 2 · WSSE ch 5 |
+| 09 | [Storage engines & indexes](./09-storage-engines-and-indexing/) | ✅ | B-trees vs LSM-trees, WAL, Bloom filters | DDIA ch 3 |
 | — | Encoding & schema evolution | ⬜ | JSON vs Protobuf/Avro, changing a schema without breaking old clients | DDIA ch 4 |
 | — | Transactions & isolation levels | ⬜ | ACID, dirty reads, lost updates, write skew, serializability | DDIA ch 7 · UDS: transactions |
-| 07 | [Replication](./07-database-replication/) | 🟡 | Leader–follower, multi-leader, leaderless; replication lag | DDIA ch 5 · UDS: replication |
-| 08 | [Partitioning / sharding](./08-database-partitioning/) | 🟡 | Range vs hash partitioning, hot spots, rebalancing | DDIA ch 6 · UDS: partitioning |
+| 07 | [Replication](./07-database-replication/) | ✅ | Leader–follower, multi-leader, leaderless; replication lag | DDIA ch 5 · UDS: replication |
+| 08 | [Partitioning / sharding](./08-database-partitioning/) | ✅ | Range vs hash partitioning, hot spots, rebalancing | DDIA ch 6 · UDS: partitioning |
 | — | Blob / object storage | ⬜ | How S3-style storage keeps huge files durable | SDI-2 ch 9 · UDS: file storage |
 
 ### Part 3 · Caching & edge
 
 | # | Concept | Status | What you'll learn | Read more |
 | :-: | :--- | :-: | :--- | :--- |
-| 10 | [Caching patterns](./10-caching-patterns/) | 🟡 | Cache-aside, write-through, write-behind, write-around | WSSE ch 6 · UDS: caching |
-| 11 | [Eviction & invalidation](./11-cache-eviction-and-invalidation/) | 🟡 | LRU, LFU, TTLs, cache stampedes | WSSE ch 6 |
+| 10 | [Caching patterns](./10-caching-patterns/) | ✅ | Cache-aside, write-through, write-behind, write-around | WSSE ch 6 · UDS: caching |
+| 11 | [Eviction & invalidation](./11-cache-eviction-and-invalidation/) | ✅ | LRU, LFU, TTLs, cache stampedes | WSSE ch 6 |
 | 12 | [CDNs](./12-content-delivery-networks/) | 🟡 | Edge locations, pull vs push, HTTP cache headers | UDS: HTTP caching, CDNs · WSSE ch 3 |
 
 ### Part 4 · Distributed-systems thinking
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 1 deep · 24 draft · 24 planned
+**Progress:** 11 deep · 14 draft · 24 planned
 
 ---
 
