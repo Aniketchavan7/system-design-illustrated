@@ -58,7 +58,7 @@ flowchart TD
     end
 
     Router -->|Bucket 0| S0
-    Router -->|Bucket 1 (4920 matches here)| S1
+    Router -->|"Bucket 1 (4920 matches here)"| S1
     Router -->|Bucket 2| S2
 ```
 

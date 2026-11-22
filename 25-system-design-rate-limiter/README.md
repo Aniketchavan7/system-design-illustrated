@@ -96,9 +96,9 @@ flowchart TD
 
     subgraph BackendTier["Protected Core Microservices"]
         Service["🏢 Core Application Database & APIs"]
-        Redis -->|Under Limit: Return (true, remaining)| GW1
-        GW1 -->|2. HTTP 200 OK -> Forward| Service
-        Redis -.->|Over Limit: Return (false, retry_after)| GW2
+        Redis -->|"Under Limit: Return (true, remaining)"| GW1
+        GW1 -->|"2. HTTP 200 OK -> Forward"| Service
+        Redis -.->|"Over Limit: Return (false, retry_after)"| GW2
         GW2 -.->|2. Return HTTP 429 Too Many Requests| C2
     end
 

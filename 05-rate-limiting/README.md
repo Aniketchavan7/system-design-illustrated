@@ -234,8 +234,8 @@ All five algorithms take a fake clock (`now`) as input, so the run is repeatable
   - Both windows were legally under 100, but the server just suffered **200 requests in 2 seconds**—a 2× traffic burst that can crash the database.
 - **The Sliding Window Counter Solution:**
   - Instead of resetting cleanly at the boundary, it calculates an estimated count based on the overlap with the previous window:
-  $$	ext{Count} = 	ext{Current Window Count} + 	ext{Previous Window Count} 	imes (1 - 	ext{Time Elapsed in Current Window})$$
-  - At 12:01:15 ($25\%$ into the new minute), the weight of the previous minute is $75\%$. If the user sent 100 requests at 12:00:59, their estimated count is $0 + 100 	imes 0.75 = 75$, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory ($O(1)$).
+  $$\text{Count} = \text{Current Window Count} + \text{Previous Window Count} \times (1 - \text{Time Elapsed in Current Window})$$
+  - At 12:01:15 ($25\%$ into the new minute), the weight of the previous minute is $75\%$. If the user sent 100 requests at 12:00:59, their estimated count is $0 + 100 \times 0.75 = 75$, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory ($O(1)$).
 
 </details>
 

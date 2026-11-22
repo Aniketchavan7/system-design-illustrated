@@ -87,7 +87,7 @@ flowchart TD
 
     subgraph Playback["4. Client Playback Tier"]
         Edge -->|1. Fetch master.m3u8| Player["📱 Client Player (ABR Engine)"]
-        Player -->|2. Stream 1080p chunks (Wi-Fi)| Edge
+        Player -->|"2. Stream 1080p chunks (Wi-Fi)"| Edge
         Player -.->|3. Auto-downgrade to 480p on 4G| Edge
     end
 

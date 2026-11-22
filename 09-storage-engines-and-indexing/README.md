@@ -68,7 +68,7 @@ flowchart TD
 
         Write --> WAL
         Write --> Mem
-        Mem -->|When MemTable fills (e.g. 64 MB)| Flush
+        Mem -->|"When MemTable fills (e.g. 64 MB)"| Flush
     end
 
     subgraph DiskStorage["On-Disk Leveled Compaction"]

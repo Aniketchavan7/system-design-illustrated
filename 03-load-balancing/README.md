@@ -152,7 +152,7 @@ flowchart TD
     end
 
     DNS --> LB1
-    LB1 -.->|If Primary crashes, Secondary claims Virtual IP in < 1s| LB2
+    LB1 -.->|"If Primary crashes, Secondary claims Virtual IP in < 1s"| LB2
 ```
 
 1. **VRRP (Virtual Router Redundancy Protocol) / Keepalived:** An Active and a Standby load balancer share a single **Virtual IP (VIP)**. The Standby listens to a continuous heartbeat from the Primary. If the Primary misses 3 heartbeats ($< 1\text{ second}$), the Standby instantly assumes ownership of the Virtual IP via ARP broadcast.

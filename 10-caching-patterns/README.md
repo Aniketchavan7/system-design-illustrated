@@ -59,7 +59,7 @@ flowchart TD
     end
 
     subgraph PatternC["3. Write-Behind / Write-Back (High Write Speed)"]
-        App3["📱 App"] -->|1. Fast Write (< 0.1ms)| Redis3["⚡ Cache"]
+        App3["📱 App"] -->|"1. Fast Write (< 0.1ms)"| Redis3["⚡ Cache"]
         Redis3 -.->|2. Async Batch Flush in background| DB3[("💾 DB")]
     end
 ```

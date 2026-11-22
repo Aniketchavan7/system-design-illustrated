@@ -89,8 +89,8 @@ flowchart TD
 
     subgraph CommitLog["2. Partitioned Commit Log (Apache Kafka / Redpanda)"]
         P2["Producer"] --> L["Topic: 'orders' (Partition 0)<br/>[Offset 0 | Offset 1 | Offset 2 | Offset 3 | Offset 4]"]
-        L -->|Offset: 4 (Live)| CG1["💳 Payment Service (Consumer Group A)"]
-        L -->|Offset: 2 (Lagging)| CG2["📊 Analytics Pipeline (Consumer Group B)"]
+        L -->|"Offset: 4 (Live)"| CG1["💳 Payment Service (Consumer Group A)"]
+        L -->|"Offset: 2 (Lagging)"| CG2["📊 Analytics Pipeline (Consumer Group B)"]
         L -.->|Rewind to Offset 0| CG3["🔄 Bug Fix Replay (Consumer Group C)"]
     end
 

@@ -74,12 +74,12 @@ flowchart TD
     Start["Distributed System Request"] --> IsPartition{"Is there a Network Partition (P)?"}
 
     %% Partition Branch
-    IsPartition -->|YES (Failure Mode)| PartitionTradeoff{"Prioritize What?"}
+    IsPartition -->|"YES (Failure Mode)"| PartitionTradeoff{"Prioritize What?"}
     PartitionTradeoff -->|Consistency| CP["🔒 CP System (e.g. Spanner, CockroachDB)<br/>• Reject writes in minority partition<br/>• Guarantee Linearizability<br/>• Sacrifices Availability"]
     PartitionTradeoff -->|Availability| AP["⚡ AP System (e.g. Cassandra, DynamoDB)<br/>• Accept writes locally on all nodes<br/>• Return stale data if needed<br/>• Sacrifices Consistency (Eventual)"]
 
     %% Normal Operation Branch
-    IsPartition -->|NO (Normal 99.9% State)| ElseTradeoff{"In Normal Times, Prioritize What?"}
+    IsPartition -->|"NO (Normal 99.9% State)"| ElseTradeoff{"In Normal Times, Prioritize What?"}
     ElseTradeoff -->|Low Latency| EL["🚀 Else: Latency (PA/EL or PC/EL)<br/>• Asynchronous replication ACK<br/>• Sub-millisecond response time<br/>• Small risk of stale reads"]
     ElseTradeoff -->|Strong Consistency| EC["🛡️ Else: Consistency (PC/EC or PA/EC)<br/>• Synchronous quorum round-trips<br/>• Higher latency (20-100ms)<br/>• Guaranteed fresh reads"]
 

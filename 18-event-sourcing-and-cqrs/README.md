@@ -78,7 +78,7 @@ flowchart LR
     subgraph QuerySide["3. Query Side (Read Model)"]
         Bus -->|4. Consume| Projector["Background Projector"]
         Projector -->|5. Update View| ReadDB[("📖 Read DB (Redis/SQL)<br/>Denormalized Projections")]
-        ClientRead["👤 Client"] -->|6. Query Balance (0.5ms)| ReadDB
+        ClientRead["👤 Client"] -->|"6. Query Balance (0.5ms)"| ReadDB
     end
 
     style CommandSide fill:#161b22,stroke:#58a6ff,stroke-width:2px;

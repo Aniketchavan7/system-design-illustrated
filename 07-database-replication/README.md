@@ -55,12 +55,12 @@ flowchart TD
         F2[("📖 Read Replica 2 (Follower)<br/>Reads Only")]
     end
 
-    App -->|1. Writes (INSERT, UPDATE)| Leader
+    App -->|"1. Writes (INSERT, UPDATE)"| Leader
     Leader -->|2. Asynchronous WAL / Binlog Stream| F1
     Leader -->|2. Asynchronous WAL / Binlog Stream| F2
 
-    App -->|3. Reads (SELECT) - 95% of traffic| F1
-    App -->|3. Reads (SELECT) - 95% of traffic| F2
+    App -->|"3. Reads (SELECT) - 95% of traffic"| F1
+    App -->|"3. Reads (SELECT) - 95% of traffic"| F2
 ```
 
 1. All write transactions (`INSERT`, `UPDATE`, `DELETE`) are processed exclusively by the Primary Leader.

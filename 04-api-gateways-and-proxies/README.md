@@ -60,7 +60,7 @@ The API Gateway solves this by centralizing all cross-cutting perimeter duties i
 
 ```mermaid
 flowchart LR
-    Client["📱 Mobile App (Public Internet)"] -->|1. HTTPS Request<br/>Bearer JWT Token| GW["🚪 API Gateway<br/>(Kong / Envoy / Traefik)"]
+    Client["📱 Mobile App (Public Internet)"] -->|"1. HTTPS Request<br/>Bearer JWT Token"| GW["🚪 API Gateway<br/>(Kong / Envoy / Traefik)"]
 
     subgraph CrossCutting["Edge Perimeter Responsibilities"]
         direction TB
