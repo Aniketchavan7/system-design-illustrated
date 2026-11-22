@@ -11,6 +11,10 @@ DNS is the decentralized naming system for computers and services connected to t
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/dns_lookup.gif" alt="DNS Lookup Animation" width="100%" />
+</p>
 ```mermaid
 sequenceDiagram
     autonumber

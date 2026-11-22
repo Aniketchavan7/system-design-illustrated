@@ -11,6 +11,10 @@ This module explains the foundational protocols powering client-server interacti
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/tcp_handshake.gif" alt="TCP Handshake Animation" width="100%" />
+</p>
 ```mermaid
 sequenceDiagram
     autonumber

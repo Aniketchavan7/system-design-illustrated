@@ -11,6 +11,10 @@ Explores how to design resilient distributed systems that withstand inevitable h
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/circuit_breaker.gif" alt="Circuit Breaker State Transitions Animation" width="100%" />
+</p>
 ```mermaid
 stateDiagram-v2
     [*] --> Closed: Normal Operation

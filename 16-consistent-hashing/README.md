@@ -11,6 +11,10 @@ Covers how consistent hashing maps keys and servers onto an abstract ring topolo
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/consistent_hashing.gif" alt="Consistent Hashing Ring Animation" width="100%" />
+</p>
 ```mermaid
 flowchart TD
     subgraph HashRing["Consistent Hashing Ring (0 to 2^32 - 1)"]

@@ -11,6 +11,10 @@ Load balancers distribute incoming network traffic across multiple servers to en
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/load_balancer.gif" alt="Dynamic Load Balancing Animation" width="100%" />
+</p>
 ```mermaid
 flowchart TD
     Users["👥 Inbound Client Traffic"] --> LB["⚖️ Load Balancer (Nginx / HAProxy / ALB)"]

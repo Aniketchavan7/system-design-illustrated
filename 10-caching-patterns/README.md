@@ -11,6 +11,10 @@ Explains caching design patterns (Cache-Aside, Write-Through, Write-Behind, Writ
 ---
 
 ## 📊 Visual Architecture Diagram
+
+<p align="center">
+  <img src="./assets/cache_aside.gif" alt="Cache-Aside Pattern Animation" width="100%" />
+</p>
 ```mermaid
 flowchart TD
     subgraph CacheAsidePattern["Cache-Aside Pattern (Lazy Loading)"]

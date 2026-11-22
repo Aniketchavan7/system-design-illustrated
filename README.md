@@ -27,6 +27,10 @@ New topics are added **one at a time, as we run into them**. See [Adding a new c
 
 ## 🗺️ The big picture
 
+<p align="center">
+  <img src="./assets/animated_system_flow.gif" alt="Live Request Lifecycle Simulation" width="100%" />
+</p>
+
 Almost every large web app is some combination of the boxes below. Each part of the syllabus zooms into one area of this picture.
 
 ```mermaid

@@ -35,6 +35,10 @@ It also helps with **cost** (paid APIs or LLM calls you forward to) and **fairne
 
 ## 🖼️ Picture it
 
+<p align="center">
+  <img src="./assets/token_bucket.gif" alt="Token Bucket Animation" width="100%" />
+</p>
+
 ```mermaid
 sequenceDiagram
     autonumber
