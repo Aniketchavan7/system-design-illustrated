@@ -113,7 +113,7 @@ All explanations here are written from scratch in plain language. The books are 
 | 13 | [CAP & PACELC](./13-cap-and-pacelc-theorems/) | ✅ | The real trade-off during (and without) a network partition | DDIA ch 9 |
 | 14 | [Consistency models](./14-consistency-models/) | ✅ | Linearizable, causal, eventual — in pictures | DDIA ch 9 · UDS: replication |
 | 15 | [Consensus & leader election](./15-consensus-and-leader-election/) | ✅ | Raft in plain language, quorums | DDIA ch 9 · UDS: leader election |
-| 16 | [Consistent hashing](./16-consistent-hashing/) | 🟡 | Hash rings and virtual nodes | SDI-1 ch 5 |
+| 16 | [Consistent hashing](./16-consistent-hashing/) | ✅ | Hash rings and virtual nodes | SDI-1 ch 5 |
 | — | Unique ID generation | ⬜ | Auto-increment vs UUID vs Snowflake IDs | SDI-1 ch 7 |
 
 ### Part 5 · Async processing & microservices
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 15 deep · 10 draft · 24 planned
+**Progress:** 16 deep · 9 draft · 24 planned
 
 ---
 
