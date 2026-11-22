@@ -179,7 +179,7 @@ Requests pour into a funnel (a queue) that holds 5. They drip out to the server 
 - **"Read count, then write count+1" as two steps.** Two servers both read `99`, both allow, and you're at 101. → Use an **atomic** operation (Redis `INCR`, or a Lua script that checks and increments in one step).
 - **Returning 500 or just dropping the connection.** → Return **429** with `Retry-After`, so clients know it's on purpose and when to come back.
 - **Clients retrying immediately after a 429.** That makes the storm worse. → Retry with **exponential backoff + jitter** ([module 20](../20-fault-tolerance-and-resilience/)).
-- **Taking the whole API down when the rate limiter's Redis is down.** → Decide up front: *fail open* (allow traffic and log a warning) or *fail closed* (reject everything). Most public APIs fail open.
+- **Taking the whole API down when the rate limiter's Redis is down.** → Decide up front: *fail open* (allow traffic and log a warning) or *fail closed* (reject everything). Failing open keeps the product working; failing closed is safer for things like login protection.
 
 ## 💻 Try it yourself
 
@@ -247,7 +247,6 @@ Many people can share one public IP: an office network, a university or a mobile
 
 - **SDI-1 ch 4**, *Design a rate limiter*: an interview walk-through of these algorithms plus a full distributed design.
 - **UDS**, *Upstream resiliency* chapter: rate limiting alongside load shedding and load leveling, as ways to protect a service from its callers.
-- **WSSE ch 4**, *Web services*: where throttling fits in API design.
 
 ## 🔗 Related
 
