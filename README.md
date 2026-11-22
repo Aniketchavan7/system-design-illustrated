@@ -139,7 +139,7 @@ All explanations here are written from scratch in plain language. The books are 
 
 | # | Concept | Status | What you'll learn | Read more |
 | :-: | :--- | :-: | :--- | :--- |
-| 21 | [URL shortener](./21-system-design-url-shortener/) | 🟡 | Base62 IDs, read-heavy caching, redirects | SDI-1 ch 8 |
+| 21 | [URL shortener](./21-system-design-url-shortener/) | ✅ | Base62 IDs, read-heavy caching, redirects | SDI-1 ch 8 |
 | 22 | [Distributed key-value store / cache](./22-system-design-in-memory-cache/) | 🟡 | Consistent hashing + replication + eviction together | SDI-1 ch 6 |
 | 23 | [Chat app](./23-system-design-chat-app/) | 🟡 | WebSockets, presence, message storage | SDI-1 ch 12 |
 | 24 | [Video streaming](./24-system-design-video-streaming/) | 🟡 | Upload, transcoding, adaptive bitrate | SDI-1 ch 14 |
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 20 deep · 5 draft · 24 planned
+**Progress:** 21 deep · 4 draft · 24 planned
 
 ---
 
