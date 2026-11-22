@@ -205,6 +205,78 @@ All five algorithms take a fake clock (`now`) as input, so the run is repeatable
 - **Login pages:** "Too many attempts, try again in 15 minutes."
 - **Nginx** (`limit_req`) and **Cloudflare** rate-limiting rules.
 
+## 🎯 Top Interview Questions & Deep Answers
+
+### Q1: "How would you design a distributed rate limiter running across 50 API Gateway servers without race conditions?"
+
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+
+- **The Problem:** If 50 gateway nodes each keep an in-memory counter, a client sending 100 requests can make 50 × 100 = 5,000 requests total. Conversely, if nodes coordinate using naive read-then-write steps (`count = GET user; if count < limit: SET user (count + 1)`), concurrent requests produce classic **race conditions** allowing double the limit.
+- **The Solution (Centralized Redis + Atomic Lua Script):**
+  1. Maintain counters in a centralized **Redis Cluster**.
+  2. Execute the sliding window or token bucket algorithm inside an **atomic Redis Lua script** (`EVALSHA`). Because Redis executes Lua scripts as a single atomic transaction on a single thread, no two requests can interleave between checking the count and incrementing it.
+  3. **High-Performance Optimization:** Use a local in-memory filter (e.g., Token Bucket with synchronized batches) to reject obvious denial-of-service spam at the edge before even pinging Redis.
+
+</details>
+
+---
+
+### Q2: "What is the 'window boundary spike' problem in Fixed Window Counter, and how does Sliding Window Counter solve it?"
+
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+
+- **The Fixed Window Flaw:** Suppose the limit is 100 requests per minute, resetting at 12:00:00, 12:01:00, etc.
+  - A user sends 100 requests at 12:00:59.
+  - The counter resets to 0 at 12:01:00.
+  - The user immediately sends 100 requests at 12:01:01.
+  - Both windows were legally under 100, but the server just suffered **200 requests in 2 seconds**—a 2× traffic burst that can crash the database.
+- **The Sliding Window Counter Solution:**
+  - Instead of resetting cleanly at the boundary, it calculates an estimated count based on the overlap with the previous window:
+  $$	ext{Count} = 	ext{Current Window Count} + 	ext{Previous Window Count} 	imes (1 - 	ext{Time Elapsed in Current Window})$$
+  - At 12:01:15 ($25\%$ into the new minute), the weight of the previous minute is $75\%$. If the user sent 100 requests at 12:00:59, their estimated count is $0 + 100 	imes 0.75 = 75$, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory ($O(1)$).
+
+</details>
+
+---
+
+### Q3: "What happens if your centralized Redis rate-limiter cluster crashes? Do you fail open or fail closed?"
+
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+
+This is an architectural trade-off that depends strictly on the business criticality of the endpoint:
+
+1. **Fail Open (Recommended for General APIs & E-Commerce):**
+   - If Redis times out or throws an error, the Gateway catches the exception, logs an alert, and **allows the request through to the backend**.
+   - *Why:* You never want a rate-limiting infrastructure blip to prevent paying customers from buying products or reading their dashboard.
+2. **Fail Closed (Mandatory for High-Security / Expensive Endpoints):**
+   - For `/login`, `/password-reset`, or `/ai/expensive-llm-generate`, the Gateway **rejects incoming traffic** if Redis is unreachable.
+   - *Why:* Failing open on login endpoints would leave your database completely exposed to credential-stuffing and brute-force password cracking attacks.
+
+</details>
+
+---
+
+### Q4: "How do you rate-limit unauthenticated users sharing a corporate NAT IP or mobile carrier without blocking an entire office?"
+
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+
+If you rate-limit purely by `client_ip`, 5,000 employees working in the same corporate office or on the same mobile network share a single public NAT IP address, and one person's script could lock out the entire company.
+
+**Defense in Depth Strategy:**
+1. **Multi-Factor Fingerprinting:** Combine IP address with client attributes: `hash(IP + User-Agent + Accept-Language + Client-Fingerprint-Cookie)`.
+2. **Dual-Tier Limits:**
+   - A relaxed **broad limit** per IP address (e.g., 5,000 requests/min to accommodate corporate NATs).
+   - A strict **granular limit** per anonymous browser session cookie or device ID (e.g., 60 requests/min).
+3. **Proof-of-Work / CAPTCHA Fallback:** When an IP crosses the warning threshold, instead of hard-rejecting with 429, serve a Cloudflare Turnstile challenge. Legitimate humans pass in 1 second; automated scrapers are halted.
+
+</details>
+
+---
+
 ## ✅ Check yourself
 
 1. A rule says "10 requests per minute" and uses a fixed window. What's the most requests a client could get through in 2 seconds?
