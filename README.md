@@ -123,7 +123,7 @@ All explanations here are written from scratch in plain language. The books are 
 | 17 | [Message queues & logs](./17-message-queues/) | ✅ | Queues vs logs, consumer groups, at-least-once vs exactly-once | DDIA ch 11 · UDS: messaging · WSSE ch 7 · SDI-2 ch 4 |
 | 18 | [Event sourcing & CQRS](./18-event-sourcing-and-cqrs/) | ✅ | Storing events instead of state; separate read models | DDIA ch 11–12 |
 | 19 | [Distributed transactions](./19-distributed-transactions/) | ✅ | Two-phase commit vs sagas | DDIA ch 9 · UDS: asynchronous transactions |
-| 20 | [Fault tolerance & resilience](./20-fault-tolerance-and-resilience/) | 🟡 | Timeouts, retries with backoff, circuit breakers, bulkheads | UDS: downstream & upstream resiliency |
+| 20 | [Fault tolerance & resilience](./20-fault-tolerance-and-resilience/) | ✅ | Timeouts, retries with backoff, circuit breakers, bulkheads | UDS: downstream & upstream resiliency |
 | — | Batch vs stream processing | ⬜ | MapReduce-style jobs vs real-time pipelines | DDIA ch 10–11 |
 | — | Microservices & service boundaries | ⬜ | When to split, and what it costs | UDS: microservices |
 | — | Search & indexing | ⬜ | Inverted indexes, how a search box works | WSSE ch 8 |
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 19 deep · 6 draft · 24 planned
+**Progress:** 20 deep · 5 draft · 24 planned
 
 ---
 
