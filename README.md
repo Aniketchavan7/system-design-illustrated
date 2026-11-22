@@ -102,7 +102,7 @@ All explanations here are written from scratch in plain language. The books are 
 | :-: | :--- | :-: | :--- | :--- |
 | 10 | [Caching patterns](./10-caching-patterns/) | ✅ | Cache-aside, write-through, write-behind, write-around | WSSE ch 6 · UDS: caching |
 | 11 | [Eviction & invalidation](./11-cache-eviction-and-invalidation/) | ✅ | LRU, LFU, TTLs, cache stampedes | WSSE ch 6 |
-| 12 | [CDNs](./12-content-delivery-networks/) | 🟡 | Edge locations, pull vs push, HTTP cache headers | UDS: HTTP caching, CDNs · WSSE ch 3 |
+| 12 | [CDNs](./12-content-delivery-networks/) | ✅ | Edge locations, pull vs push, HTTP cache headers | UDS: HTTP caching, CDNs · WSSE ch 3 |
 
 ### Part 4 · Distributed-systems thinking
 
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 11 deep · 14 draft · 24 planned
+**Progress:** 12 deep · 13 draft · 24 planned
 
 ---
 
