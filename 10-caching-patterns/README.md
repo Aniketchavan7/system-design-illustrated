@@ -6,7 +6,7 @@
 ---
 
 ## 🎯 What & Why
-Explains caching design patterns (Cache-Aside, Write-Through, Write-Behind, Write-Around) to drastically reduce database load and cut request latency from milliseconds to microseconds.
+Explains caching design patterns (Cache-Aside, Write-Through, Write-Behind, Write-Around) to reduce database load and cut read latency from tens of milliseconds (a database query) to around a millisecond or less (an in-memory lookup).
 
 ---
 
@@ -25,7 +25,7 @@ flowchart TD
         App -->|1. Check Cache| Cache
         Cache -.->|2. Cache Miss| App
         App -->|3. Query DB| DB
-        DB -->>|4. Return Data| App
+        DB -->|4. Return Data| App
         App -->|5. Write to Cache with TTL| Cache
     end
 ```
@@ -43,7 +43,7 @@ flowchart TD
 
 2. **Write-Through**:
    - The application writes data to the cache, and the cache synchronously writes to the database before acknowledging success.
-   - **Trade-off**: Data in cache is never stale; writes suffer higher latency because two systems are updated synchronously.
+   - **Trade-off**: The cache stays fresh as long as **every** write goes through it; writes are slower because two systems are updated before replying.
 
 3. **Write-Behind (Write-Back)**:
    - The application writes directly to the cache, which acknowledges immediately.
@@ -107,7 +107,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Data Freshness**: Always configure appropriate TTLs to balance staleness vs database load.
-- **Resource Limits**: Size in-memory clusters appropriately and set clear eviction policies.
-- **Consistency**: Understand the trade-offs between sync writes and async replication.
+## ⚖️ Trade-offs
+
+| Pattern | Reads | Writes | Risk |
+| :--- | :--- | :--- | :--- |
+| **Cache-aside** | First read of each key is slow (miss) | Go to the DB; then delete or update the cached copy | Stale data if you forget to invalidate; the most common and flexible pattern |
+| **Write-through** | Fresh, fast | Slower: cache + DB on every write | Cache fills with data nobody reads |
+| **Write-behind** | Fresh, fast | Fastest: acknowledged from memory | Data loss if the cache dies before flushing |
+| **Write-around** | First read after a write is a miss | Normal DB speed | Brief staleness if an old cached copy exists |
+
+**Costs of any cache:** another system to run and monitor, stale data to reason about, and a "cold cache" after restarts that sends a burst of traffic to the database.

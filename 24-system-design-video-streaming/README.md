@@ -53,7 +53,7 @@ flowchart TD
 3. **Adaptive Bitrate Streaming (ABR)**:
    - Protocols: **HLS** (HTTP Live Streaming) and **DASH** (Dynamic Adaptive Streaming over HTTP).
    - Video is divided into short segments (typically 2 to 6 seconds each).
-   - A **master playlist** (`.m3u8`) lists all resolutions and bitrates.
+   - A **master playlist** lists all resolutions and bitrates: an `.m3u8` file for HLS, an `.mpd` manifest for DASH.
    - The video player continuously monitors network throughput:
      - On fast Wi-Fi: automatically downloads the next 1080p segment.
      - Moving into a subway tunnel: seamlessly steps down to 480p without buffering.
@@ -87,7 +87,16 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **High Availability vs Strong Consistency**: Match the architectural requirements to the business domain.
-- **Caching & Data Locality**: Keep reads fast at the edge while protecting the database.
-- **Fail-Safe Design**: Ensure the system degrades gracefully under extreme load.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **More renditions** (240p → 4K) | Smooth playback on any connection; transcoding cost and storage grow with each one |
+| **H.264 vs VP9 / AV1** | H.264 plays everywhere; newer codecs save 30–50% bandwidth but are slower to encode and not supported on every device |
+| **Shorter segments** (2 s) | Faster start and quicker quality switching; more files and requests, slightly worse compression |
+| **Longer segments** (6–10 s) | Efficient; slower to adapt and higher latency for live streams |
+| **Transcode everything upfront** | Instant playback in every quality; wasted on videos nobody watches |
+| **Transcode popular videos only / on demand** | Cheaper; the first viewer of a rare quality waits |
+| **CDN for everything** | Fast and offloads origin; for a long tail of rarely-watched videos, CDN cache hit rates drop |
+
+**Most of the bill is bandwidth and storage, not servers.** Encoding choices and caching decide how much it all costs.

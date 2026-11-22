@@ -18,7 +18,8 @@ flowchart TD
     QueryType -->|Structured, strict transactions, complex JOINs| SQL["🗄️ Relational / SQL (PostgreSQL, MySQL)"]
     QueryType -->|Hierarchical, polymorphic JSON documents| Doc["📄 Document NoSQL (MongoDB, DynamoDB)"]
     QueryType -->|Ultra-fast key lookups & caching| KV["⚡ Key-Value (Redis, Memcached)"]
-    QueryType -->|High-write time-series & heavy analytics| Wide["📊 Wide-Column (Cassandra, ScyllaDB)"]
+    QueryType -->|Huge write volume, lookups by key| Wide["📊 Wide-Column (Cassandra, ScyllaDB)"]
+    QueryType -->|Analytics over billions of rows| Col["📈 Columnar / OLAP (ClickHouse, BigQuery)"]
     QueryType -->|Deeply interconnected entities & networks| Graph["🕸️ Graph Database (Neo4j, AWS Neptune)"]
 ```
 
@@ -38,6 +39,8 @@ flowchart TD
   - **Soft State**: Values may change over time even without new inputs due to replication propagation.
   - **Eventual Consistency**: Given sufficient time without new updates, all replicas converge to the same value.
 
+> ⚠️ "SQL = ACID, NoSQL = BASE" is a rule of thumb, not a law. MongoDB and DynamoDB support multi-item ACID transactions, and distributed SQL databases (CockroachDB, Spanner) scale out while staying ACID. "Isolation" also comes in levels, and many databases default to something weaker than full serializability.
+
 ---
 
 ### Database Categories At A Glance
@@ -45,8 +48,11 @@ flowchart TD
 1. **Relational (RDBMS)**: Highly structured, supports ACID transactions and complex relational algebra (`JOIN`). Ideal for financial ledgers, order management, and core business identities.
 2. **Document Stores**: Stores flexible JSON-like documents. Ideal for catalogs, content management, and user profiles.
 3. **Key-Value Stores**: O(1) reads and writes by primary key. Ideal for session stores, shopping carts, and leaderboard caches.
-4. **Wide-Column / Columnar**: Stores data grouped by columns rather than rows. Ideal for high-throughput write streams (IoT, logs, clickstreams) and OLAP analytical queries.
-5. **Graph Databases**: Nodes and edges with first-class relationships. Ideal for social networks, fraud detection, and recommendation engines.
+4. **Wide-Column (Cassandra, ScyllaDB, HBase)**: Rows are grouped into partitions by a partition key, and each row can have different columns. Ideal for very high write throughput (IoT, logs, chat messages) when you always look data up by key.
+5. **Columnar / analytical (ClickHouse, BigQuery, Redshift)**: Stores each column's values together on disk, so "average price over 1 billion orders" reads only the price column. Ideal for analytics (OLAP), not for lots of small updates.
+
+   > ⚠️ "Wide-column" and "columnar" sound alike but are different things. Cassandra is **not** a columnar analytics database.
+6. **Graph Databases**: Nodes and edges with first-class relationships. Ideal for social networks, fraud detection, and recommendation engines.
 
 ---
 
@@ -90,7 +96,15 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Data Freshness**: Always configure appropriate TTLs to balance staleness vs database load.
-- **Resource Limits**: Size in-memory clusters appropriately and set clear eviction policies.
-- **Consistency**: Understand the trade-offs between sync writes and async replication.
+## ⚖️ Trade-offs
+
+| Type | Great at | Weak at |
+| :--- | :--- | :--- |
+| **Relational** | Transactions, JOINs, constraints, ad-hoc queries | Scaling writes beyond one machine needs sharding work; schema changes on huge tables are slow |
+| **Document** | Data that's naturally one JSON blob (a product, a profile); flexible fields | Many-to-many relationships and JOINs; data duplicated across documents can drift |
+| **Key-value** | Extremely fast get/set by key; caches, sessions | Anything except lookup by key |
+| **Wide-column** | Massive write rates, linear scaling | You must design tables around your queries up front; no JOINs |
+| **Columnar / OLAP** | Aggregates over billions of rows | Single-row reads and frequent updates |
+| **Graph** | "Friends of friends", fraud rings, recommendations | Bulk analytics and simple CRUD |
+
+**Default advice:** start with PostgreSQL unless you can name the specific problem a NoSQL store solves for you.

@@ -56,7 +56,7 @@ flowchart TD
 ### Critical HTTP Caching Headers
 
 - `Cache-Control: public, max-age=31536000, immutable`: Instructs CDNs and browsers to cache the asset for 1 full year without revalidating (common for content-hashed assets like `bundle.8f3a1.js`).
-- `ETag` (Entity Tag): A hash fingerprint of the resource. If the client sends `If-None-Match: "xyz"`, the server returns `304 Not Modified` with zero body bytes if unchanged.
+- `ETag` (Entity Tag): A version identifier for the resource (often a hash of its contents). If the client sends `If-None-Match: "xyz"`, the server returns `304 Not Modified` with zero body bytes if unchanged.
 - `Vary: Accept-Encoding`: Instructs the edge to maintain separate cached copies for clients requesting `gzip`, `brotli`, or uncompressed payloads.
 
 ---
@@ -104,7 +104,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Quorums**: Choose odd-numbered cluster sizes (3, 5, 7) to avoid split votes.
-- **Failover Speeds**: Balance election timeouts to avoid false failovers during transient CPU spikes.
-- **Consistency**: Strict consistency trades off availability during partitions.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Pull CDN** | Zero setup per file; the first user in each region gets a slow miss |
+| **Push CDN** | No first-request miss, full control; you must upload and manage every file |
+| **Long cache times** | Fast and cheap, but updates don't show until expiry. Fix: put a version or hash in the filename (`app.3f9a.js`) so each new deploy is a brand-new URL |
+| **Purging / invalidation** | Immediate updates, but slow and sometimes rate-limited or paid on some CDNs |
+| **Caching dynamic or personalised pages** | Big speed win, but one mistake can show user A's page to user B. Always vary the cache key on anything user-specific, or don't cache it |
+| **Cost** | Bandwidth from the CDN is usually cheaper than from your origin, but CDN bills can grow with traffic |

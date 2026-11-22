@@ -1,7 +1,7 @@
 # 13 - The CAP & PACELC Theorems
 
 > **Real-World Analogy:**  
-> Imagine planning an event with two coordinators who communicate via walkie-talkie. Suddenly, the radio batteries die (Network Partition). You now have only two choices: Coordinator A can keep selling tickets anyway, but risk double-booking seats that Coordinator B also sold (High Availability, Low Consistency); or both can refuse to sell any tickets until the radios work again (Strong Consistency, Zero Availability).
+> Imagine planning an event with two coordinators who communicate via walkie-talkie. Suddenly, the radio batteries die (Network Partition). You now have only two choices: Coordinator A can keep selling tickets anyway, but risk double-booking seats that Coordinator B also sold (High Availability, Low Consistency); or they can stop selling until the radios work again (Consistency, but no availability while the radios are down).
 
 ---
 
@@ -16,8 +16,8 @@ flowchart TD
     subgraph CAP["The CAP Theorem (In the event of Network Partition)"]
         P["⚡ Network Partition Occurs"]
         P --> Choice{"Must choose between:"}
-        Choice -->|CP: Consistency over Availability| CP["🔒 CP Systems (Raft, Paxos, Spanner, Zookeeper)\nRejects operations if quorum cannot be reached"]
-        Choice -->|AP: Availability over Consistency| AP["⚡ AP Systems (Cassandra, DynamoDB, CouchDB)\nAccepts all writes; resolves discrepancies eventually"]
+        Choice -->|CP: Consistency over Availability| CP["🔒 CP systems (etcd, ZooKeeper, Spanner)<br/>Rejects operations if quorum cannot be reached"]
+        Choice -->|AP: Availability over Consistency| AP["⚡ AP systems (Cassandra, Riak, CouchDB)<br/>Accepts all writes; resolves discrepancies eventually"]
     end
 ```
 
@@ -46,7 +46,7 @@ The CAP theorem only describes behavior *during a network partition*. But what a
 | :--- | :--- | :--- |
 | **Apache Cassandra** | **PA/EL** | On partition, chooses Availability. Else, chooses low Latency (async replication). |
 | **Google Spanner** | **PC/EC** | On partition, chooses Consistency (quorums). Else, chooses Consistency via TrueTime. |
-| **MongoDB** | **PC/EC** (default) | On partition, rejects writes on partitioned secondaries. Else, returns consistent primary reads. |
+| **MongoDB** | **Depends on settings** | Only the primary accepts writes, and a primary cut off from the majority steps down, so writes are CP-like. Reading from secondaries or using weak write concerns trades consistency for latency. Abadi's original PACELC paper classified it PA/EC. |
 | **Amazon DynamoDB** | **PA/EL** | Configurable, but defaults to high availability and ultra-low latency. |
 
 ---
@@ -90,7 +90,15 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Quorums**: Choose odd-numbered cluster sizes (3, 5, 7) to avoid split votes.
-- **Failover Speeds**: Balance election timeouts to avoid false failovers during transient CPU spikes.
-- **Consistency**: Strict consistency trades off availability during partitions.
+## ⚖️ Trade-offs
+
+| Choose **CP** (refuse when unsure) for… | Choose **AP** (answer anyway) for… |
+| :--- | :--- |
+| Bank balances, payments, inventory you can't oversell | Likes, view counts, social feeds |
+| Leader election, locks, configuration (etcd, ZooKeeper) | Shopping carts, user presence, product catalogs |
+| Anything where a wrong answer is worse than no answer | Anything where a slightly old answer beats an error page |
+
+**Common misunderstandings**
+- CAP is only about what happens **during** a network partition. Most of the time there is no partition, and the real everyday trade-off is PACELC's **latency vs consistency**.
+- "CA systems" don't exist across a network: partitions will happen, so you only get to choose C or A when they do.
+- Many databases let you choose **per request** (e.g. Cassandra consistency levels, DynamoDB strongly-consistent reads), so a whole system is rarely "just CP" or "just AP".

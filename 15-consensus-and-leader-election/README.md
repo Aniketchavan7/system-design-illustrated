@@ -39,13 +39,13 @@ Raft breaks consensus into three manageable sub-problems:
 
 1. **Leader Election**:
    - Nodes exist in one of three states: **Follower**, **Candidate**, or **Leader**.
-   - If a Follower receives no heartbeats within a randomized election timeout (e.g., 150ms–300ms), it becomes a Candidate and requests votes.
-   - If it wins votes from a majority of nodes ($\lfloor N/2 floor + 1$), it becomes the Leader.
+   - If a Follower receives no heartbeats within a randomized election timeout (e.g., 150ms–300ms), it becomes a Candidate, increases its term number, and requests votes. Nodes only vote for a candidate whose log is at least as up-to-date as their own.
+   - If it wins votes from a majority of nodes (more than half: ⌊N/2⌋ + 1, e.g. 3 of 5), it becomes the Leader.
 
 2. **Log Replication**:
    - Clients send commands only to the Leader.
    - The Leader appends the command to its log and sends `AppendEntries` RPCs to all Followers.
-   - Once a majority of Followers acknowledge the entry, the Leader commits it and applies it to its state machine.
+   - Once a majority of the cluster (the leader counts itself) has stored the entry, the Leader commits it and applies it to its state machine.
 
 3. **Safety Guarantee**:
    - If a leader commits a log entry, no other node can ever overwrite or diverge that committed entry in any future term.
@@ -99,7 +99,19 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Quorums**: Choose odd-numbered cluster sizes (3, 5, 7) to avoid split votes.
-- **Failover Speeds**: Balance election timeouts to avoid false failovers during transient CPU spikes.
-- **Consistency**: Strict consistency trades off availability during partitions.
+## ⚖️ Trade-offs
+
+| Cluster size | Survives | Notes |
+| :--- | :--- | :--- |
+| 3 nodes | 1 failure | Most common; fast commits (needs 2 acks) |
+| 5 nodes | 2 failures | Lets you do maintenance on one node and still survive another failure |
+| 7 nodes | 3 failures | Every write waits for 4 nodes; rarely worth it |
+| Even sizes (4, 6) | No better than one fewer | 4 nodes still tolerate only 1 failure, so add the odd node |
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Short election timeout** | Fast recovery, but GC pauses or network blips trigger needless elections |
+| **Long election timeout** | Stable, but a real crash means seconds with no leader (no writes) |
+| **Spreading nodes across regions** | Survives a region outage, but every commit pays cross-region latency |
+
+**Advice:** don't implement consensus yourself. Use a proven system (etcd, ZooKeeper, Consul) or a database that has it built in.

@@ -49,14 +49,15 @@ A high-performance cache node consists of three cooperating data structures:
 ### Scaling Out to Multiple Nodes
 
 - Uses **Consistent Hashing** so adding a new cache server only moves $1/N$ of the dataset.
-- Master-Replica pairs ensure high availability; if a master crashes, a replica takes over without cache drops.
+- Master-replica pairs improve availability: if a master crashes, its replica takes over. Replication is usually asynchronous, so the last few writes before a crash can be lost. That's fine for a cache, but worth knowing.
 
 ---
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python implementation: In-Memory Key-Value Cache with TTL and LRU Eviction
+# One cache node: TTL expiry + LRU eviction (an OrderedDict keeps keys in recency order)
 import time
+from collections import OrderedDict
 
 class CacheEntry:
     def __init__(self, key: str, value: any, expires_at: float):
@@ -67,16 +68,16 @@ class CacheEntry:
 class InMemDistributedCacheNode:
     def __init__(self, max_keys: int = 100):
         self.max_keys = max_keys
-        self.store = {}
+        self.store = OrderedDict()
 
     def set(self, key: str, value: any, ttl_seconds: float = None):
         expires_at = time.time() + ttl_seconds if ttl_seconds else float('inf')
         if len(self.store) >= self.max_keys and key not in self.store:
-            # Evict oldest inserted key
-            oldest_key = next(iter(self.store))
-            del self.store[oldest_key]
+            # Evict the least recently used key (the front of the OrderedDict)
+            self.store.popitem(last=False)
 
         self.store[key] = CacheEntry(key, value, expires_at)
+        self.store.move_to_end(key)  # newest = most recently used
 
     def get(self, key: str):
         entry = self.store.get(key)
@@ -85,6 +86,7 @@ class InMemDistributedCacheNode:
         if time.time() > entry.expires_at:
             del self.store[key]  # Lazy expiration
             return None
+        self.store.move_to_end(key)  # mark as most recently used
         return entry.value
 
 if __name__ == "__main__":
@@ -100,7 +102,15 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **High Availability vs Strong Consistency**: Match the architectural requirements to the business domain.
-- **Caching & Data Locality**: Keep reads fast at the edge while protecting the database.
-- **Fail-Safe Design**: Ensure the system degrades gracefully under extreme load.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Client-side routing** (the client knows the ring) | One fewer network hop; every client library must agree on the ring |
+| **Proxy routing** (e.g. Twemproxy, Envoy) | Thin clients; an extra hop and another component to run |
+| **Replicas** | Survive node loss, more read capacity; double the memory, and async replicas can serve stale data |
+| **Lazy expiry only** | Cheap, but expired keys that are never read keep using memory |
+| **Active expiry (sampling)** | Frees memory steadily; uses some CPU continuously |
+| **Persistence (snapshots / append-only file)** | Warm restart instead of an empty cache; slower writes and disk I/O |
+
+**Remember:** a cache is not a database. Design the app so that losing the whole cache makes it slower, not wrong.

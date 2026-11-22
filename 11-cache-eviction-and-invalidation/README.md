@@ -57,7 +57,8 @@ flowchart TD
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python implementation: Thread-safe LRU Cache using Doubly Linked List and Hash Map
+# LRU cache: hash map + doubly linked list, O(1) get and put.
+# (Not thread-safe: wrap get/put in a lock if several threads share it.)
 class Node:
     def __init__(self, key: str, val: any):
         self.key = key
@@ -119,7 +120,17 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Quorums**: Choose odd-numbered cluster sizes (3, 5, 7) to avoid split votes.
-- **Failover Speeds**: Balance election timeouts to avoid false failovers during transient CPU spikes.
-- **Consistency**: Strict consistency trades off availability during partitions.
+## ⚖️ Trade-offs
+
+| Policy | Works well for | Weakness |
+| :--- | :--- | :--- |
+| **LRU** | Most web workloads (recently used ≈ soon used) | One big scan (e.g. a nightly report) can flush all your hot keys |
+| **LFU** | Stable popularity (top products, country lists) | Slow to adapt when popularity changes; needs counter decay |
+| **FIFO** | Very simple, low overhead | Evicts hot items just because they're old |
+| **TTL only** | Data that goes stale on a known schedule | Memory can still fill up before keys expire |
+
+| Mitigation | Cost |
+| :--- | :--- |
+| Cache null results (penetration) | Memory for "not found" entries; must expire them in case the item is created later |
+| TTL jitter (avalanche) | Expiry times become less predictable |
+| Lock / single-flight (stampede) | Other requests wait or get slightly stale data while one request rebuilds the value |

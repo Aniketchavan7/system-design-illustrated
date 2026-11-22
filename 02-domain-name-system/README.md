@@ -68,7 +68,7 @@ sequenceDiagram
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python implementation: A custom recursive DNS cache simulator
+# A DNS-style cache: each answer is kept only until its TTL runs out
 import time
 
 class DNSCache:
@@ -107,7 +107,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Scalability**: Decouple client-facing traffic from core compute.
-- **Latency**: Optimize protocols (e.g., HTTP/3 QUIC, connection pools) to eliminate unnecessary round-trips.
-- **Fault Tolerance**: Always enforce circuit-breakers and graceful degradations under heavy load.
+## ⚖️ Trade-offs
+
+| Decision | Option A | Option B |
+| :--- | :--- | :--- |
+| **TTL length** | Long (hours): fewer lookups, faster pages, less load on DNS | Short (30–60 s): changes and failovers take effect quickly, but more lookups |
+| **DNS-based load balancing / failover** | Cheap and global; no extra hop | Coarse: clients and resolvers cache answers, and some ignore TTLs, so traffic shifts slowly |
+| **GeoDNS** | Sends users to a nearby region | Decides by the *resolver's* location, which can be far from the user (unless the resolver passes the client subnet) |
+| **Managed DNS (Route 53, Cloudflare)** | Global Anycast, health checks, DDoS protection | Monthly cost, vendor lock-in |
+
+**Rule of thumb:** before a planned migration, lower the TTL a day in advance, switch the record, then raise the TTL again.

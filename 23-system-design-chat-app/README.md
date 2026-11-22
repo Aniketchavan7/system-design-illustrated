@@ -35,7 +35,7 @@ flowchart TD
 
 1. **Persistent WebSocket Connections**:
    - HTTP polling or long-polling incurs unacceptable latency and massive header overhead.
-   - Long-lived bidirectional **WebSocket** connections keep TCP open with minimal frame overhead (2 bytes).
+   - Long-lived bidirectional **WebSocket** connections keep TCP open with minimal per-message overhead (2–14 bytes of frame header instead of hundreds of bytes of HTTP headers).
 
 2. **Connection Gateway & Session Routing**:
    - A single gateway server can hold 50,000 to 100,000 concurrent open WebSocket connections using non-blocking epoll.
@@ -97,7 +97,16 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **High Availability vs Strong Consistency**: Match the architectural requirements to the business domain.
-- **Caching & Data Locality**: Keep reads fast at the edge while protecting the database.
-- **Fail-Safe Design**: Ensure the system degrades gracefully under extreme load.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **WebSockets** | True real-time in both directions; stateful connections complicate load balancing, deploys and reconnect storms |
+| **Long polling** | Works everywhere, through any proxy; more overhead and latency |
+| **Fan-out on write for groups** (copy each message to every member's inbox) | Fast reads; a 10,000-member group means 10,000 writes per message |
+| **Fan-out on read** (one copy per channel, members fetch it) | Cheap writes; reads must merge many channels |
+| **Wide-column store for messages** | Great for "latest N messages in this chat"; poor for search (add a search index) |
+| **Delivery receipts / ordering** | Per-conversation ordering (sequence numbers) is cheap; global ordering across all chats is expensive and rarely needed |
+| **End-to-end encryption** | Servers can't read messages, which is great for privacy, but server-side search and moderation become impossible |
+
+**Presence at scale is expensive:** a heartbeat every 30 s from 100M users is over 3M writes per second. Batch heartbeats, only tell friends who are actually online, and accept a little lag.

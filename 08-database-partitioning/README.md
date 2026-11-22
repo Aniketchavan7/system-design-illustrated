@@ -16,9 +16,9 @@ flowchart TD
     Client["📱 Application Layer"] --> Router["🧭 Shard Router (Hash: crc32(user_id) % 3)"]
 
     subgraph ShardFleet["Database Shards"]
-        S0[("💾 Shard 0 (Keys: 0 to 333)")]
-        S1[("💾 Shard 1 (Keys: 334 to 666)")]
-        S2[("💾 Shard 2 (Keys: 667 to 999)")]
+        S0[("💾 Shard 0 (crc32 % 3 = 0)")]
+        S1[("💾 Shard 1 (crc32 % 3 = 1)")]
+        S2[("💾 Shard 2 (crc32 % 3 = 2)")]
     end
 
     Router -->|Bucket 0| S0
@@ -100,7 +100,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Data Freshness**: Always configure appropriate TTLs to balance staleness vs database load.
-- **Resource Limits**: Size in-memory clusters appropriately and set clear eviction policies.
-- **Consistency**: Understand the trade-offs between sync writes and async replication.
+## ⚖️ Trade-offs
+
+| Strategy | Good | Bad |
+| :--- | :--- | :--- |
+| **Range** | Range queries are cheap ("all orders from March"); easy to understand | Hot spots: new data often lands on the same shard (e.g. today's timestamps) |
+| **Hash** | Spreads data and load evenly | Range queries must ask every shard; changing the shard count moves most keys (unless you use consistent hashing, module 16) |
+| **Directory / lookup table** | Total flexibility: move any tenant anywhere | The lookup service is one more thing that must be fast and never go down |
+
+**Before you shard at all:** add indexes, caching, read replicas and a bigger machine first. Sharding makes JOINs, transactions, unique constraints and schema changes much harder, so it should be the last step, not the first.
+
+**Choosing the shard key** is the most important decision. Pick something that (1) appears in almost every query and (2) spreads load evenly. `user_id` is often good; `country` or `created_date` are usually bad.

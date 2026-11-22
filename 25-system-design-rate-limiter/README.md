@@ -29,14 +29,14 @@ flowchart TD
 ---
 
 ## ⚙️ How It Works Under The Hood
-### The Sliding Window Counter in Redis
+### The Sliding Window Log in Redis
 
-Using a sliding window counter prevents the window-boundary traffic spikes of fixed windows:
+Using a sliding window log (see [module 05](../05-rate-limiting/)) prevents the window-boundary traffic spikes of fixed windows:
 - Store timestamps of requests in a Redis Sorted Set (`ZSET`).
 - When a request arrives from `user_ip`:
   1. Remove elements older than `(now - window_size)` using `ZREMRANGEBYSCORE`.
   2. Count elements in set using `ZCARD`.
-  3. If count < limit: add `now` using `ZADD` and allow request.
+  3. If count < limit: add `now` using `ZADD` and allow request. (Use a unique member such as `now + request_id`: sorted-set members must be unique, so two requests with the same timestamp would otherwise count as one.)
   4. Else: reject request.
 
 ---
@@ -49,7 +49,7 @@ Because this check involves multiple steps, concurrent requests could cause race
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python implementation: Sliding Window Rate Limiter
+# Sliding window LOG rate limiter (single process; the Redis version is described above)
 import time
 from collections import deque
 
@@ -93,7 +93,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **High Availability vs Strong Consistency**: Match the architectural requirements to the business domain.
-- **Caching & Data Locality**: Keep reads fast at the edge while protecting the database.
-- **Fail-Safe Design**: Ensure the system degrades gracefully under extreme load.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Central Redis counter** | Exact limits across all servers; adds ~1 ms per request, and Redis becomes critical infrastructure |
+| **Local counters + periodic sync** | No extra hop; limits are approximate (a client can briefly exceed them by spreading requests across servers) |
+| **Sliding log (sorted set)** | Exact; memory grows with the limit (one entry per request) |
+| **Sliding window counter / token bucket** | A few numbers per client; slightly approximate or allows bursts |
+| **Multi-region: one global counter** | Exact worldwide; every request pays cross-region latency |
+| **Multi-region: per-region limits** | Fast; the effective global limit is the sum across regions unless you split the budget |
+| **Fail open vs fail closed when Redis is down** | Open keeps the product working but unprotected; closed is safe but turns a Redis outage into a full outage |

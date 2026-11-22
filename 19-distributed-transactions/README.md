@@ -1,7 +1,7 @@
 # 19 - Distributed Transactions & The Saga Pattern
 
 > **Real-World Analogy:**  
-> Imagine booking a vacation package: you must book a flight, reserve a hotel room, and rent a rental car. If the car rental fails at the last step, you don't cancel everything and give up—instead, a coordinator calls the hotel to cancel your reservation and refunds the flight. This chain of steps with compensating cancellations is the Saga Pattern.
+> Imagine booking a vacation package: you must book a flight, reserve a hotel room, and rent a rental car. If the car rental fails at the last step, nobody can "roll back" the airline's and the hotel's computers for you. Instead, a coordinator runs explicit undo steps: it cancels the hotel reservation and requests a flight refund. This chain of steps with compensating cancellations is the Saga Pattern.
 
 ---
 
@@ -46,12 +46,13 @@ sequenceDiagram
 - **Two-Phase Commit (2PC)**:
   - Phase 1 (Prepare): Coordinator asks all participating databases: *"Can you commit this change?"* All participants acquire locks.
   - Phase 2 (Commit): If all vote yes, coordinator says *"Commit"*. If any votes no, coordinator says *"Rollback"*.
-  - **Major Flaw**: Blocking protocol. If the coordinator crashes mid-transaction, all nodes hold row locks indefinitely, stalling system throughput.
+  - **Major Flaw**: Blocking protocol. If the coordinator crashes after participants voted "yes", they must keep holding their locks until the coordinator recovers and tells them the outcome. Everything that touches those rows waits.
 
 - **The Saga Pattern**:
   - Breaks a distributed transaction into a series of local database transactions across separate microservices.
   - Each local transaction commits immediately to its own database.
   - If any step fails, the Saga executes **Compensating Transactions** backwards to undo the effects of previous steps.
+  - Sagas give up **isolation**: other requests can see the half-finished state (e.g. a "pending" order) before it's completed or undone.
 
 ---
 
@@ -107,7 +108,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Resilience**: Design for failure at every tier; assume machines and networks will fail.
-- **Backpressure**: Shed load gracefully before resources are completely exhausted.
-- **Idempotency**: Guarantee safe retries for all network operations.
+## ⚖️ Trade-offs
+
+| Approach | Good | Bad |
+| :--- | :--- | :--- |
+| **One database, one transaction** | Real ACID; by far the simplest | Only works if the data lives together; worth designing for |
+| **Two-phase commit** | All-or-nothing across databases | Blocking, slow (extra round trips while holding locks), every participant must support it |
+| **Saga: choreography** | Services stay decoupled; no central component | The overall flow is hidden across many services; hard to debug |
+| **Saga: orchestration** | The flow is explicit in one place; easier to monitor | The orchestrator is one more service, and logic tends to concentrate there |
+
+**Saga rules of thumb:** every step and every compensation must be **idempotent** (it may run twice), compensations must be able to **retry until they succeed**, and some actions can't be undone (an email that was sent). Put those last.

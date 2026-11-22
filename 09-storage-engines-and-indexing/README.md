@@ -40,7 +40,7 @@ flowchart TD
 | **Write Pattern** | Random in-place page overwrites on disk | Sequential append-only writes |
 | **Read Pattern** | Single tree traversal ($O(\log N)$) | Searches MemTable, then checks SSTables via Bloom filters |
 | **Storage Structure** | Fixed-size pages (typically 4KB to 16KB) | In-memory MemTable flushed to immutable sorted files |
-| **Write Amplification** | Higher (rewriting whole 16KB pages for small row updates) | Lower (sequential appends), but compaction uses I/O |
+| **Write Amplification** | A small row change rewrites a whole page (8–16 KB), plus the WAL | Often lower, but compaction rewrites the same data several times, so it depends on the workload |
 
 ---
 
@@ -96,7 +96,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Data Freshness**: Always configure appropriate TTLs to balance staleness vs database load.
-- **Resource Limits**: Size in-memory clusters appropriately and set clear eviction policies.
-- **Consistency**: Understand the trade-offs between sync writes and async replication.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **B-tree engine** | Predictable, fast reads and range scans; in-place updates mean more random I/O on writes |
+| **LSM-tree engine** | Very high write throughput and good compression; reads may check several files, and background compaction can cause latency spikes |
+| **Adding an index** | Turns a full scan into a quick lookup, but every INSERT/UPDATE must also update the index, and it uses disk and memory |
+| **Composite index `(a, b)`** | Serves queries on `a` or on `a AND b`, but not queries on `b` alone |
+| **Bloom filter size** | More bits per key = fewer false positives (fewer wasted disk reads) but more memory |
+
+**Rule of thumb:** index the columns you filter and join on in your most frequent queries, and check with `EXPLAIN` that they're actually used.

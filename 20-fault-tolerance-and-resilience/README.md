@@ -46,7 +46,7 @@ stateDiagram-v2
 - **Bulkhead Pattern**: Partitions resources (thread pools, connection pools) so that a failure in one non-critical feature (e.g., video recommendations) cannot consume all threads and starve critical features (e.g., video playback).
 - **Exponential Backoff with Full Jitter**:
   - Instead of retrying on a fixed schedule (which causes synchronized retry stampedes), exponentially increase wait times and add randomized noise:
-  $$T_{	ext{wait}} = 	ext{random}(0, \min(T_{\max}, 	ext{base} 	imes 2^{	ext{attempt}}))$$
+  `wait = random(0, min(max_wait, base * 2 ** attempt))`
 
 ---
 
@@ -96,17 +96,28 @@ if __name__ == "__main__":
     cb = CircuitBreaker(failure_threshold=2, recovery_time=1.0)
     for i in range(4):
         try:
-            cb.call(unstable_service)
+            print(f"Call {i+1}:", cb.call(unstable_service))
         except Exception as e:
             print(f"Call {i+1} failed:", e)
 
-    print("Subsequent immediate call:", cb.call(unstable_service))
+    time.sleep(1.1)  # wait out the recovery time
+    try:
+        print("After cool-down:", cb.call(unstable_service))
+    except Exception as e:
+        print("After cool-down: probe failed, circuit re-opens:", e)
 
 ```
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Resilience**: Design for failure at every tier; assume machines and networks will fail.
-- **Backpressure**: Shed load gracefully before resources are completely exhausted.
-- **Idempotency**: Guarantee safe retries for all network operations.
+## ⚖️ Trade-offs
+
+| Pattern | Protects against | Watch out for |
+| :--- | :--- | :--- |
+| **Timeouts** | Waiting forever on a hung dependency | Too short = false failures; too long = threads pile up. Base them on the dependency's p99 latency |
+| **Retries + backoff + jitter** | Brief, random failures | Retries multiply load on a struggling service; only retry idempotent operations, and cap the attempts |
+| **Circuit breaker** | Hammering a service that's already down | Thresholds need tuning; a breaker that trips too easily causes outages of its own |
+| **Bulkhead** | One slow feature eating all threads or connections | Pools sized too small waste capacity |
+| **Fallbacks** | Total failure of a non-critical dependency | Fallback code is rarely exercised, so test it on purpose |
+
+**Combine them:** timeout → limited retries with jitter → circuit breaker → fallback. Each one alone is not enough.

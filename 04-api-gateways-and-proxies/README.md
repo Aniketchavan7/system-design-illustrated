@@ -38,8 +38,8 @@ flowchart LR
 ### Central Responsibilities of an API Gateway
 
 1. **Authentication & Authorization**: Decodes and verifies JSON Web Tokens (JWT) or API keys before traffic hits microservices.
-2. **TLS / SSL Termination**: Offloads CPU-intensive cryptographic decryption at the edge of the datacenter.
-3. **Request Aggregation (Backends for Frontends - BFF)**: Aggregates data from 5 services into a single JSON response for mobile clients.
+2. **TLS / SSL Termination**: Decrypts HTTPS once at the edge, so services behind it don't each need certificates. Traffic behind the gateway is then unencrypted unless you re-encrypt it (e.g. mTLS between services).
+3. **Request Aggregation**: Combines data from several services into one response, so a mobile app makes 1 call instead of 5. Giving each client type (web, iOS, TV) its own tailored gateway is called the **Backend for Frontend (BFF)** pattern.
 4. **Traffic Shaping & Canary Releases**: Splits 5% of traffic to a new version of a service (`v2`) and 95% to stable (`v1`).
 5. **Rate Limiting & DoS Protection**: Prevents abusive scrapers or misbehaving mobile apps from saturating internal services.
 
@@ -92,7 +92,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Scalability**: Decouple client-facing traffic from core compute.
-- **Latency**: Optimize protocols (e.g., HTTP/3 QUIC, connection pools) to eliminate unnecessary round-trips.
-- **Fault Tolerance**: Always enforce circuit-breakers and graceful degradations under heavy load.
+## ⚖️ Trade-offs
+
+| Benefit | Cost |
+| :--- | :--- |
+| One place for auth, rate limits, logging and TLS | Every request takes one extra network hop (usually ~1 ms) |
+| Clients see one stable API while services change behind it | The gateway can become a bottleneck or single point of failure, so run several instances |
+| Canary releases and traffic splitting without touching services | "Logic creep": business rules sneaking into the gateway make it a hard-to-change monolith |
+| Aggregation means fewer round trips for mobile | Aggregation endpoints couple the gateway to many services' response formats |
+
+**Managed (AWS API Gateway, Apigee)** gets you started fast but costs per request and locks you in. **Self-hosted (Kong, Envoy, NGINX)** is flexible but you have to operate it.

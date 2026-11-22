@@ -33,10 +33,10 @@ flowchart TD
 ### The Modulo Problem in Distributed Caching
 
 In traditional hash-based routing:
-$$	ext{Server Index} = 	ext{hash}(	ext{key}) \pmod N$$
+`server_index = hash(key) % N`
 
 When the number of servers $N$ changes from 4 to 5:
-- Almost **all keys** map to a completely different server index.
+- About **80% of keys** (in general, N/(N+1) of them) map to a different server.
 - Results in a massive **Cache Stampede**: entire caches are missed simultaneously, overwhelming the database origin.
 
 ---
@@ -48,7 +48,7 @@ When the number of servers $N$ changes from 4 to 5:
    - To find the destination server for a key, find its hash position on the ring and traverse clockwise until encountering the first node.
 
 2. **Node Addition and Removal**:
-   - Adding a node only requires moving keys between the new node and its immediate counter-clockwise predecessor.
+   - Adding a node only moves the keys that fall between the new node and the node just before it (counter-clockwise). Those keys used to belong to the next node clockwise; now they belong to the new node. Nothing else moves.
    - On average, only $K / N$ keys need to be remapped, where $K$ is the total number of keys and $N$ is the number of servers!
 
 3. **Virtual Nodes (Vnodes)**:
@@ -70,6 +70,7 @@ class ConsistentHashRing:
         self.vnode_to_node = {}  # Map: virtual hash -> physical node name
 
     def _hash(self, key: str) -> int:
+        # MD5 gives a 128-bit position, so this ring runs from 0 to 2^128 - 1
         return int(hashlib.md5(key.encode('utf-8')).hexdigest(), 16)
 
     def add_node(self, node: str):
@@ -111,7 +112,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Resilience**: Design for failure at every tier; assume machines and networks will fail.
-- **Backpressure**: Shed load gracefully before resources are completely exhausted.
-- **Idempotency**: Guarantee safe retries for all network operations.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Plain `hash % N`** | Simplest and perfectly even, but changing N moves most keys |
+| **Consistent hashing without virtual nodes** | Few keys move, but load is very uneven with only a handful of servers |
+| **More virtual nodes per server** (100–256) | Smoother balance, but a bigger ring to store and search |
+| **Weighted virtual nodes** | Give a bigger server more vnodes so it takes a bigger share |
+| **Alternatives** | *Rendezvous hashing* (no ring, simple, even) and *jump consistent hash* (tiny and fast, but only for numbered buckets) solve the same problem |
+
+**Remember:** consistent hashing decides *where* data lives; it doesn't move the data for you. Something still has to copy the affected keys when the ring changes.

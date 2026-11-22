@@ -51,7 +51,7 @@ flowchart LR
 | **Model** | Smart broker, dumb consumer (broker tracks delivery) | Dumb broker, smart consumer (consumer tracks own offset) |
 | **Replayability** | Cannot replay processed messages | Consumers can rewind offset and replay historical events |
 | **Ordering** | Ordered within queue; complex with competing workers | Strictly ordered per partition |
-| **Throughput** | Tens of thousands of messages per second | Millions of events per second (sequential disk I/O) |
+| **Throughput** | Typically lower per broker (it tracks and deletes each message) | Very high: millions of events/sec across a cluster (sequential disk I/O, batching) |
 
 ---
 
@@ -64,13 +64,14 @@ flowchart LR
    - Messages are guaranteed never to be lost, but duplicates may arrive during network retries.
    - **Requirement**: Consumers must be designed to be **Idempotent** (processing the same message ID twice produces identical results).
 3. **Exactly-Once**:
-   - Achieved through two-phase commit or transactional outboxes combined with idempotent deduplication keys.
+   - True exactly-once *delivery* isn't possible over an unreliable network. What systems offer is **effectively-once processing**: at-least-once delivery plus deduplication or idempotent writes. Kafka adds transactions so that a read → process → write cycle *within Kafka* happens exactly once.
 
 ---
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python simulation: In-memory Pub/Sub event bus with consumer groups
+# In-memory pub/sub: every subscriber gets its own copy of each event (fan-out).
+# (A consumer *group* would instead split events between its members.)
 from collections import defaultdict, deque
 
 class EventBus:
@@ -106,7 +107,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Resilience**: Design for failure at every tier; assume machines and networks will fail.
-- **Backpressure**: Shed load gracefully before resources are completely exhausted.
-- **Idempotency**: Guarantee safe retries for all network operations.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Queue (RabbitMQ, SQS)** | Simple work distribution, per-message retries and dead-letter queues; no replay once a message is consumed |
+| **Log (Kafka, Redpanda)** | Replay history, many independent readers, huge throughput; more to operate, and ordering only within a partition |
+| **More partitions** | More parallel consumers, but ordering only holds within each partition, and more files and connections |
+| **At-least-once** | Nothing lost, but every consumer must be idempotent |
+| **At-most-once** | Simplest, but messages can silently disappear |
+
+**Cost of going async at all:** the caller no longer knows when (or whether) the work finished, failures surface later and elsewhere, and you need monitoring for queue depth and consumer lag.

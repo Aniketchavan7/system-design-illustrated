@@ -28,7 +28,7 @@ flowchart TD
     API <-->|1. Check Short Code| Cache
     Cache -.->|2. Cache Miss| DB
     API -->|Write: Fetch Next ID| KGS
-    API -->|Write: Store (ID, short_code, long_url)| DB
+    API -->|"Write: store id, short_code, long_url"| DB
 ```
 
 ---
@@ -36,13 +36,13 @@ flowchart TD
 ## ⚙️ How It Works Under The Hood
 ### Capacity Estimation & Numbers
 
-- **New URLs Created**: 100 million per month $pprox 40$ writes / second.
+- **New URLs Created**: 100 million per month ≈ 100,000,000 ÷ 2.6 million seconds ≈ **40 writes/second**.
 - **Read/Write Ratio**: 100 : 1 read-heavy.
 - **Read Requests**: 4,000 requests / second (Peak: 8,000 RPS).
 - **Storage for 10 Years**:
-  - $100	ext{M} 	imes 12 	imes 10 = 12	ext{ Billion records}$.
+  - 100 million × 12 months × 10 years = **12 billion records**.
   - Assuming 500 bytes per URL record:
-  $$12	ext{ Billion} 	imes 500	ext{ bytes} pprox 6	ext{ Terabytes (easily fits on modern SSD storage)}.$$
+  - 12 billion × 500 bytes ≈ **6 TB**, which fits on a few modern SSDs.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TD
 
 - **Characters Available**: `[a-z, A-Z, 0-9]` = 62 alphanumeric characters.
 - A 7-character Base62 string yields:
-  $$62^7 pprox 3.5	ext{ Trillion unique combinations}$$
+  - 62⁷ ≈ **3.5 trillion** unique codes.
 - **Algorithm**:
   1. Increment a global 64-bit unique integer ID (e.g., using Twitter Snowflake or distributed range service).
   2. Convert that integer to its Base62 string representation.
@@ -111,7 +111,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **High Availability vs Strong Consistency**: Match the architectural requirements to the business domain.
-- **Caching & Data Locality**: Keep reads fast at the edge while protecting the database.
-- **Fail-Safe Design**: Ensure the system degrades gracefully under extreme load.
+## ⚖️ Trade-offs
+
+| Decision | Option A | Option B |
+| :--- | :--- | :--- |
+| **How to make the code** | Counter + Base62: no collisions, short codes; but codes are guessable (`abc1`, `abc2`…) and you need a reliable ID generator | Hash or random + collision check: unguessable; needs a uniqueness check on every write |
+| **Redirect type** | `301`: browsers cache it, so less load, but you lose click stats and can't change the target later | `302`: every click hits you, so full analytics and editable links, but more traffic |
+| **Same long URL twice** | Return the existing code: saves space, needs a lookup by long URL (an extra index) | Always create a new one: simpler, enables per-campaign stats |
+| **Database** | SQL: easy and strongly consistent; fine at ~40 writes/s | NoSQL key-value: scales reads and writes horizontally with no schema |
+
+**Don't forget:** spam and malware links (scan targets, allow reporting), expiry for unused links, and per-user rate limits on creating links ([module 05](../05-rate-limiting/)).

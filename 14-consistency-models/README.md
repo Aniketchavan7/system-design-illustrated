@@ -1,7 +1,7 @@
 # 14 - Distributed Consistency Models
 
 > **Real-World Analogy:**  
-> Imagine a group chat with friends across different time zones. With Strong Consistency, nobody can send a new message until every single member's phone buzzes and marks 'Delivered'. With Eventual Consistency, messages arrive whenever network connectivity permits; everyone will eventually see all messages, but someone on an airplane might see replies slightly out of order until they reconnect.
+> Imagine a group chat with friends across different time zones. With Strong Consistency, the chat behaves like one shared whiteboard: the moment a message is posted, anyone who looks sees it. With Eventual Consistency, messages arrive whenever network connectivity permits; everyone will eventually see all messages, but someone on an airplane might see replies slightly out of order until they reconnect.
 
 ---
 
@@ -18,6 +18,8 @@ flowchart LR
     Causal --> ReadYourWrites["Read-Your-Writes"]
     ReadYourWrites --> Eventual["⚡ Eventual Consistency"]
 ```
+
+> The diagram goes roughly from strongest (left) to weakest (right). Read-your-writes is really a *per-user* guarantee, but in strength it sits between causal and eventual.
 
 ---
 
@@ -51,7 +53,7 @@ flowchart LR
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python simulation: Eventual consistency with Vector Clocks for causal ordering
+# Vector clocks: how nodes track "what happened before what" (the basis of causal consistency)
 
 class VectorClock:
     def __init__(self, node_id: str):
@@ -85,7 +87,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Quorums**: Choose odd-numbered cluster sizes (3, 5, 7) to avoid split votes.
-- **Failover Speeds**: Balance election timeouts to avoid false failovers during transient CPU spikes.
-- **Consistency**: Strict consistency trades off availability during partitions.
+## ⚖️ Trade-offs
+
+| Model | You get | You pay |
+| :--- | :--- | :--- |
+| **Linearizable** | Behaves like one single copy; simplest to reason about | Every operation coordinates with a majority: slower, and unavailable during partitions |
+| **Sequential** | Everyone sees the same order of operations | Still needs coordination; rarely offered on its own |
+| **Causal** | Replies never appear before the messages they answer | Must track dependencies (e.g. vector clocks); metadata grows |
+| **Read-your-writes / monotonic reads** | Users never see their own change "disappear" | Sticky sessions or version tracking per user |
+| **Eventual** | Fastest and most available | The app must tolerate stale and out-of-order reads |
+
+**Practical approach:** use strong consistency only where wrong answers are costly (money, inventory, uniqueness), and eventual consistency plus read-your-writes everywhere else.

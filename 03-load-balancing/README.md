@@ -40,7 +40,7 @@ flowchart TD
 | **Inspection Depth** | IP and TCP port only | Full HTTP request (path, cookies, headers, body) |
 | **Performance** | Extremely high throughput, ultra-low latency | Slightly higher CPU overhead (TLS termination & parsing) |
 | **Routing Capability** | Basic packet forwarding | Path-based routing (`/auth` vs `/feed`), header injection |
-| **SSL/TLS Handling** | Passes encrypted packets through | Terminates TLS, decrypts payload, verifies certificates |
+| **SSL/TLS Handling** | Usually passes encrypted traffic through untouched (some, like AWS NLB, can optionally terminate TLS) | Terminates TLS, decrypts payload, verifies certificates |
 | **Examples** | AWS NLB, HAProxy (TCP mode), Linux IPVS | AWS ALB, Nginx, Envoy, Traefik |
 
 ---
@@ -114,7 +114,13 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Scalability**: Decouple client-facing traffic from core compute.
-- **Latency**: Optimize protocols (e.g., HTTP/3 QUIC, connection pools) to eliminate unnecessary round-trips.
-- **Fault Tolerance**: Always enforce circuit-breakers and graceful degradations under heavy load.
+## ⚖️ Trade-offs
+
+| Decision | Trade-off |
+| :--- | :--- |
+| **Layer 4 vs Layer 7** | L4 is faster and protocol-agnostic but blind to URLs and headers. L7 can route `/api` vs `/images`, retry, and add headers, at the cost of more CPU and TLS termination. |
+| **Round robin** | Dead simple, but ignores that some requests are slow and some servers are busy. |
+| **Least connections** | Better when request times vary a lot (uploads, WebSockets); the balancer must track live connection counts. |
+| **IP hash / sticky sessions** | Keeps a user on one server (handy for in-memory sessions), but load gets uneven (a whole office behind one IP), and adding or removing a server reshuffles users. Better: make servers stateless and keep sessions in Redis. |
+| **Health checks** | Too aggressive: a short CPU spike pulls healthy servers out. Too lazy: users hit a dead server for many seconds. |
+| **The balancer itself** | It can become a single point of failure: run an active-passive pair or use a managed balancer. |

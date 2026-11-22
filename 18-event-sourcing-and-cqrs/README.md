@@ -1,7 +1,7 @@
 # 18 - Event Sourcing & CQRS
 
 > **Real-World Analogy:**  
-> Look at your personal bank account. Your bank does not simply store one single number for your balance. Instead, it records an immutable ledger of every single deposit, withdrawal, and transfer you made since opening the account (Event Sourcing). To show your current balance, the bank sums all those transactions up into a cached view (CQRS read model).
+> Think of your bank statement. It's a list of every deposit, withdrawal and transfer since the account was opened, and nothing on it is ever erased (Event Sourcing). Your balance can always be worked out by adding up that list. The balance shown at the top of your banking app is a pre-computed summary kept for fast reading (a CQRS read model).
 
 ---
 
@@ -39,9 +39,9 @@ Traditional architectures use the exact same data model for both reads and write
 ### Core Concepts of Event Sourcing
 
 1. **Immutable Event Stream**: Instead of `UPDATE accounts SET balance = 500 WHERE id = 1`, store events:
-   - `AccountOpened(initial_balance = 0)`
-   - `MoneyDeposited(amount = 700)`
-   - `MoneyWithdrawn(amount = 200)`
+   - `AccountCreated(initial_balance = 0)`
+   - `FundsDeposited(amount = 700)`
+   - `FundsWithdrawn(amount = 200)`
 2. **Auditability & Time Travel**: You can reconstruct the exact state of any entity at any point in the past by replaying events up to that timestamp.
 3. **Snapshots**: To avoid replaying 100,000 events on startup, periodically take a state snapshot (e.g., every 1,000 events) and replay only subsequent events from that snapshot forward.
 
@@ -49,7 +49,7 @@ Traditional architectures use the exact same data model for both reads and write
 
 ## 💻 Concrete Code Implementation
 ```python
-# Python implementation: Minimal Event Sourcing & CQRS engine
+# Minimal event sourcing: state is rebuilt from events (the CQRS read side is not shown)
 class AccountAggregate:
     def __init__(self, account_id: str):
         self.account_id = account_id
@@ -89,7 +89,14 @@ if __name__ == "__main__":
 
 ---
 
-## ⚖️ Trade-Offs & Architectural Considerations
-- **Resilience**: Design for failure at every tier; assume machines and networks will fail.
-- **Backpressure**: Shed load gracefully before resources are completely exhausted.
-- **Idempotency**: Guarantee safe retries for all network operations.
+## ⚖️ Trade-offs
+
+| Benefit | Cost |
+| :--- | :--- |
+| Full audit trail: you know *why* every value is what it is | Much more complex than plain CRUD; most apps don't need it |
+| Rebuild state as of any past moment; fix bugs by replaying events | Events are permanent, so changing their shape later needs versioning and "upcasters" |
+| New read models can be built from old events at any time | Read models lag behind writes (eventual consistency) |
+| CQRS lets reads and writes scale and evolve separately | Two models to keep in sync; more moving parts |
+| | Deleting personal data (e.g. GDPR) is hard in an append-only log |
+
+**Use it when** the history itself is valuable (accounting, orders, auditing, collaborative editing). **Skip it** for simple CRUD screens.
