@@ -143,7 +143,7 @@ All explanations here are written from scratch in plain language. The books are 
 | 22 | [Distributed key-value store / cache](./22-system-design-in-memory-cache/) | ✅ | Consistent hashing + replication + eviction together | SDI-1 ch 6 |
 | 23 | [Chat app](./23-system-design-chat-app/) | ✅ | WebSockets, presence, message storage | SDI-1 ch 12 |
 | 24 | [Video streaming](./24-system-design-video-streaming/) | ✅ | Upload, transcoding, adaptive bitrate | SDI-1 ch 14 |
-| 25 | [Distributed rate limiter](./25-system-design-rate-limiter/) | 🟡 | Module 05's algorithms across many servers | SDI-1 ch 4 |
+| 25 | [Distributed rate limiter](./25-system-design-rate-limiter/) | ✅ | Module 05's algorithms across many servers | SDI-1 ch 4 |
 | — | News feed | ⬜ | Fan-out on write vs read | SDI-1 ch 11 |
 | — | Notification system | ⬜ | Push, SMS, email at scale | SDI-1 ch 10 |
 | — | Web crawler | ⬜ | Politeness, dedup, URL frontier | SDI-1 ch 9 |
@@ -154,7 +154,7 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Hotel / ticket reservation | ⬜ | Avoiding double-booking | SDI-2 ch 7 |
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
-**Progress:** 24 deep · 1 draft · 24 planned
+**Progress:** 25 deep · 0 draft · 24 planned
 
 ---
 
