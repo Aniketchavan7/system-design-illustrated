@@ -140,8 +140,13 @@ All explanations here are written from scratch in plain language, synthesizing t
 | 38 | [Cloud File Storage & Sync](./38-system-design-cloud-file-storage/) | ✅ | 4MB block chunking, SHA-256 deduplication, Delta Sync, optimistic conflicted copies | SDI-1 ch 15 (Google Drive) |
 | 39 | [Proximity Service & Nearby Places](./39-system-design-proximity-service/) | ✅ | Geohash Base-32 encoding, 9-cell boundary resolution, Haversine distance, Uber H3 | SDI-2 ch 1 (Yelp / Uber) |
 | 40 | [Digital Wallet & Payment System](./40-system-design-payment-system/) | ✅ | Double-entry bookkeeping (Debit=Credit), Idempotency keys, reconciliation, PSP timeouts | SDI-2 ch 11 (Stripe / PayPal) |
+| 41 | [Hotel & Ticket Reservation System](./41-system-design-hotel-reservation/) | ✅ | Double-booking prevention, 10-minute hold TTLs, optimistic locking, multi-day atomic ledger | SDI-2 ch 7 (Airbnb / Booking) |
+| 42 | [Real-Time Gaming Leaderboard](./42-system-design-real-time-gaming-leaderboard/) | ✅ | Redis Sorted Sets, Skip Lists, fractional tie-breaking, million-player ranking | SDI-2 ch 10 (Google Play / Netflix Games) |
+| 43 | [Distributed Job & Task Scheduler](./43-system-design-distributed-job-scheduler/) | ✅ | Distributed cron coordination, Hashed Timing Wheels, worker heartbeats, failover recovery | SDI-2 ch 6 (Google Chronos / Conductor) |
+| 44 | [Metrics Monitoring & Alerting System](./44-system-design-metrics-monitoring-and-alerting/) | ✅ | TSDB, Gorilla XOR compression, pull vs push scraping, downsampling, alert flapping prevention | SDI-2 ch 5 (Google Monarch / Netflix Atlas) |
+| 45 | [Ad Click Aggregation & Analytics](./45-system-design-ad-click-aggregation/) | ✅ | Tumbling/hopping windows, event-time watermarks, late event side outputs, bot click fraud filter | SDI-2 ch 4 (Google Ads / Keystone) |
 
-**Progress:** 40 verified · 0 under review · 0 planned (100% Complete)
+**Progress:** 45 verified · 0 under review · 0 planned (100% Complete)
 
 ---
 
@@ -191,6 +196,11 @@ Every single module includes a dedicated `REAL_WORLD_EXAMPLES.md` deep dive deta
 | **38** | Cloud File Storage & Sync | **Dropbox** Magic Pocket 4MB Chunking Engine vs **Google** Drive Colossus & Spanner Metadata | [Read Deep Dive](./38-system-design-cloud-file-storage/REAL_WORLD_EXAMPLES.md) |
 | **39** | Proximity Service & Nearby Places | **Uber** H3 Hexagonal Hierarchical Spatial Index vs **Google** Maps S2 Geometry Library | [Read Deep Dive](./39-system-design-proximity-service/REAL_WORLD_EXAMPLES.md) |
 | **40** | Digital Wallet & Payment System | **Stripe** Ledger Engine & Nightly Reconciliation vs **PayPal** Akka Distributed Actor State Machines | [Read Deep Dive](./40-system-design-payment-system/REAL_WORLD_EXAMPLES.md) |
+| **41** | Hotel & Ticket Reservation System | **Google** Hotels & Travel Spanner Instant Booking vs **Netflix** Live Events & Studio Soundstage Booking (Conductor Saga) | [Read Deep Dive](./41-system-design-hotel-reservation/REAL_WORLD_EXAMPLES.md) |
+| **42** | Real-Time Gaming Leaderboard | **Google** Play Games Bigtable Inverted Key Leaderboards vs **Netflix** Games Real-Time Social Challenges (Redis ZSET) | [Read Deep Dive](./42-system-design-real-time-gaming-leaderboard/REAL_WORLD_EXAMPLES.md) |
+| **43** | Distributed Job Scheduler | **Google** Borg Chronos Distributed Paxos Cron vs **Netflix** Conductor / Meson Workflow Orchestration (Dynomite) | [Read Deep Dive](./43-system-design-distributed-job-scheduler/REAL_WORLD_EXAMPLES.md) |
+| **44** | Metrics Monitoring & Alerting | **Google** Borgmon / Monarch Multi-Region In-Memory TSDB vs **Netflix** Atlas Dimensional Time-Series (100M+ metrics/sec) | [Read Deep Dive](./44-system-design-metrics-monitoring-and-alerting/REAL_WORLD_EXAMPLES.md) |
+| **45** | Ad Click Aggregation | **Google** Ads Photon Active-Active Multi-Datacenter Streaming vs **Netflix** Keystone Real-Time Flink Pipeline (1.5T events/day) | [Read Deep Dive](./45-system-design-ad-click-aggregation/REAL_WORLD_EXAMPLES.md) |
 
 ---
 
