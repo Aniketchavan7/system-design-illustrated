@@ -1,6 +1,7 @@
 /**
  * System Design Illustrated - Interactive Flashcard Web App Engine
- * Zero dependencies, vanilla JS, fully responsive, keyboard accessible.
+ * Zero dependencies, vanilla JS, fully responsive, keyboard accessible,
+ * monochrome editorial design with rich reading typography.
  */
 
 (function () {
@@ -72,7 +73,48 @@
     statusFilters: document.getElementById('status-filters')
   };
 
-  // 2. Storage Helpers
+  // 2. Lightweight Markdown Typesetting Helper
+  function formatMarkdown(text) {
+    if (!text) return '';
+    let escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Format code spans
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Format bold
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Format italic
+    escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Split paragraphs
+    const blocks = escaped.split(/\n\n+/);
+    return blocks.map(block => {
+      block = block.trim();
+      if (!block) return '';
+
+      const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+      // Check for bullet list
+      const isBullet = lines.every(l => l.startsWith('- ') || l.startsWith('* '));
+      if (isBullet) {
+        const lis = lines.map(l => `<li>${l.substring(2)}</li>`).join('');
+        return `<ul>${lis}</ul>`;
+      }
+
+      // Check for numbered list
+      const isNumbered = lines.every(l => /^\d+\.\s+/.test(l));
+      if (isNumbered) {
+        const lis = lines.map(l => `<li>${l.replace(/^\d+\.\s+/, '')}</li>`).join('');
+        return `<ol>${lis}</ol>`;
+      }
+
+      // Normal paragraph
+      return `<p>${lines.join('<br>')}</p>`;
+    }).filter(Boolean).join('');
+  }
+
+  // 3. Storage Helpers
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cardStates));
@@ -89,7 +131,7 @@
     saveState();
   }
 
-  // 3. Filtering & Searching
+  // 4. Filtering & Searching
   function applyFilters() {
     filteredCards = cards.filter(card => {
       // Category filter
@@ -107,10 +149,12 @@
         const searchable = (
           card.title + ' ' + 
           card.eli5 + ' ' + 
+          card.analogy + ' ' +
           card.category + ' ' + 
           card.google_example + ' ' + 
           card.netflix_example + ' ' + 
-          card.interview_question
+          card.interview_question + ' ' +
+          card.interview_answer
         ).toLowerCase();
         if (!searchable.includes(q)) return false;
       }
@@ -123,7 +167,7 @@
     updateProgress();
   }
 
-  // 4. Rendering
+  // 5. Rendering
   function renderCard() {
     if (dom.card.classList.contains('flipped')) {
       dom.card.classList.remove('flipped');
@@ -132,8 +176,8 @@
 
     if (filteredCards.length === 0) {
       dom.cardTitleFront.textContent = 'No matching cards found';
-      dom.cardEli5.textContent = 'Try adjusting your search query or switching filters.';
-      dom.cardAnalogy.textContent = 'Use the category pills or clear search to explore all 45 topics.';
+      dom.cardEli5.innerHTML = '<p>Try adjusting your search query or switching filters to view all 45 system design modules.</p>';
+      dom.cardAnalogy.innerHTML = '<p>Use the category chips above or clear the search input to reset the deck.</p>';
       dom.cardNumbers.textContent = '0 / 0 Results';
       dom.cardNum.textContent = '--';
       dom.cardCategory.textContent = 'Empty';
@@ -161,21 +205,21 @@
     dom.cardCategory.textContent = card.category;
     dom.cardTitleFront.textContent = card.title;
     dom.cardTitleBack.textContent = card.title;
-    dom.cardEli5.textContent = card.eli5;
-    dom.cardAnalogy.textContent = card.analogy;
+    dom.cardEli5.innerHTML = formatMarkdown(card.eli5);
+    dom.cardAnalogy.innerHTML = formatMarkdown(card.analogy);
     dom.cardNumbers.textContent = card.key_numbers;
 
     // Status Badge
-    dom.cardStatus.textContent = status === 'mastered' ? 'Mastered' : status === 'review' ? 'Review Later' : 'Unseen';
+    dom.cardStatus.textContent = status === 'mastered' ? '✓ Mastered' : status === 'review' ? 'Review Later' : 'Unseen';
     dom.cardStatus.className = `card-status-badge status-${status}`;
 
     // Back Face
-    dom.primaryCaseLabel.textContent = card.primary_case_label || 'Google';
-    dom.secondaryCaseLabel.textContent = card.secondary_case_label || 'Netflix';
-    dom.googleDesc.textContent = card.google_example || 'Employed in Google planetary datacenters.';
-    dom.netflixDesc.textContent = card.netflix_example || 'Core component of Netflix global streaming architecture.';
-    dom.interviewQ.textContent = card.interview_question || 'Interview Question';
-    dom.interviewA.textContent = card.interview_answer || 'Detailed answer in module README.';
+    dom.primaryCaseLabel.textContent = card.primary_case_label || 'Primary Case Study';
+    dom.secondaryCaseLabel.textContent = card.secondary_case_label || 'Secondary Case Study';
+    dom.googleDesc.innerHTML = formatMarkdown(card.google_example);
+    dom.netflixDesc.innerHTML = formatMarkdown(card.netflix_example);
+    dom.interviewQ.textContent = card.interview_question;
+    dom.interviewA.innerHTML = formatMarkdown(card.interview_answer);
 
     // Deep Links
     const isFile = window.location.protocol === 'file:';
@@ -224,7 +268,7 @@
     const card = filteredCards[currentIndex];
     setCardStatus(card.id, 'mastered');
     renderCard();
-    // Auto-advance
+    // Auto-advance smoothly
     if (currentIndex < filteredCards.length - 1) {
       setTimeout(nextCard, 200);
     }
@@ -235,7 +279,7 @@
     const card = filteredCards[currentIndex];
     setCardStatus(card.id, 'review');
     renderCard();
-    // Auto-advance
+    // Auto-advance smoothly
     if (currentIndex < filteredCards.length - 1) {
       setTimeout(nextCard, 200);
     }
@@ -248,18 +292,20 @@
         const j = Math.floor(Math.random() * (i + 1));
         [cards[i], cards[j]] = [cards[j], cards[i]];
       }
-      dom.btnShuffle.style.background = 'rgba(99, 102, 241, 0.3)';
-      dom.btnShuffle.style.borderColor = 'var(--primary)';
+      dom.btnShuffle.style.background = 'var(--ink-primary)';
+      dom.btnShuffle.style.color = '#000000';
+      dom.btnShuffle.style.borderColor = 'var(--ink-primary)';
     } else {
       cards = [...rawCards];
       dom.btnShuffle.style.background = '';
+      dom.btnShuffle.style.color = '';
       dom.btnShuffle.style.borderColor = '';
     }
     applyFilters();
   }
 
   function resetProgress() {
-    if (confirm('Are you sure you want to reset all mastery and review progress?')) {
+    if (confirm('Reset all mastery and review progress?')) {
       cardStates = {};
       saveState();
       renderCard();
@@ -282,9 +328,9 @@
     dom.progressFill.style.width = `${percent}%`;
   }
 
-  // 5. Event Listeners
+  // 6. Event Listeners
   dom.cardContainer.addEventListener('click', (e) => {
-    // Avoid flipping when clicking on actual outbound links
+    // Avoid flipping when clicking outbound links
     if (e.target.closest('a')) return;
     flipCard();
   });
@@ -344,7 +390,6 @@
 
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
-    // Ignore keystrokes when typing in search input
     if (document.activeElement === dom.searchInput) return;
 
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
@@ -365,6 +410,9 @@
     } else if (e.code === 'KeyS') {
       e.preventDefault();
       shuffleDeck();
+    } else if (e.key === '/') {
+      e.preventDefault();
+      dom.searchInput.focus();
     }
   });
 
@@ -393,7 +441,7 @@
   const isFileProto = window.location.protocol === 'file:';
   const isDocsDir = window.location.pathname.replace(/\\/g, '/').toLowerCase().includes('/docs');
   const guideLink = document.getElementById('link-study-guide');
-  if (isFileProto) {
+  if (isFileProto && guideLink) {
     guideLink.href = isDocsDir ? '../STUDY_GUIDE.md' : './STUDY_GUIDE.md';
   }
   const csEl = document.getElementById('link-cheatsheet');

@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-World Deep Dives**: See **Google Public DNS**, **Route 53**, and **Netflix** examples in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## 🧒 The 30-second version
 
@@ -12,7 +12,39 @@ Computers on the internet don't understand names like `google.com` or `netflix.c
 
 **DNS (Domain Name System)** is the decentralized global contact book of the internet. Whenever you type a URL, your computer asks a chain of specialized servers to translate that human-friendly name into the server's numerical IP address in a fraction of a second.
 
+## First pass
+
+In the [first lesson](../01-client-server-networking/#first-pass), the browser already knew where to send `GET /guide`. Now start with only the name `trailnotes.example`. **DNS** is the system that maps that name to an address the browser can connect to.
+
+~~~mermaid
+flowchart LR
+    B[Browser] -->|Look up trailnotes.example| R[Recursive resolver]
+    R -->|Ask when answer is missing from cache| A[Authoritative DNS]
+    A -->|Address and TTL| R
+    R -->|Return address| B
+    B -->|Connect and request the guide| S[Trail Notes endpoint]
+~~~
+
+The browser or operating system can reuse an answer it already has. Otherwise, it asks a **recursive resolver**. On a cache miss, the resolver follows referrals as needed to reach the **authoritative DNS server**, which publishes the site's record. The resolver returns the address, and the browser uses it for the HTTPS connection. The HTTP request itself travels to the site.
+
+**Predict.** In this exercise, a resolver caches `192.0.2.10` at 09:00:00 with a 60-second **TTL**. The TTL sets how long the answer can be reused in this model. The site owner publishes `192.0.2.20` at 09:00:15. Which address does that resolver return at 09:00:30? What does it return on its first new lookup at 09:01:01?
+
+<details>
+<summary>Reveal the answer</summary>
+
+At **09:00:30**, the cached answer still has 30 seconds left, so it returns `192.0.2.10`. At **09:01:01**, the old entry has expired. Assuming the resolver can query the authoritative server and receives the new record, it returns `192.0.2.20`. Other resolvers may have cached their answers at different times.
+
+</details>
+
+Use the existing [Python simulator](#run-the-demo) to watch a cached answer expire. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Domain Name System** and explain why two clients can receive different answers during a change.
+
+**Next lesson** · [Route the request to a healthy server](../03-load-balancing/#first-pass)
+
 ---
+
+## Technical reference
+
+Explore record types, cache behavior, anycast, and DNS-based failover.
 
 ## 🍕 Everyday analogy: The Global Phone Directory & Concierge
 
@@ -79,13 +111,13 @@ sequenceDiagram
 2. **Step 3–4:** Recursive Resolver queries the **Root Server (`.`)**. The Root server does not know the full domain, but refers the resolver to the **`.com` TLD server**.
 3. **Step 5–6:** Resolver queries the **`.com` TLD server**, which refers it to the domain owner's **Authoritative Nameserver** (`ns1.example.com`).
 4. **Step 7–8:** Resolver asks the **Authoritative Nameserver**, which returns the authoritative `A` record (`93.184.216.34`) along with its TTL (300 seconds).
-5. **Step 9–10:** Resolver stores the result in its cache and returns the IP to the client OS. Future requests from any nearby user will now get a sub-millisecond cache hit.
+5. **Step 9–10:** Resolver stores the result in its cache and returns the IP to the client OS. Clients using that resolver can benefit until the entry expires, while still paying their round trip to the resolver.
 
 ---
 
-## 🔢 Walk-through with real numbers
+## 🔢 Worked estimate · Cold and warm DNS
 
-Let's calculate the latency penalty of a cold DNS resolution across the world vs a warm cached resolution:
+These hypothetical round-trip times compare a browser cache hit, a recursive resolver cache hit, and a lookup that needs all three referral stages.
 
 | Step | Operation | Transit Latency |
 | :---: | :--- | :---: |
@@ -95,12 +127,12 @@ Let's calculate the latency penalty of a cold DNS resolution across the world vs
 | 4 | Resolver $\to$ `.com` TLD nameserver RTT | **$18\text{ ms}$** |
 | 5 | Resolver $\to$ Authoritative nameserver (Route 53) RTT | **$22\text{ ms}$** |
 | **Total Cold Lookup** | **Full iterative resolution tree traversal** | **$\approx 63\text{ ms}$** |
-| **Total Warm Lookup** | **Local OS / Resolver Cache Hit** | **$< 1\text{ ms}$** |
+| **Recursive resolver cache hit** | Local cache miss and one network round trip | **About 8 ms** |
+| **Local cache hit** | Browser uses its saved answer | **0.1 ms** |
 
 ### DNS UDP Packet Size Math
-- Traditional DNS packets over UDP are strictly capped at **512 bytes** (RFC 1035).
-- If responses exceed 512 bytes (e.g. multiple IPv6 addresses or DNSSEC cryptographic signatures), the server sets the **Truncation Flag (`TC = 1`)**.
-- The client detects `TC = 1` and immediately re-establishes the query using **TCP on port 53** or **EDNS0** (Extension Mechanisms for DNS, supporting up to 4,096 bytes).
+
+Without EDNS, classic DNS over UDP has a 512-byte message limit. EDNS lets the requester advertise a larger UDP payload it can receive. If the response is truncated, the server sets the `TC` bit and the client can retry over TCP. An open TCP connection can also be reused for multiple queries. [RFC 6891](https://www.rfc-editor.org/rfc/rfc6891.html) · [RFC 7766](https://www.rfc-editor.org/rfc/rfc7766.html)
 
 ---
 
@@ -122,15 +154,11 @@ Let's calculate the latency penalty of a cold DNS resolution across the world vs
 
 ---
 
-### 2. Anycast Routing: How 13 Root IPs Serve the Entire Planet
+### 2. Anycast routing and root server instances
 
-There are only **13 root server IP addresses** (`a.root-servers.net` through `m.root-servers.net`). How can 13 servers survive all global internet traffic?
+The DNS root has 13 server identifiers, A through M, each with IPv4 and IPv6 addresses. Operators can run many instances behind a given identity. [Root Server Technical Operations Association FAQ](https://root-servers.org/faq/)
 
-They don't! They use **Anycast BGP Routing**:
-- In **Unicast**, each IP address maps to one single physical network card in one physical building.
-- In **Anycast**, the exact same IP address (e.g. `198.41.0.4` for `a.root-servers.net` or `1.1.1.1` for Cloudflare) is advertised simultaneously by **over 1,500 physical datacenters** across the world using BGP (Border Gateway Protocol).
-- When you send a packet to `1.1.1.1`, internet routers automatically route your packet to the **physically closest datacenter** (usually $< 10\text{ ms}$ away).
-- **DDoS Immunity:** If a botnet attacks an Anycast IP with 100 Gbps of traffic, the load is distributed across hundreds of edge datacenters worldwide, absorbing the attack locally without bringing down other regions.
+In anycast, several locations announce the same address prefix. Routing policy determines the destination, so the selected site need not be physically closest. Distributing requests can help absorb surges. The outcome still depends on where the traffic lands and how much capacity is available. [Google Public DNS performance documentation](https://developers.google.com/speed/public-dns/docs/performance)
 
 ---
 
@@ -176,11 +204,11 @@ The **Time-To-Live (TTL)** tells resolvers how long they are legally permitted t
 
 3. **Relying purely on DNS for sub-second failover:**
    - *Why it fails:* Many ISPs and mobile carriers blatantly **ignore TTLs** and cache records for hours to save their own bandwidth. Furthermore, web browsers cache IPs internally for 60 seconds regardless of DNS TTL.
-   - *The Fix:* Use Anycast IPs or an external Layer 7 proxy for sub-second failover; never rely on DNS records alone for instantaneous zero-downtime failover.
+   - *The Fix:* Measure connection recovery with your actual clients. An edge proxy can switch backends while clients retain the same public endpoint.
 
 ---
 
-## 💻 Try it yourself
+## Run the demo
 
 Run the interactive simulator in this folder:
 
@@ -199,9 +227,8 @@ python demo.py
 
 ## 🌍 Where you'll see it in production
 
-- **AWS Route 53:** Provides health checks that automatically reroute DNS queries away from degraded AWS regions.
-- **Cloudflare (1.1.1.1):** The world's fastest public recursive resolver, operating from over 330 Anycast edge cities with DNS-over-HTTPS (DoH).
-- **Netflix Open Connect:** Uses GeoDNS to direct your TV or phone to an Open Connect Appliance (OCA) cache server installed directly inside your local internet service provider's physical facility!
+- **Route 53** can use health checks to select the endpoint returned in a new DNS answer. [AWS failover record settings](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-failover.html)
+- **Google Public DNS** documents anycast routing and two levels of resolver caching. [Google Public DNS performance documentation](https://developers.google.com/speed/public-dns/docs/performance)
 
 ---
 
@@ -212,11 +239,7 @@ python demo.py
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
-- **Why UDP by default?**
-  - **Latency and Throughput:** DNS lookups are small, transient queries. A UDP query takes **1 single round trip** (Request $\to$ Response). If DNS used TCP, every single lookup would require a 3-way handshake (1.5 RTT) plus connection teardown, tripling lookup latency and consuming massive server socket memory across global resolvers.
-- **When does it fall back to TCP?**
-  1. **Truncation (`TC = 1`):** Traditional UDP DNS responses are capped at **512 bytes**. If the response payload exceeds 512 bytes (common with DNSSEC cryptographic keys or large TXT records), the server sets the `TC` bit, and the client automatically retries over TCP.
-  2. **Zone Transfers (`AXFR` / `IXFR`):** Replicating complete DNS zone files between Primary and Secondary authoritative nameservers requires reliable, sequenced transmission of megabytes of data, which mandates TCP.
+A small query over UDP can finish in a single round trip without opening a connection. Classic DNS over UDP has a 512-byte limit without EDNS. If a UDP response has the truncation bit set, the resolver can retry over TCP. DNS implementations can choose TCP up front and reuse an open connection for multiple queries. [RFC 7766](https://www.rfc-editor.org/rfc/rfc7766.html) · [RFC 6891](https://www.rfc-editor.org/rfc/rfc6891.html)
 
 </details>
 
@@ -227,12 +250,7 @@ python demo.py
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
-- In traditional **Unicast**, one IP belongs to one machine. In **Anycast**, multiple physical servers located across hundreds of cities worldwide advertise the exact same IP prefix via BGP (Border Gateway Protocol).
-- When a user sends a DNS packet, internet transit providers naturally route the packet along the shortest BGP path to the nearest geographical datacenter.
-- **DDoS Defense Mechanics:** During a 500 Gbps volumetric DDoS attack against an Anycast DNS service:
-  - The attack traffic is not concentrated in one datacenter.
-  - Instead, the botnet's traffic is geographically fragmented: bots in Germany hit Frankfurt, bots in California hit San Jose, bots in Brazil hit São Paulo.
-  - Each individual edge datacenter absorbs its local fraction of the attack with local scrubbing hardware without the global service failing.
+Anycast lets several locations advertise the same network prefix. Routing selects a path to one of them. Distribution across sites can spread an attack's load, but mitigation depends on how traffic is routed, what capacity each site has, and how attack traffic is filtered. [Google Public DNS FAQ](https://developers.google.com/speed/public-dns/faq)
 
 </details>
 
@@ -261,11 +279,11 @@ python demo.py
 - **Design:**
   1. Configure an active-passive or active-active DNS routing policy (e.g., in AWS Route 53).
   2. Deploy automated **health-check probes** from multiple global vantage points querying an endpoint (e.g., `https://region-a.example.com/healthz`).
-  3. If Region A fails 3 consecutive health checks within 15 seconds, Route 53 automatically flips the DNS record for `api.example.com` to point to Region B's load balancer IP.
+  3. When the configured health checks mark Region A unhealthy and Region B is healthy, Route 53 can return Region B in new answers. Detection takes time and cached answers can still refer to Region A.
   4. Keep the TTL short (e.g., 30 to 60 seconds).
 - **Major Limitations in Real Production:**
-  1. **Resolver Disobedience (Ignoring TTL):** Many public ISPs, corporate proxy caches, and mobile networks enforce arbitrary minimum TTLs (e.g., 15 minutes to 2 hours) to conserve their bandwidth, meaning a significant percentage of users will continue sending traffic to the dead region.
-  2. **Client-Side Caching:** Browsers (Chrome, Safari) cache IP addresses in memory for 60 seconds or longer, ignoring DNS record changes until the tab or browser process restarts.
+  1. **Resolver Disobedience (Ignoring TTL):** Resolvers with a cached answer can keep returning it until it expires. Reconnection behavior also depends on local policy.
+  2. **Client-Side Caching:** Clients may keep using an existing connection after the DNS record changes. Measure the time it takes for clients to reconnect.
   3. **Traffic Thundering Herd:** When Region A dies and traffic abruptly swings to Region B, Region B can suffer a catastrophic cold-start crash if its database connection pools and caches are not pre-warmed.
 
 </details>

@@ -41,6 +41,21 @@ With consensus replication, 2F+1 voting replicas need a majority of F+1. Place t
 4. **Measure and reconcile.** Checkout succeeds at 12:11. The standby reports committed writes through 11:59:35. The observed recovery took 11 minutes and exposed 25 seconds of recent writes. Match order IDs against receipts before replaying missing operations with their original idempotency keys.
 5. **Fail back deliberately.** Rebuild the former primary from the new source of truth, validate that it has caught up, and schedule a controlled switchover.
 
+## Trail Notes exercise
+
+Trail Notes now has [cached guide pages](../10-caching-patterns/#trail-notes-exercise) and [queued photo previews](../17-message-queues/#trail-notes-exercise). A region fails at **12:00**. A standby can serve guide reads at **12:08**, but its latest recoverable committed guide update is at **11:59:20**. The team set a **10-minute RTO for public reads** and a **30-second RPO for guide updates**.
+
+**Predict.** Which target did the incident meet? What would you verify before reopening writes and restarting preview workers?
+
+<details>
+<summary>Reveal the answer</summary>
+
+Public reads recovered in **8 minutes**, within their target. The recovery point is **40 seconds** before the outage, so the guide-update RPO was missed by **10 seconds**. Compare recovered guide versions with acknowledgments or durable records to identify missing updates. Before resuming writes, establish which region owns them. Ensure restarted preview workers process the intended job versions and can safely retry work completed before the outage.
+
+</details>
+
+Revisit the [original request path](../03-load-balancing/#first-pass) and redraw it with the cache, queue, and standby. Label which components serve public reads and which protect author updates.
+
 ## Prove that a backup can be restored
 
 Try this on paper. A bad migration ran at 14:00 and replicated to both regions. You discover it at 14:05. Pick a restore point, work out how to recover valid writes made after 14:00, and describe what you would check before reopening traffic.

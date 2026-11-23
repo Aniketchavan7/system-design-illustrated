@@ -22,6 +22,21 @@ Imagine a busy pizza chef:
 - **With a Message Queue (RabbitMQ / SQS)**: Waiters drop order tickets into a basket. The chef grabs tickets one by one, cooks pizzas, and throws the tickets away.
 - **With a Distributed Commit Log (Kafka)**: All orders are recorded in a permanent, numbered ledger book ($1, 2, 3 \dots$). The chef reads the ledger to cook pizzas. The accounting team reads the exact same ledger to calculate taxes. The inventory manager reads it to restock flour. Nobody tears out or deletes pages from the book, and anyone can flip back to page 1 anytime to recount.
 
+## Trail Notes exercise
+
+The [cache](../10-caching-patterns/#trail-notes-exercise) helps readers get guide pages. Guide authors have a different problem. When they upload a photo, the site must save the original, then resize a preview. Trail Notes records the original and queues the slower resize so authors can get an acknowledgment while a worker builds the preview.
+
+**Predict.** A burst adds **100 preview jobs per second** for **10 seconds**. Workers complete **20 per second** throughout the burst, starting with an empty queue. How many jobs are pending at the end? How long will they take to drain if no more arrive?
+
+<details>
+<summary>Reveal the answer</summary>
+
+About **800 jobs** remain. The queue received 1,000 jobs and workers finished 200. At 20 jobs per second and no new arrivals, the remaining work takes **40 seconds**. If the queue delivers a job twice, use a stable key such as the photo ID and resize version so the worker can safely reuse or replace the same output.
+
+</details>
+
+**Next exercise** · [Recover the site after a regional outage](../advanced/multi-region-recovery.md#trail-notes-exercise). To test a related failure with PostgreSQL and RabbitMQ, use the [order processing lab](../labs/order-processing/).
+
 ---
 
 ## 🍕 Everyday Analogy

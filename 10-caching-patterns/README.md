@@ -12,6 +12,21 @@ Fetching data from a database on a hard drive takes about **15 milliseconds**. R
 
 A **cache** is a high-speed in-memory storage layer (like Redis or Memcached) sitting between your application and your database. Instead of making the database re-calculate the same expensive SQL query 10,000 times a second, the application checks the cache first. If the answer is already in memory (**Cache Hit**), it returns it in under 1 millisecond.
 
+## Trail Notes exercise
+
+In the [load balancing lesson](../03-load-balancing/#first-pass), two surviving servers can handle **1,800 requests per second**, while users send **2,000**. Trail Notes adds a cache in front of those servers for public guide pages. Assume all incoming requests are eligible for caching, a cache hit never reaches a backend, and the origin can sustain the same rate for cache misses.
+
+**Predict.** With a **70% hit rate**, how many requests per second go to the backends? What happens if the cache stops answering and the site sends every request through?
+
+<details>
+<summary>Reveal the answer</summary>
+
+The cache handles **1,400 requests per second**, and the backends see **600**. If all traffic bypasses the cache, the backends see **2,000** again and the 200-request-per-second shortfall returns. Plan for cold caches and cache failures. For example, limit concurrent work sent to the origin and decide whether an older cached guide is acceptable during an outage.
+
+</details>
+
+**Next exercise** · [Move photo processing off the request path](../17-message-queues/#trail-notes-exercise).
+
 ---
 
 ## 🍕 Everyday analogy: The Kitchen Counter vs The Basement Pantry

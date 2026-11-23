@@ -189,13 +189,13 @@ All explanations here are written from scratch in plain language, synthesizing t
 
 ## 🏢 Real-World Production Case Studies (Google, Netflix, Meta, Amazon, Stripe)
 
-Every single module includes a dedicated `REAL_WORLD_EXAMPLES.md` deep dive detailing how tech titans run these concepts at multi-billion request scale:
+Each module includes a `REAL_WORLD_EXAMPLES.md` companion with production examples or illustrative applications.
 
 | Module | Core Topic | Production Deep Dives & Architectures | Link |
 | :--- | :--- | :--- | :---: |
-| **01** | Client–Server Networking | **Google** QUIC / HTTP/3 & BBR vs **Netflix** Zuul 2/3 Netty Edge TLS & Session Tickets | [Read Deep Dive](./01-client-server-networking/REAL_WORLD_EXAMPLES.md) |
-| **02** | Domain Name System (DNS) | **Google** 8.8.8.8 Anycast BGP & ECS vs **Netflix** Route 53 Latency-Based Regional Evacuation | [Read Deep Dive](./02-domain-name-system/REAL_WORLD_EXAMPLES.md) |
-| **03** | Load Balancing | **Google** Maglev (L4 Kernel-Bypass Consistent Hashing) vs **Netflix** Ribbon & Eureka Client-Side Balancing | [Read Deep Dive](./03-load-balancing/REAL_WORLD_EXAMPLES.md) |
+| **01** | Client–Server Networking | **Google** QUIC deployment · **Netflix** Zuul 2 gateway | [Read Deep Dive](./01-client-server-networking/REAL_WORLD_EXAMPLES.md) |
+| **02** | Domain Name System (DNS) | **Google Public DNS** caching and anycast · **Route 53** failover · **Netflix** capacity planning | [Read Deep Dive](./02-domain-name-system/REAL_WORLD_EXAMPLES.md) |
+| **03** | Load Balancing | **Google** Maglev · **Netflix** client-side balancing and overload protection | [Read Deep Dive](./03-load-balancing/REAL_WORLD_EXAMPLES.md) |
 | **04** | API Gateways & Proxies | **Netflix** Zuul 2/3 Async EventLoop Gateway vs **Google** Envoy Service Mesh & xDS Control Plane | [Read Deep Dive](./04-api-gateways-and-proxies/REAL_WORLD_EXAMPLES.md) |
 | **05** | Rate Limiting | **Stripe** 4-Tier Distributed Rate Limiter vs **Netflix** Adaptive Concurrency Limits (Little's Law) | [Read Deep Dive](./05-rate-limiting/REAL_WORLD_EXAMPLES.md) |
 | **06** | SQL vs NoSQL Databases | **Google** Spanner (TrueTime Relational ACID) vs **Netflix** Polyglot Cassandra & Aurora | [Read Deep Dive](./06-relational-and-non-relational-databases/REAL_WORLD_EXAMPLES.md) |

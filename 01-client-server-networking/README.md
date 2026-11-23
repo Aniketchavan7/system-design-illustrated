@@ -14,7 +14,41 @@ Every digital product is a conversation between two computers: a **client** (you
 - **UDP** is like a live radio broadcast—it sprays sound into the air as fast as possible; if you miss two syllables of music, it doesn't rewind the station.
 - **HTTP/1.1, HTTP/2, and HTTP/3** are the languages clients and servers use on top of those couriers to send web pages, videos, and API data.
 
+## First pass
+
+**Trail Notes** is a fictional website where people read hiking guides. Imagine opening `https://trailnotes.example/guide` and follow one request. For this lesson, assume the browser already knows the server's address.
+
+~~~mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Trail Notes server
+    B->>S: Establish a secure connection if needed
+    B->>S: GET /guide
+    S-->>B: 200 OK and the guide HTML
+~~~
+
+1. The browser is the **client**. It sends the request over a secure connection.
+2. The **server** reads the path `/guide` and sends a response. Status `200 OK` indicates success, and the response body contains the HTML.
+3. The browser renders the HTML. It may ask for styles or images in additional requests, using the same connection when possible.
+
+**Predict.** An established connection has a 50 ms round-trip time. The server takes 20 ms to produce a small response. What is the estimated time from sending the request to receiving the response? What might a new connection add?
+
+<details>
+<summary>Reveal the answer</summary>
+
+About **70 ms** in this model. The outbound request and inbound response use one network round trip, and server work adds another 20 ms. This estimate omits payload transfer time and browser rendering. A new HTTPS connection can add connection and encryption setup. How much it adds depends on the protocol and whether an earlier session can be resumed.
+
+</details>
+
+Use the existing [Python simulator](#run-the-demo) to compare connection setup and request patterns. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Client–Server Networking** and explain how you estimated 70 ms.
+
+**Next lesson** · [Find the website's address with DNS](../02-domain-name-system/#first-pass)
+
 ---
+
+## Technical reference
+
+Explore TCP and UDP, HTTP versions, loss and multiplexing, streaming protocols, and interview questions.
 
 ## 🍕 Everyday analogy: The Postal Letter vs The Live Phone Call
 
@@ -82,7 +116,7 @@ sequenceDiagram
 
 ---
 
-## 🔢 Walk-through with real numbers
+## 🔢 Worked estimate · Four page assets
 
 Suppose your mobile app needs to fetch **4 items** to display a user profile:
 - `profile.json` (2 KB)
@@ -90,7 +124,7 @@ Suppose your mobile app needs to fetch **4 items** to display a user profile:
 - `theme.css` (5 KB)
 - `analytics.js` (50 KB)
 
-Assume network **$\text{RTT} = 50\text{ ms}$**, and server computation takes **$20\text{ ms}$** per asset.
+This is a simplified comparison of request patterns. The TCP rows omit TLS setup and payload transfer time. The HTTP/3 row assumes a previously established session can resume with accepted early data. Assume network **$\text{RTT} = 50\text{ ms}$**, and server computation takes **$20\text{ ms}$** per asset.
 
 | Protocol | Connections Opened | How requests travel | Total Elapsed Time | Why? |
 | :--- | :---: | :--- | :---: | :--- |
@@ -142,7 +176,7 @@ flowchart TD
 #### HTTP/3: QUIC over UDP
 - Why HTTP/2 was not enough: HTTP/2 solves application-layer Head-of-Line blocking, but TCP itself still has transport Head-of-Line blocking. If a single TCP packet drops on Wi-Fi, the OS pauses **all** HTTP/2 streams until that lost packet is resent.
 - HTTP/3 replaces TCP with **QUIC (running over UDP)**.
-- Each stream in QUIC is truly independent. A lost packet on Stream 3 does not delay Stream 1 by a single millisecond.
+- QUIC orders data per stream. Missing bytes on one stream do not stop delivery of available bytes on another stream, though shared congestion control can slow the connection as a whole.
 - **Connection Migration:** If your phone switches from home Wi-Fi to cellular 5G, the IP address changes. TCP connections break and must reconnect from scratch. QUIC uses a 64-bit Connection ID, so streams continue seamlessly without dropping!
 
 ---
@@ -200,7 +234,7 @@ While public internet clients use HTTP/JSON REST APIs because every browser supp
 
 ---
 
-## 💻 Try it yourself
+## Run the demo
 
 Run the interactive simulator in this folder:
 
@@ -210,18 +244,16 @@ python demo.py
 ```
 
 ### What to explore in `demo.py`:
-1. Observe the exact **1.5 RTT timing** required to establish a TCP socket.
+1. The demo counts three one-way legs until the server receives the final ACK. The client can normally send its first data with that ACK after one RTT. Separate TLS setup can add time.
 2. Watch how HTTP/1.1 serial queueing creates **Head-of-Line blocking**, forcing the total page load time to equal the sum of all individual latencies.
-3. Contrast with the HTTP/2 multiplexing test, which finishes in the time of the single slowest asset.
+3. Contrast with the HTTP/2 multiplexing test, which models concurrent requests with elapsed time bounded by the slowest asset under the demo's assumptions.
 
 ---
 
 ## 🌍 Where you'll see it in production
 
-- **Discord Voice Channels:** Use **UDP** via WebRTC so your voice never lags when packets are dropped.
-- **ChatGPT & Anthropic Claude:** Stream generated AI tokens to your screen using **Server-Sent Events (SSE)**.
-- **Uber Microservices:** Hundreds of internal Go and Java backend services communicate exclusively via **gRPC** to handle millions of location pings per second.
-- **Cloudflare & Google:** Over $35\%$ of global internet traffic is now served via **HTTP/3 (QUIC)** to speed up mobile networks.
+- **Google** documented an early QUIC deployment for HTTPS traffic in a 2017 research paper. [Google's QUIC deployment paper](https://research.google/pubs/the-quic-transport-protocol-design-and-internet-scale-deployment/)
+- **Netflix** documents how Zuul 2 proxies client requests to upstream services. [Netflix's Zuul 2 architecture](https://github.com/Netflix/zuul/wiki/How-It-Works-2.0)
 
 ---
 
@@ -253,8 +285,8 @@ A comprehensive answer spans **DNS $\to$ TCP $\to$ TLS $\to$ HTTP $\to$ Renderin
 
 - **Application-Layer HoL Blocking (HTTP/1.1):** In HTTP/1.1, only one request could be active on a TCP socket at a time. HTTP/2 solved this by multiplexing binary frames with stream IDs.
 - **Transport-Layer HoL Blocking (TCP):** TCP is an abstraction of a single continuous stream of ordered bytes. If packet #3 of Stream B is dropped by a router on Wi-Fi, the operating system's TCP receive buffer **refuses to deliver packets #4, #5, and #6 to the application**—even if those subsequent packets belong to a completely unrelated Stream A!
-- **Why it matters:** On lossy networks (e.g. mobile 4G/5G with $2\%$ packet loss), HTTP/2 is actually slower than HTTP/1.1 with 6 separate sockets.
-- **The Solution:** HTTP/3 abandoned TCP entirely for **QUIC (over UDP)**. In QUIC, each stream has its own independent sequencing and loss-recovery queue. A lost packet on Stream B has zero effect on Stream A.
+- **Why it matters:** On lossy links, a missing range of TCP bytes can delay every HTTP/2 stream on that connection. The relative performance of one multiplexed connection and several independent connections depends on the workload and network.
+- **The Solution:** HTTP/3 abandoned TCP entirely for **QUIC (over UDP)**. In QUIC, each stream has its own independent sequencing and loss-recovery queue. Missing data on Stream B does not impose ordered delivery on Stream A. Shared congestion control still affects the connection.
 
 </details>
 

@@ -10,9 +10,72 @@
 
 A single computer can only handle so much traffic before its CPU catches fire or runs out of RAM. Rather than buying an impossibly expensive supercomputer (**vertical scaling**), engineers run dozens of cheap computers in parallel (**horizontal scaling**).
 
-A **load balancer** sits in front of that fleet of servers. When a user sends a request, the load balancer picks one available server, forwards the work, and returns the response. If one server crashes, the load balancer automatically stops sending it traffic without the user ever noticing.
+A **load balancer** sits in front of that fleet of servers. When a user sends a request, the load balancer picks one available server, forwards the work, and returns the response. Once it detects a backend failure, it can stop sending new work there. Users may see errors if requests were already in flight or the remaining servers are overloaded.
+
+## First pass
+
+In the [DNS lesson](../02-domain-name-system/#first-pass), the browser found the site's public address. Traffic has grown, so that address now leads to a **load balancer** in front of three Trail Notes servers. The browser still sends `GET /guide` over HTTPS.
+
+~~~mermaid
+flowchart LR
+    B[Browser] -->|HTTPS GET /guide| L[Load balancer]
+    L --> A[Server A]
+    L --> C[Server B]
+    L --> D[Server C]
+~~~
+
+The [routing animation](#routing-animation) follows a request from a client through the load balancer to a healthy server. **Text walkthrough.** The browser sends a request to the public endpoint. The load balancer chooses an eligible server and forwards it. That server returns the page through the load balancer. If a health check marks a server unavailable, new requests go to other servers. Requests already sent to the failed server may still fail. The animation illustrates routing. Use the separate workload below for the calculation.
+
+**Predict.** Each server can sustain **900 requests per second** for this mix of work. The site receives a steady **2,000 requests per second**. Once Server C is out of rotation, can the remaining servers keep up? Assume traffic is spread evenly and the backends are the capacity limit.
+
+<details>
+<summary>Reveal the answer</summary>
+
+Before the failure, capacity is **3 × 900 = 2,700 requests per second**. After it, capacity is **2 × 900 = 1,800 requests per second**. Surviving servers receive about 1,000 requests per second each, or 100 above each server's limit. Rerouting preserves a route for new requests, but there is still a **200-request-per-second shortfall**.
+
+</details>
+
+### Choose a response
+
+Which option fits a sustained outage? Which could absorb a two-second traffic burst?
+
+<details>
+<summary>Compare the trade-offs</summary>
+
+| Option | When it helps | Cost or limit |
+| --- | --- | --- |
+| Run spare capacity | A failure can last longer than a brief spike. A fourth server leaves 2,700 requests per second after one fails in this model. | The spare capacity costs money while healthy. Check whether databases and shared services can handle the traffic too. |
+| Shed low-priority traffic | Protect essential reads by rejecting or deferring at least 200 requests per second of optional work in this simplified workload. | Some users lose a feature or get a retryable error. Retries must be bounded so they do not add to the overload. |
+| Use a bounded queue | A two-second burst at 200 requests per second over capacity builds up about 400 requests. The queue can drain if arrival rates later fall below capacity. | Pending work adds latency and can expire. During a sustained 200-request-per-second shortfall, the queue keeps growing until its limit. |
+
+[Google SRE guidance on overload](https://sre.google/sre-book/handling-overload/)
+
+</details>
+
+### Final exercise · Trace a request through a failure
+
+Draw the path from a new browser tab to the guide HTML. Include DNS, connection setup, the load balancer, and one backend. Then cross out Server C and answer these questions before revealing the walkthrough.
+
+1. Does a browser with a valid cached DNS answer need a new DNS lookup?
+2. What can happen to a request already running on Server C, and what happens to new requests after the balancer detects the failure?
+3. What is the remaining capacity, and how would you handle the shortfall if the outage lasts ten minutes?
+
+<details>
+<summary>Reveal the walkthrough</summary>
+
+On a cache miss the browser asks its resolver for the public address, then connects to the load balancer. With a valid cached answer it can go straight to the connection. The balancer sends `GET /guide` to a backend, and the backend returns the HTML through the balancer. Server C's in-flight work may fail. After failure detection, the balancer sends new work to A and B. They can serve **1,800 requests per second**, so steady demand exceeds capacity by **200 per second**. Bring spare capacity online if available. In the meantime, protect the guide request by shedding enough optional work to stay within capacity.
+
+</details>
+
+Use the existing [Python simulator](#run-the-demo) to see how the balancer routes requests after ejection. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Load Balancing** and explain why a healthy route alone cannot cover a capacity shortfall.
+
+**Continue learning** · [Cache popular guides](../10-caching-patterns/#trail-notes-exercise), [queue background jobs](../17-message-queues/#trail-notes-exercise), and [practice regional failover](../advanced/multi-region-recovery.md#trail-notes-exercise).
 
 ---
+
+## Technical reference
+
+Explore Layer 4 and Layer 7 routing, health checks, balancing algorithms, and failure modes.
 
 ## 🍕 Everyday analogy: The Restaurant Hostess & Bank Teller Queues
 
@@ -48,10 +111,10 @@ A load balancer solves this by:
 
 ---
 
-## 🖼️ Picture it
+## Routing animation
 
 <p align="center">
-  <img src="./assets/load_balancer.gif" alt="Dynamic Load Balancing Animation" width="100%" />
+  <img src="./assets/load_balancer.gif" alt="Requests move from the client through the load balancer to Server 1 or 2 while failed Server 3 is skipped" width="100%" />
 </p>
 
 ```mermaid
@@ -86,7 +149,7 @@ flowchart TD
 
 ---
 
-## 🔢 Walk-through with real numbers
+## 🔢 Worked estimate · Provisioning spare capacity
 
 Let's calculate how many backend servers you need to survive peak load:
 
@@ -190,7 +253,7 @@ flowchart TD
 
 ---
 
-## 💻 Try it yourself
+## Run the demo
 
 Run the interactive simulator in this folder:
 
@@ -203,15 +266,14 @@ python demo.py
 1. Watch **Round-Robin** cycle requests cleanly 1-by-1 across servers.
 2. Watch **Least-Connections** normalize active connections by machine weight and route to the least-burdened node.
 3. Test **IP Hashing** and observe how a client IP always lands on the same server.
-4. Watch an injected **health check failure** eject `srv-3` and observe how subsequent traffic is safely routed only to surviving healthy nodes without dropping requests.
+4. Watch an injected **health check failure** remove `srv-3` from the demo's rotation. The demo shows where new requests go. Use the worked exercise to check whether those servers have enough capacity.
 
 ---
 
 ## 🌍 Where you'll see it in production
 
-- **HAProxy:** Renowned as the world's fastest open-source Layer 4/7 reverse proxy, used by GitHub, Reddit, and Stack Overflow to handle tens of billions of requests daily.
-- **AWS Application Load Balancer (ALB):** Natively integrates with AWS Auto Scaling groups to automatically add and remove container instances based on traffic spikes.
-- **Nginx:** Powers over $30\%$ of the world's top 10 million websites as both a reverse proxy and Layer 7 load balancer.
+- **Maglev** distributes network flows across service endpoints while using consistent hashing and connection tracking to reduce disruption during failures. [Google's 2016 Maglev paper](https://research.google/pubs/maglev-a-fast-and-reliable-software-network-load-balancer/)
+- **AWS Application Load Balancer** uses configurable health checks to determine target health. AWS documents an exception when all registered targets in a group are unhealthy, where the load balancer can fail open. [AWS target group health checks](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html)
 
 ---
 
