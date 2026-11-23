@@ -13,12 +13,16 @@ concurrency:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - os: windows-latest
+            python-version: "3.11"
 
     steps:
       - name: 📥 Checkout repository
@@ -40,14 +44,15 @@ jobs:
 
       - name: 🧪 Run Pytest test suite
         run: |
-          pytest -v --tb=short
+          python -m pytest -v --tb=short
 
       - name: 📊 Generate CI Job Summary
         if: always()
+        shell: bash
         run: |
           echo "### 🧠 System Design Illustrated — Test Results" >> $GITHUB_STEP_SUMMARY
           echo "- **Python Version**: \`${{ matrix.python-version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **OS**: \`ubuntu-latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **OS**: \`${{ runner.os }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Verified Components**:" >> $GITHUB_STEP_SUMMARY
           echo "  - 45 Runnable Module \`demo.py\` scripts" >> $GITHUB_STEP_SUMMARY
@@ -82,3 +87,20 @@ jobs:
       - name: 🔗 Verify relative links and module integrity
         run: |
           pytest -v tests/test_structure_and_links.py tests/test_flashcard_app.py
+
+  order-processing-lab:
+    name: Order processing crash recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: labs/order-processing
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start PostgreSQL and RabbitMQ
+        run: docker compose up -d --wait --wait-timeout 120 postgres rabbitmq
+      - name: Verify relay and worker crash recovery
+        run: docker compose run --rm --build lab verify
+      - name: Stop lab services
+        if: always()
+        run: docker compose down

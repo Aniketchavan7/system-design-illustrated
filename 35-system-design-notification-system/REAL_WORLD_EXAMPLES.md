@@ -49,7 +49,7 @@ flowchart LR
     AppServer["App Server / Backend"] -->|"HTTP v1 API / OAuth 2.0"| FCMEndpoint["FCM Ingress Edge (BFE)"]
     FCMEndpoint --> MessageRouter["FCM Router & Fanout Engine"]
     MessageRouter --> ConnectionServer["Google Play Services Connection Servers"]
-    ConnectionServer ==="Persistent TLS Keep-Alive Socket"===> AndroidPhone["Android Devices (Play Services)"]
+    ConnectionServer ==>|"Persistent TLS Keep-Alive Socket"| AndroidPhone["Android Devices (Play Services)"]
 ```
 
 ### Key Technical Mechanisms

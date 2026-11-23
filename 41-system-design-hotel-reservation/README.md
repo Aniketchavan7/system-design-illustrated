@@ -81,7 +81,7 @@ sequenceDiagram
             Note over RedisHold,DB: TTL fires or Payment Fails
             RedisHold--xAPI: Key Expired in Redis
             API->>DB: UPDATE reservations SET status='EXPIRED'
-            API-->>Client: 410 Gone ("Reservation expired; inventory released")
+            API-->>Client: 410 Gone ("Reservation expired, inventory released")
         end
     end
 ```

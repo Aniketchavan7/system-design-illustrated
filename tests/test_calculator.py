@@ -11,9 +11,9 @@ def test_calculator_exists():
 
 def test_calculator_help():
     result = subprocess.run(
-        [sys.executable, CALC_PATH, "--help"],
+        [sys.executable, "-X", "utf8", CALC_PATH, "--help"],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=5
     )
     assert result.returncode == 0
@@ -22,9 +22,9 @@ def test_calculator_help():
 @pytest.mark.parametrize("preset", ["twitter", "youtube", "uber", "chat"])
 def test_calculator_presets(preset):
     result = subprocess.run(
-        [sys.executable, CALC_PATH, "--preset", preset],
+        [sys.executable, "-X", "utf8", CALC_PATH, "--preset", preset],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=5
     )
     assert result.returncode == 0
@@ -35,7 +35,7 @@ def test_calculator_presets(preset):
 def test_calculator_custom_parameters():
     result = subprocess.run(
         [
-            sys.executable, CALC_PATH,
+            sys.executable, "-X", "utf8", CALC_PATH,
             "--dau", "50000000",
             "--writes", "10",
             "--reads", "100",
@@ -46,7 +46,7 @@ def test_calculator_custom_parameters():
             "--peak-mult", "2.5"
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=5
     )
     assert result.returncode == 0

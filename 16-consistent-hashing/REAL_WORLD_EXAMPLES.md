@@ -43,8 +43,8 @@
 
 #### B. Minimizing Rebalance Impact
 - When Discord adds a new server node to the cluster:
-  - Only the guilds that fall between the new node and its immediate predecessor are remapped ($rac{1}{N}$ fraction of guilds).
-  - The remaining $rac{N-1}{N}$ of guilds remain completely undisturbed on their existing servers.
+  - Only the guilds that fall between the new node and its immediate predecessor are remapped ($\frac{1}{N}$ fraction of guilds).
+  - The remaining $\frac{N-1}{N}$ of guilds remain completely undisturbed on their existing servers.
 - When an auto-scaling event occurs, only a tiny sliver of users reconnect, eliminating cascading gateway collapses.
 
 ---
@@ -100,5 +100,5 @@ In theory, consistent hashing distributes keys evenly. In practice, with small n
 
 ## 🎯 System Design Interview Takeaways
 1. **Always Mention Virtual Nodes**: If an interviewer asks you to design a distributed cache (Memcached/Redis) or storage ring, never stop at basic consistent hashing. Immediately explain that **Virtual Nodes (vnodes)** are required to prevent hot segments and cascading domino failures.
-2. **Quantify the Movement Invariant**: Explicitly state that when scaling from $N$ to $N+1$ nodes, consistent hashing rebalances only **$K/N$ keys** (where $K$ is total keys), compared to $K 	imes rac{N}{N+1}$ in standard modulus hashing.
+2. **Quantify the Movement Invariant**: Explicitly state that when scaling from $N$ to $N+1$ nodes, consistent hashing rebalances only **$K/N$ keys** (where $K$ is total keys), compared to $K 	imes \frac{N}{N+1}$ in standard modulus hashing.
 3. **Handling Hot Keys**: Remind the interviewer that consistent hashing distributes keys evenly, but *not* read volume for a single viral key (e.g., celebrity post). Viral keys require local replication or near-cache layers.

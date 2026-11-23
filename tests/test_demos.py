@@ -18,10 +18,10 @@ def test_demo_execution(folder):
 
     # Run demo.py as subprocess with working directory set to the module folder
     result = subprocess.run(
-        [sys.executable, "demo.py"],
+        [sys.executable, "-X", "utf8", "demo.py"],
         cwd=os.path.join(REPO_ROOT, folder),
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=15
     )
 
@@ -30,3 +30,15 @@ def test_demo_execution(folder):
         f"--- STDOUT ---\n{result.stdout}\n"
         f"--- STDERR ---\n{result.stderr}\n"
     )
+
+
+def test_authorization_demo():
+    result = subprocess.run(
+        [sys.executable, "-X", "utf8", "advanced/auth_demo.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        encoding="utf-8",
+        timeout=5,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Verified tenant isolation" in result.stdout

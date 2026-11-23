@@ -103,9 +103,9 @@ $$	ext{Concurrency} = 	ext{Throughput} 	imes 	ext{Latency}$$
 2. It tracks the **Minimum RTT** observed during low-traffic periods (the physical baseline latency of the system).
 3. If current RTT begins to climb significantly above baseline, the system has entered **queueing delay** (congestion).
 4. The limiter dynamically contracts the permitted concurrency limit:
-   $$	ext{Limit}_{t+1} = 	ext{Limit}_t 	imes eta \quad (	ext{Multiplicative Decrease})$$
+   $$	ext{Limit}_{t+1} = 	ext{Limit}_t 	imes \beta \quad (	ext{Multiplicative Decrease})$$
 5. When RTT recovers, it gradually increases the limit:
-   $$	ext{Limit}_{t+1} = 	ext{Limit}_t + lpha \quad (	ext{Additive Increase})$$
+   $$	ext{Limit}_{t+1} = 	ext{Limit}_t + \alpha \quad (	ext{Additive Increase})$$
 
 #### Traffic Prioritization
 When throttling is active, Netflix drops low-priority background traffic first:
@@ -123,11 +123,11 @@ Google SRE solves the problem of a struggling server being killed by client retr
 Clients track the number of requests they sent in the last 2 minutes (`requests`) and the number of requests accepted by the server without error (`accepts`).
 Clients compute the probability of dropping their own request before sending it:
 
-$$P_{	ext{drop}} = \max\left(0, rac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}ight)$$
+$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}ight)$$
 
 - Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).
 - **How it behaves**:
-  - If the server accepts all requests, $	ext{requests} pprox 	ext{accepts}$, so $	ext{requests} - 2(	ext{accepts}) < 0 \implies P_{	ext{drop}} = 0$ (no throttling).
+  - If the server accepts all requests, $	ext{requests} \approx 	ext{accepts}$, so $	ext{requests} - 2(	ext{accepts}) < 0 \implies P_{	ext{drop}} = 0$ (no throttling).
   - If the server starts failing requests due to overload, $P_{	ext{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!
 
 ---

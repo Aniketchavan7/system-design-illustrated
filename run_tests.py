@@ -13,6 +13,10 @@ import sys
 import subprocess
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+
     repo_root = os.path.dirname(os.path.abspath(__file__))
     os.chdir(repo_root)
 
@@ -64,10 +68,10 @@ def main():
             errors.append(f"Missing demo.py in {mod}")
             continue
         res = subprocess.run(
-            [sys.executable, "demo.py"],
+            [sys.executable, "-X", "utf8", "demo.py"],
             cwd=os.path.join(repo_root, mod),
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             timeout=15
         )
         if res.returncode == 0:
@@ -80,9 +84,9 @@ def main():
     print("\n3️⃣ Testing calculate.py capacity calculator...")
     for preset in ["twitter", "youtube", "uber", "chat"]:
         res = subprocess.run(
-            [sys.executable, "calculate.py", "--preset", preset],
+            [sys.executable, "-X", "utf8", "calculate.py", "--preset", preset],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             timeout=5
         )
         if res.returncode == 0 and "ESTIMATED INFRASTRUCTURE PROFILE" in res.stdout:

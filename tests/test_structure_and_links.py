@@ -1,9 +1,18 @@
 import os
 import re
+from pathlib import Path
 import pytest
 from tests.conftest import REPO_ROOT, get_module_folders
 
 MODULE_FOLDERS = get_module_folders()
+
+
+def curriculum_markdown():
+    root = Path(REPO_ROOT)
+    paths = list(root.glob("*.md"))
+    for folder in [*MODULE_FOLDERS, "advanced", "labs"]:
+        paths.extend((root / folder).rglob("*.md"))
+    return sorted(paths)
 
 def test_master_files_exist():
     required_master_files = [
@@ -56,19 +65,10 @@ def test_relative_markdown_links():
     """Verify all internal relative markdown links point to existing files."""
     broken_links = []
     
-    md_files = [
-        os.path.join(REPO_ROOT, "README.md"),
-        os.path.join(REPO_ROOT, "CHEATSHEET.md"),
-        os.path.join(REPO_ROOT, "DECISION_FLOWCHARTS.md")
-    ]
-    for fld in MODULE_FOLDERS:
-        md_files.append(os.path.join(REPO_ROOT, fld, "README.md"))
-        md_files.append(os.path.join(REPO_ROOT, fld, "REAL_WORLD_EXAMPLES.md"))
-
     link_pattern = re.compile(r'\[([^\]]+)\]\(((\./|\.\./)[^)]+)\)')
 
-    for md_path in md_files:
-        if not os.path.isfile(md_path):
+    for md_path in curriculum_markdown():
+        if md_path.name == "TEMPLATE.md":
             continue
         with open(md_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -77,7 +77,7 @@ def test_relative_markdown_links():
         for text, link, _ in matches:
             # Strip anchors (#section) and queries (?...)
             clean_link = link.split('#')[0].split('?')[0]
-            if not clean_link or clean_link.endswith('/'):
+            if not clean_link:
                 continue
             target_path = os.path.normpath(os.path.join(os.path.dirname(md_path), clean_link))
             if not os.path.exists(target_path):
@@ -85,3 +85,17 @@ def test_relative_markdown_links():
                 broken_links.append(f"{rel_source} -> {link} (resolved to {target_path})")
 
     assert not broken_links, f"Found {len(broken_links)} broken relative markdown links:\n" + "\n".join(broken_links[:10])
+
+
+def test_markdown_has_no_unexpected_control_characters():
+    invalid = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+    root = Path(REPO_ROOT)
+    findings = []
+    for path in curriculum_markdown():
+        for line, text in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+            for match in invalid.finditer(text):
+                findings.append(
+                    f"{path.relative_to(root)}:{line}:{match.start() + 1} "
+                    f"U+{ord(match[0]):04X}"
+                )
+    assert not findings, "\n".join(findings)

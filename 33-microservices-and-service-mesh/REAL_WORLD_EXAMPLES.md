@@ -66,7 +66,7 @@ flowchart TD
         end
     end
 
-    EnvoyA ==="mTLS 1.3 Tunnel (SPIFFE Identity)"===> EnvoyB
+    EnvoyA ==>|"mTLS 1.3 Tunnel (SPIFFE Identity)"| EnvoyB
     Pilot -.->|"Stream Route Tables (xDS)"| EnvoyA
     Pilot -.->|"Stream Route Tables (xDS)"| EnvoyB
     CA -.->|"Rotate x509 Certs Every 24h"| EnvoyA

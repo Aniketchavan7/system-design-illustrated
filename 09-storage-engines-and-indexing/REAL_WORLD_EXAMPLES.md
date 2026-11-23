@@ -102,5 +102,5 @@ To read a key:
 
 ## 🎯 System Design Interview Takeaways
 1. **When to Choose LSM-Trees**: If designing a system with massive write ingestion (e.g., Time-Series Metrics, Messaging Logs, IoT Telemetry, Financial Ledgers), explicitly choose an **LSM-tree storage engine (RocksDB, Cassandra, Bigtable)** over a B+ Tree.
-2. **Explain Write Amplification**: Impress interviewers by explaining *Write Amplification Factor (WAF)*: $	ext{WAF} = rac{	ext{Bytes Written to Storage}}{	ext{Bytes Written by Application}}$. LSM-trees minimize WAF during initial writes by converting random writes into sequential disk streams.
+2. **Explain Write Amplification**: Impress interviewers by explaining *Write Amplification Factor (WAF)*: $	ext{WAF} = \frac{	ext{Bytes Written to Storage}}{	ext{Bytes Written by Application}}$. LSM-trees minimize WAF during initial writes by converting random writes into sequential disk streams.
 3. **The Role of Bloom Filters**: Always explain that Bloom filters in LSM-trees prevent disastrous read penalties by checking whether a key definitely does not exist in an SSTable before performing expensive disk I/O.

@@ -92,7 +92,7 @@ Consider a system monitoring **50,000 Microservice Pods**:
 * **Gorilla Compression Sizing**:
   - Raw uncompressed datapoint: 8-byte Unix timestamp + 8-byte IEEE 754 float = 16 bytes.
   - Raw daily volume: $43.2\text{B} \times 16\text{ bytes} \approx 691.2\text{ Gigabytes/day}$.
-  - With **Gorilla XOR Compression** ($pprox 1.37\text{ bytes/datapoint}$ $\approx 12\times$ compression):
+  - With **Gorilla XOR Compression** ($\approx 1.37\text{ bytes/datapoint}$ $\approx 12\times$ compression):
   - Compressed daily volume: $43.2\text{B} \times 1.37\text{ bytes} \approx 59.2\text{ Gigabytes/day}$!
   - 59.2 GB fits easily on modern high-speed NVMe SSD drives.
 
@@ -149,7 +149,9 @@ To keep query times fast across months of data:
 ---
 
 ## Try It Yourself
-A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (`OK` $ightarrow$ `PENDING` $ightarrow$ `FIRING`) is included in this directory.
+A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (`OK` $
+ightarrow$ `PENDING` $
+ightarrow$ `FIRING`) is included in this directory.
 
 Run the simulation:
 ```bash

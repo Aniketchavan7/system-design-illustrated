@@ -13,10 +13,10 @@
 Back-of-the-envelope estimation is the art of **rapidly calculating system scale (QPS, memory, disk storage, network bandwidth)** before writing a single line of architecture. It is not about finding the exact decimal; it is about finding the **order of magnitude** ($10	ext{ RPS}$ vs $10,000	ext{ RPS}$; $10	ext{ GB}$ vs $10	ext{ TB}$).
 
 - **Powers of 10 shortcuts**:
-  - $1	ext{ Million requests/day} pprox \mathbf{12	ext{ requests/second (RPS)}}$.
-  - $1	ext{ Billion requests/day} pprox \mathbf{12,000	ext{ RPS}}$.
+  - $1	ext{ Million requests/day} \approx \mathbf{12	ext{ requests/second (RPS)}}$.
+  - $1	ext{ Billion requests/day} \approx \mathbf{12,000	ext{ RPS}}$.
   - Peak traffic is typically estimated at $\mathbf{2	imes 	ext{average}}$.
-- **Hardware Latency Reality**: Reading from RAM ($pprox 100	ext{ ns}$) is **100,000 times faster** than reading from a spinning disk ($pprox 10	ext{ ms}$) and **1,500,000 times faster** than a cross-ocean network round trip ($pprox 150	ext{ ms}$).
+- **Hardware Latency Reality**: Reading from RAM ($\approx 100	ext{ ns}$) is **100,000 times faster** than reading from a spinning disk ($\approx 10	ext{ ms}$) and **1,500,000 times faster** than a cross-ocean network round trip ($\approx 150	ext{ ms}$).
 
 ---
 
@@ -24,7 +24,7 @@ Back-of-the-envelope estimation is the art of **rapidly calculating system scale
 
 Imagine planning a wedding:
 - You don't need to know if Uncle Bob eats exactly $412	ext{ grams}$ or $420	ext{ grams}$ of chicken.
-- You estimate: *"150 guests $	imes$ 1 main dish $pprox$ 150 meals. Plus 20% buffer for hungry eaters $pprox$ 180 portions."*
+- You estimate: *"150 guests $	imes$ 1 main dish $\approx$ 150 meals. Plus 20% buffer for hungry eaters $\approx$ 180 portions."*
 - If your rough estimate said 150 portions and you prepared for 15, your guests starve. If you prepared for 15,000, food rots and you go bankrupt.
 
 Back-of-the-envelope estimation gives you the exact ballpark to pick the right server size, database tier, and caching budget.
@@ -86,15 +86,15 @@ Whenever an interviewer gives you a design problem:
 ### 1. Traffic (QPS) Math
 - **Input**: Daily Active Users (DAU) and average actions per user per day.
 - **Formula**:
-  $$	ext{Average QPS} = rac{	ext{DAU} 	imes 	ext{Requests per user}}{86,400	ext{ seconds}}$$
+  $$	ext{Average QPS} = \frac{	ext{DAU} 	imes 	ext{Requests per user}}{86,400	ext{ seconds}}$$
 - **Rule of Thumb**: Round $86,400$ to **$100,000$** for fast mental math:
-  $$	ext{Average QPS} pprox rac{	ext{Total Daily Requests}}{100,000}$$
+  $$	ext{Average QPS} \approx \frac{	ext{Total Daily Requests}}{100,000}$$
 - **Peak QPS**: $	ext{Peak QPS} = 	ext{Average QPS} 	imes 2$.
 
 ### 2. Storage Estimation Math
 - **Formula**:
   $$	ext{Daily Storage} = 	ext{Daily Writes} 	imes 	ext{Average Payload Size}$$
-  $$	ext{5-Year Storage} = 	ext{Daily Storage} 	imes 365 	imes 5 pprox 	ext{Daily Storage} 	imes 2,000$$
+  $$	ext{5-Year Storage} = 	ext{Daily Storage} 	imes 365 	imes 5 \approx 	ext{Daily Storage} 	imes 2,000$$
 
 ### 3. Memory (Cache Sizing) Math: The 80/20 Rule
 - **The Pareto Principle**: $20\%$ of hot content generates $80\%$ of read traffic.
@@ -132,7 +132,7 @@ State your assumptions clearly:
 1. *"Assume $100	ext{M DAU}$ and each user makes 10 requests per day."*
 2. Total requests $= 1	ext{ Billion requests/day}$.
 3. Divide by $100,000$ seconds (rounding $86,400$):
-   $$	ext{Average QPS} pprox rac{1,000,000,000}{100,000} = \mathbf{10,000	ext{ QPS}}$$
+   $$	ext{Average QPS} \approx \frac{1,000,000,000}{100,000} = \mathbf{10,000	ext{ QPS}}$$
 4. Apply peak multiplier ($2	imes$):
    $$	ext{Peak QPS} = 10,000 	imes 2 = \mathbf{20,000	ext{ QPS}}$$
 Interviewers reward fast, clean arithmetic over struggling with exact decimals.
@@ -146,13 +146,13 @@ Interviewers reward fast, clean arithmetic over struggling with exact decimals.
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 1. Assume $300	ext{M DAU}$. $100	ext{M}$ users post 2 tweets/day $= 200	ext{M tweets/day}$.
-2. Each tweet is 280 chars $+$ metadata (User ID, timestamp) $pprox 500	ext{ bytes}$.
+2. Each tweet is 280 chars $+$ metadata (User ID, timestamp) $\approx 500	ext{ bytes}$.
 3. Assume 20% of tweets contain an image ($200	ext{ KB}$):
    - Text storage: $200	ext{M} 	imes 500	ext{B} = 100	ext{ GB/day}$.
    - Media storage: $40	ext{M} 	imes 200	ext{ KB} = 8,000	ext{ GB/day} = 8	ext{ TB/day}$.
-   - Total daily storage $pprox 8.1	ext{ TB/day}$.
+   - Total daily storage $\approx 8.1	ext{ TB/day}$.
 4. 5-Year Storage:
-   $$8.1	ext{ TB} 	imes 365 	imes 5 pprox 8.1	ext{ TB} 	imes 1,825 pprox \mathbf{14.8	ext{ Petabytes}}$$
+   $$8.1	ext{ TB} 	imes 365 	imes 5 \approx 8.1	ext{ TB} 	imes 1,825 \approx \mathbf{14.8	ext{ Petabytes}}$$
 
 </details>
 
@@ -166,8 +166,8 @@ Apply the **80/20 Pareto rule**:
 1. Calculate daily read volume. If daily active data volume is $5	ext{ TB}$.
 2. To satisfy 80% of reads from RAM, you need:
    $$5	ext{ TB} 	imes 0.20 = \mathbf{1	ext{ TB of RAM}}$$
-3. Account for Redis memory overhead (pointers, hash tables, slab allocation) $pprox 25\%$ extra buffer:
-   $$	ext{Total RAM} pprox 1	ext{ TB} 	imes 1.25 = \mathbf{1.25	ext{ TB}}$$
+3. Account for Redis memory overhead (pointers, hash tables, slab allocation) $\approx 25\%$ extra buffer:
+   $$	ext{Total RAM} \approx 1	ext{ TB} 	imes 1.25 = \mathbf{1.25	ext{ TB}}$$
 4. Provision four $256	ext{ GB}$ or eight $128	ext{ GB}$ Redis cluster instances.
 
 </details>
@@ -191,8 +191,8 @@ Disk latency is dominated by physical seek times (moving the mechanical head or 
 1. Assume 1 Billion hours of video watched per day.
 2. Average bitrate across mobile and desktop: $2.5	ext{ Mbps}$.
 3. Continuous egress bandwidth:
-   $$	ext{Bandwidth} = rac{1,000,000,000	ext{ hrs} 	imes 3600	ext{s} 	imes 2.5	ext{ Mbps}}{86,400	ext{s}} pprox \mathbf{104	ext{ Terabits per second (Tbps)}}$$
-4. With a 98% CDN cache offload, origin egress drops to only $pprox 2	ext{ Tbps}$.
+   $$	ext{Bandwidth} = \frac{1,000,000,000	ext{ hrs} 	imes 3600	ext{s} 	imes 2.5	ext{ Mbps}}{86,400	ext{s}} \approx \mathbf{104	ext{ Terabits per second (Tbps)}}$$
+4. With a 98% CDN cache offload, origin egress drops to only $\approx 2	ext{ Tbps}$.
 
 </details>
 

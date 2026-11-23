@@ -1,58 +1,17 @@
-# Real-World Production Implementations: Metrics Monitoring & Alerting
+# Metrics monitoring in production
 
-This document explores how **Google**, **Netflix**, **Prometheus**, and **Datadog** ingest, compress, and alert on trillions of time-series data points.
+## Google · Monarch
 
----
+Google's 2020 paper describes Monarch as a multi-tenant, in-memory time-series database. Its regional architecture keeps collection close to sources, and a global query plane integrates results. The paper reports ingesting terabytes of time-series data per second at the time of publication. [Google's Monarch paper](https://research.google/pubs/monarch-googles-planet-scale-in-memory-time-series-database/)
 
-## 1. Google: Borgmon & Monarch Planetary Time-Series Infrastructure
+Which parts of a query can execute near regional data? Counts can be added across regions. A percentile needs mergeable data such as histogram buckets with compatible boundaries.
 
-### The Architecture
-Google pioneered internal site reliability engineering (SRE) monitoring using **Borgmon** (the predecessor to Prometheus) and subsequently built **Monarch**, a multi-region, in-memory distributed time-series database monitoring Google's entire global fleet.
+## Netflix · Atlas
 
-```mermaid
-flowchart TD
-    BorgPod["Google Borg Container (BFE, Spanner, Ads)"] -->|"Expose HTTP /varz Endpoint"| Scraper["Monarch Collector (Regional)"]
-    Scraper --> InMemTSDB[("Monarch In-Memory Shards (Regional Spanner/RAM)")]
-    
-    InMemTSDB --> StreamAggregator["Continuous Stream Aggregator"]
-    StreamAggregator --> GlobalMonarch["Monarch Global Query Engine"]
-    
-    InMemTSDB --> AlertRule["Monarch Alert Evaluator"]
-    AlertRule --> PagerSystem["Google SRE On-Call Paging System"]
-```
+Netflix introduced Atlas publicly in December 2014. The company reported sustaining more than **1.2 billion distinct time series** during North American regional failover exercises. That number counts series. The same post describes the separate publication rate in data points per minute. [Netflix's Atlas engineering write-up](https://netflixtechblog.com/introducing-atlas-netflixs-primary-telemetry-platform-bd31f4d8ed9a)
 
-### Key Technical Mechanisms
-1. **The `/varz` Scraping Convention**:
-   - Google originated the pull-based monitoring convention. Every binary running on Borg exposes an internal HTTP `/varz` endpoint returning current metric counters.
-   - Borgmon/Monarch collectors scrape these endpoints every 10-30 seconds, maintaining a global target directory using Borg service discovery.
-2. **Pushdown Query Evaluation in Monarch**:
-   - To query CPU percentiles across 100,000 servers, Monarch pushes computation down to regional in-memory shards. Each region calculates its local summary, returning only aggregated vectors to the central dashboard in milliseconds.
-3. **Automated Alert Silencing during Canary Rollouts**:
-   - Monarch integrates directly with Google's deployment infrastructure. When a canary rollout begins, alerts for known expected restart behaviors are automatically silenced to avoid false pages.
+Atlas identifies metrics with sets of key-value pairs. An operator can group requests by region or filter to a particular application. Its public project describes the storage layer as an in-memory dimensional time-series database. [Netflix Atlas source](https://github.com/Netflix/atlas)
 
----
+## Worked example · Series count versus sample rate
 
-## 2. Netflix: Atlas In-Memory Dimensional Time-Series Engine
-
-### The Architecture
-Netflix operates over **1,000 microservices** across tens of thousands of AWS EC2 instances. Netflix open-sourced **Atlas**, a custom-built dimensional time-series engine capable of processing over **100 million real-time metrics per second**.
-
-```mermaid
-flowchart TD
-    NetflixInstance["Netflix Microservice / Titus Pod"] -->|"Spectator SDK (UDP / HTTP)"| IngestEdge["Atlas Ingestion Cluster (Netty)"]
-    IngestEdge --> KafkaTopics["Kafka Metric Buffers"]
-    
-    KafkaTopics --> AtlasMemoryShards[("Atlas Memory Shards (In-Memory Ring Buffers)")]
-    AtlasMemoryShards --> LongTermStorage[("Amazon S3 (Compressed Parquet / Snappy)")]
-    
-    AtlasMemoryShards --> AlertEvaluator["Atlas Alert Evaluator"]
-    AlertEvaluator --> PagerDuty["PagerDuty / Slack Alert Dispatcher"]
-```
-
-### Key Technical Mechanisms
-1. **Spectator Client-Side Pre-Aggregation**:
-   - Rather than pushing raw events, Netflix applications use the **Spectator SDK** to aggregate metric counts locally in memory over a 1-minute window before publishing to Atlas, reducing network bandwidth by 95%.
-2. **In-Memory Ring Buffers**:
-   - Atlas stores active metric series (last 6-12 hours) in off-heap in-memory ring buffers. Because memory is pre-allocated, Atlas achieves predictable sub-second query latency for live incident debugging without garbage collection pauses.
-3. **Multi-Dimensional Tag Filtering**:
-   - Every metric in Atlas is a dimensional key-value map (`app=playback`, `region=us-east-1`, `node=i-12345`). Atlas's expressive stack-based query language allows on-call engineers to slice, dice, and group by any dimension in real-time.
+Suppose 100 services run in three regions, expose ten metrics each, and emit one sample per series every ten seconds. With one series per service, region, and metric, that is 3,000 series and 300 samples per second on average. Adding a dimension with 20 values across every combination multiplies both figures by 20. Measure actual label combinations before provisioning.

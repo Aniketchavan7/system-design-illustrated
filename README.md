@@ -13,22 +13,24 @@
 
 ---
 
-**System design explained so that anyone can follow it**, one concept per folder, with everyday analogies, step-by-step pictures, worked examples with real numbers, runnable code, and a quick self-check at the end.
+**A free system design course for beginners, interview candidates, and working engineers**, one concept per folder, with everyday analogies, step-by-step pictures, worked examples with real numbers, runnable code, and a quick self-check at the end.
 
 > You do **not** need a computer-science degree to read this. If a module uses a word before explaining it, that's a bug — please open an issue.
 
-> 🗂️ **Interactive Study Flashcards**: Practice all 45 modules with 3D flashcards, spaced repetition, ELI5 summaries, and FAANG case studies directly in your browser: **[Launch Flashcards App (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/)** or open [local `index.html`](./index.html).
+> 🗂️ **Interactive Study Flashcards**: Practice all 45 modules with 3D flashcards, review tracking, ELI5 summaries, and FAANG case studies directly in your browser: **[Launch Flashcards App (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/)** or open [local `index.html`](./index.html).
 
 ---
 
 ## 🧭 How to use this repo
 
+Start with the [study guide](./STUDY_GUIDE.md) for a first pass, interview prep, or production reliability. Every reading and diagram is available on GitHub without an account.
+
 1. **Go in order** within a part. Each module builds on the ones before it.
 2. In every module, read **🧒 The 30-second version** first. If that clicks, keep going. If not, re-read the analogy, then look at the picture.
 3. **Run the code.** Every module has a standalone, zero-dependency `demo.py` you can execute immediately with `python demo.py`.
-4. **Study Real-World Production Case Studies.** Every single module contains a dedicated `REAL_WORLD_EXAMPLES.md` breaking down how **Google**, **Netflix**, and other tech leaders implement and scale that pattern at multi-billion request scale.
+4. **Study Real-World Production Case Studies.** Every single module contains a dedicated `REAL_WORLD_EXAMPLES.md` connecting the pattern to documented production systems and illustrative designs.
 5. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
-6. **Verify with the Automated Test Suite.** Validate all 45 runnable demos, capacity calculator, and architecture contracts locally with `python run_tests.py` or `pytest`.
+6. **Verify with the Automated Test Suite.** Run the module demos, calculator, Markdown checks, and flashcard checks locally with `python run_tests.py` or `python -m pytest`.
 
 ---
 
@@ -36,11 +38,18 @@
 
 | Resource | Description | Direct Link |
 | :--- | :--- | :---: |
-| 🗂️ **Interactive Flashcard Web App** | 3D study cards with spaced repetition, ELI5s, and FAANG case studies | [Launch Flashcards (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/) · [Local App](./index.html) |
+| 🗂️ **Interactive Flashcard Web App** | 3D study cards with review tracking, ELI5s, and FAANG case studies | [Launch Flashcards (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/) · [Local App](./index.html) |
 | 📐 **Back-of-the-Envelope Master Cheat Sheet** | Powers of 2, Latency numbers, QPS conversions, 5-step sizing formulas, SLA nines | [Open Cheat Sheet](./CHEATSHEET.md) |
 | 🔀 **Master Architectural Decision Flowcharts** | Interactive visual decision trees for Databases, Consistency, Caching, Protocols, and Sagas | [Open Flowcharts](./DECISION_FLOWCHARTS.md) |
 | 🧮 **Interactive Capacity Calculator** | Standalone zero-dependency Python CLI tool for QPS, bandwidth, storage & cache sizing | [View Script (`calculate.py`)](./calculate.py) |
-| 🧪 **Automated CI Test Suite** | 100+ tests validating all 45 module demos, CLI calculator, and schema contracts | [View Workflow (`ci.yml`)](./.github/workflows/ci.yml) · `python run_tests.py` |
+| 🧪 **Automated CI Test Suite** | 100+ tests validating all 45 module demos, CLI calculator, Markdown, and flashcard data | [View Workflow (`ci.yml`)](./.github/workflows/ci.yml) · `python run_tests.py` |
+
+## Practice and advanced topics
+
+- [Timed interviews and scoring rubrics](./STUDY_GUIDE.md#timed-mock-interviews)
+- [Event-driven order processing lab](./labs/order-processing/)
+- [Multi-region failover and disaster recovery](./advanced/multi-region-recovery.md)
+- [Authentication and authorization](./advanced/authentication-and-authorization.md)
 
 ### 🚦 Status legend
 
@@ -174,7 +183,7 @@ All explanations here are written from scratch in plain language, synthesizing t
 | 44 | [Metrics Monitoring & Alerting System](./44-system-design-metrics-monitoring-and-alerting/) | ✅ | TSDB, Gorilla XOR compression, pull vs push scraping, downsampling, alert flapping prevention | SDI-2 ch 5 (Google Monarch / Netflix Atlas) |
 | 45 | [Ad Click Aggregation & Analytics](./45-system-design-ad-click-aggregation/) | ✅ | Tumbling/hopping windows, event-time watermarks, late event side outputs, bot click fraud filter | SDI-2 ch 4 (Google Ads / Keystone) |
 
-**Progress:** 45 verified · 0 under review · 0 planned (100% Complete)
+**Progress:** 45 modules · 0 under review · 0 planned (100% Complete)
 
 ---
 
@@ -223,21 +232,21 @@ Every single module includes a dedicated `REAL_WORLD_EXAMPLES.md` deep dive deta
 | **37** | Search Autocomplete (Typeahead) | **Google** Instant Keystroke Typeahead at Edge vs **Netflix** Fuzzy Levenshtein Actor/Title Search | [Read Deep Dive](./37-system-design-search-autocomplete/REAL_WORLD_EXAMPLES.md) |
 | **38** | Cloud File Storage & Sync | **Dropbox** Magic Pocket 4MB Chunking Engine vs **Google** Drive Colossus & Spanner Metadata | [Read Deep Dive](./38-system-design-cloud-file-storage/REAL_WORLD_EXAMPLES.md) |
 | **39** | Proximity Service & Nearby Places | **Uber** H3 Hexagonal Hierarchical Spatial Index vs **Google** Maps S2 Geometry Library | [Read Deep Dive](./39-system-design-proximity-service/REAL_WORLD_EXAMPLES.md) |
-| **40** | Digital Wallet & Payment System | **Stripe** Ledger Engine & Nightly Reconciliation vs **PayPal** Akka Distributed Actor State Machines | [Read Deep Dive](./40-system-design-payment-system/REAL_WORLD_EXAMPLES.md) |
+| **40** | Digital Wallet & Payment System | **Stripe** Ledger and API idempotency · **PayPal** capture retries | [Read Deep Dive](./40-system-design-payment-system/REAL_WORLD_EXAMPLES.md) |
 | **41** | Hotel & Ticket Reservation System | **Google** Hotels & Travel Spanner Instant Booking vs **Netflix** Live Events & Studio Soundstage Booking (Conductor Saga) | [Read Deep Dive](./41-system-design-hotel-reservation/REAL_WORLD_EXAMPLES.md) |
 | **42** | Real-Time Gaming Leaderboard | **Google** Play Games Bigtable Inverted Key Leaderboards vs **Netflix** Games Real-Time Social Challenges (Redis ZSET) | [Read Deep Dive](./42-system-design-real-time-gaming-leaderboard/REAL_WORLD_EXAMPLES.md) |
 | **43** | Distributed Job Scheduler | **Google** Borg Chronos Distributed Paxos Cron vs **Netflix** Conductor / Meson Workflow Orchestration (Dynomite) | [Read Deep Dive](./43-system-design-distributed-job-scheduler/REAL_WORLD_EXAMPLES.md) |
-| **44** | Metrics Monitoring & Alerting | **Google** Borgmon / Monarch Multi-Region In-Memory TSDB vs **Netflix** Atlas Dimensional Time-Series (100M+ metrics/sec) | [Read Deep Dive](./44-system-design-metrics-monitoring-and-alerting/REAL_WORLD_EXAMPLES.md) |
+| **44** | Metrics Monitoring & Alerting | **Google** Monarch regional collection · **Netflix** Atlas dimensional time series | [Read Deep Dive](./44-system-design-metrics-monitoring-and-alerting/REAL_WORLD_EXAMPLES.md) |
 | **45** | Ad Click Aggregation | **Google** Ads Photon Active-Active Multi-Datacenter Streaming vs **Netflix** Keystone Real-Time Flink Pipeline (1.5T events/day) | [Read Deep Dive](./45-system-design-ad-click-aggregation/REAL_WORLD_EXAMPLES.md) |
 
 ---
 
 ## ➕ Adding a new concept
 
-1. Copy [`TEMPLATE.md`](./TEMPLATE.md) into a new folder: the next free number plus a short name, e.g. `41-distributed-search-engine/README.md`.
+1. Copy [`TEMPLATE.md`](./TEMPLATE.md) into a new folder: the next free number plus a short name, e.g. `46-distributed-search-engine/README.md`.
 2. Fill in every section. The non-negotiables: **an analogy, at least one picture, one worked example with real numbers, and a quiz**.
 3. Put any runnable code in the same folder as `demo.py`.
-4. Create a companion `REAL_WORLD_EXAMPLES.md` documenting production architectures at Google, Netflix, and industry leaders.
+4. Create a companion `REAL_WORLD_EXAMPLES.md` with primary sources for production claims. Include the date and measurement window for company metrics. Label your own sketches and workloads as illustrative.
 5. Update the row in the syllabus above: add the link, set the status, update the progress line.
 
 ---

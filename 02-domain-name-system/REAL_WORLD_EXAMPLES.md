@@ -49,7 +49,7 @@
 - The authoritative nameserver can see where the actual end-user is located (rather than Google's resolver) and return the closest edge CDN server IP, while preserving user privacy by omitting the last 8 bits of the client address.
 
 #### C. Defense Against Cache Poisoning
-- **Port Randomization**: Uses all available source UDP ports (~60,000 possibilities), expanding the entropy space to $2^{16} 	imes 60,000 pprox 4 	ext{ billion}$ combinations.
+- **Port Randomization**: Uses all available source UDP ports (~60,000 possibilities), expanding the entropy space to $2^{16} 	imes 60,000 \approx 4 	ext{ billion}$ combinations.
 - **DNS 0x20 Bit Encoding**: Randomizes the capitalization of domain queries (e.g., `wWw.gOOglE.cOm`). Authoritative servers must echo the exact casing in their response. An attacker cannot forge this without guessing the randomized bit pattern.
 
 ---

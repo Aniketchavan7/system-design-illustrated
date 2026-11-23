@@ -14,7 +14,7 @@
   let isFlipped = false;
   let isShuffled = false;
 
-  // Spaced Repetition Storage
+  // Review status storage
   const STORAGE_KEY = 'sys_design_flashcards_state_v1';
   let cardStates = {};
   try {
@@ -41,6 +41,8 @@
     cardEli5: document.getElementById('card-eli5'),
     cardAnalogy: document.getElementById('card-analogy'),
     cardNumbers: document.getElementById('card-numbers'),
+    primaryCaseLabel: document.getElementById('primary-case-label'),
+    secondaryCaseLabel: document.getElementById('secondary-case-label'),
     googleDesc: document.getElementById('google-desc'),
     netflixDesc: document.getElementById('netflix-desc'),
     interviewQ: document.getElementById('interview-q'),
@@ -168,6 +170,8 @@
     dom.cardStatus.className = `card-status-badge status-${status}`;
 
     // Back Face
+    dom.primaryCaseLabel.textContent = card.primary_case_label || 'Google';
+    dom.secondaryCaseLabel.textContent = card.secondary_case_label || 'Netflix';
     dom.googleDesc.textContent = card.google_example || 'Employed in Google planetary datacenters.';
     dom.netflixDesc.textContent = card.netflix_example || 'Core component of Netflix global streaming architecture.';
     dom.interviewQ.textContent = card.interview_question || 'Interview Question';
@@ -388,6 +392,10 @@
   // Set header link destinations for web vs local
   const isFileProto = window.location.protocol === 'file:';
   const isDocsDir = window.location.pathname.replace(/\\/g, '/').toLowerCase().includes('/docs');
+  const guideLink = document.getElementById('link-study-guide');
+  if (isFileProto) {
+    guideLink.href = isDocsDir ? '../STUDY_GUIDE.md' : './STUDY_GUIDE.md';
+  }
   const csEl = document.getElementById('link-cheatsheet');
   const fcEl = document.getElementById('link-flowcharts');
   if (csEl) {

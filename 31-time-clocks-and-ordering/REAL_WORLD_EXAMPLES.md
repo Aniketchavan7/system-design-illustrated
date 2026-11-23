@@ -39,12 +39,12 @@
 #### A. Redundant GPS and Rubidium Clocks
 - Why both GPS and Atomic clocks?
   - GPS can fail due to antenna damage, solar flares, or satellite spoofing.
-  - Rubidium atomic clocks are independent of external radio signals, but drift slightly over months ($pprox 1	ext{ }\mu	ext{s/day}$).
+  - Rubidium atomic clocks are independent of external radio signals, but drift slightly over months ($\approx 1	ext{ }\mu	ext{s/day}$).
   - Combining both allows Google to cross-check time sources and mathematically bound maximum time drift to **$\epsilon < 7	ext{ milliseconds}$**.
 
 #### B. The Commit Wait Rule
 1. When transaction $T_1$ commits, Spanner assigns it timestamp $s = t_{	ext{latest}}$.
-2. The Spanner leader intentionally **pauses execution for $2\epsilon$ ($pprox 7	ext{–}14	ext{ms}$)** before releasing locks and acknowledging to the client.
+2. The Spanner leader intentionally **pauses execution for $2\epsilon$ ($\approx 7	ext{–}14	ext{ms}$)** before releasing locks and acknowledging to the client.
 3. This guarantees that any subsequent transaction $T_2$ anywhere on Earth will receive a timestamp $s_2 > s_1$. Causality is physically locked to real-world time!
 
 ---

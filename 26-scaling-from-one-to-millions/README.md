@@ -92,15 +92,15 @@ Let's trace how infrastructure demands change from **1,000 users to 10,000,000 D
 
 ### Scale Milestones:
 1. **At 1,000 Users**:
-   - $1,000	ext{ DAU} 	imes 20	ext{ requests/day} = 20,000	ext{ requests/day} pprox \mathbf{0.23	ext{ requests/second}}$.
+   - $1,000	ext{ DAU} 	imes 20	ext{ requests/day} = 20,000	ext{ requests/day} \approx \mathbf{0.23	ext{ requests/second}}$.
    - Single \$10/mo VPS (2 vCPUs, 4GB RAM) handles this comfortably.
 2. **At 100,000 Users**:
-   - $100,000	ext{ DAU} 	imes 50	ext{ requests/day} = 5,000,000	ext{ req/day} pprox \mathbf{58	ext{ RPS average (150 RPS peak)}}$.
+   - $100,000	ext{ DAU} 	imes 50	ext{ requests/day} = 5,000,000	ext{ req/day} \approx \mathbf{58	ext{ RPS average (150 RPS peak)}}$.
    - Separate web server from PostgreSQL database. Add Redis for caching hot queries.
 3. **At 10,000,000 Users (The 10M Milestone)**:
    - $10,000,000	ext{ DAU} 	imes 100	ext{ requests/day} = 1,000,000,000	ext{ req/day}$.
-   - **Average QPS**: $rac{10^9}{86,400	ext{s}} pprox \mathbf{11,574	ext{ QPS}}$.
-   - **Peak QPS ($2	imes$)**: $pprox \mathbf{23,000	ext{ QPS}}$.
+   - **Average QPS**: $\frac{10^9}{86,400	ext{s}} \approx \mathbf{11,574	ext{ QPS}}$.
+   - **Peak QPS ($2	imes$)**: $\approx \mathbf{23,000	ext{ QPS}}$.
    - **Infrastructure Required**:
      - 40–60 Stateless web application containers behind load balancers.
      - 10+ Redis cache cluster nodes serving $90\%$ of reads in $<1	ext{ms}$.

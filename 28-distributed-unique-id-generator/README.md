@@ -77,7 +77,7 @@ $$	ext{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64	ext{ Bits (Standard 8-byte In
 ### 1. Timestamp Component (41 Bits)
 - Maximum value: $2^{41} - 1 = 2,199,023,255,551	ext{ ms}$.
 - Years of life:
-  $$	ext{Years} = rac{2,199,023,255,551	ext{ ms}}{1000	ext{ms} 	imes 60 	imes 60 	imes 24 	imes 365} pprox \mathbf{69.73	ext{ Years}}$$
+  $$	ext{Years} = \frac{2,199,023,255,551	ext{ ms}}{1000	ext{ms} 	imes 60 	imes 60 	imes 24 	imes 365} \approx \mathbf{69.73	ext{ Years}}$$
 - A custom epoch (e.g., `2026-01-01`) gives 69 years of runway before overflow.
 
 ### 2. Machine ID Component (10 Bits)
@@ -86,7 +86,7 @@ $$	ext{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64	ext{ Bits (Standard 8-byte In
 ### 3. Sequence Number Component (12 Bits)
 - Maximum value: $2^{12} = \mathbf{4,096	ext{ IDs per millisecond per node}}$.
 - Total theoretical cluster generation capacity:
-  $$	ext{Max Throughput} = 1,024	ext{ nodes} 	imes 4,096	ext{ IDs/ms} 	imes 1,000	ext{ms/s} pprox \mathbf{4.19	ext{ Billion IDs / second!}}$$
+  $$	ext{Max Throughput} = 1,024	ext{ nodes} 	imes 4,096	ext{ IDs/ms} 	imes 1,000	ext{ms/s} \approx \mathbf{4.19	ext{ Billion IDs / second!}}$$
 
 ---
 
@@ -153,7 +153,7 @@ python demo.py
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 A 64-bit integer must fit the *entire* ID (Timestamp + Machine ID + Sequence). Allocating 41 bits to the timestamp relative to a custom epoch provides:
-$$rac{2^{41} - 1}{1000 	imes 3600 	imes 24 	imes 365} pprox 69.7	ext{ Years}$$
+$$\frac{2^{41} - 1}{1000 	imes 3600 	imes 24 	imes 365} \approx 69.7	ext{ Years}$$
 This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) and sequence number (12 bits), ensuring high-concurrency generation with zero cross-network coordination.
 
 </details>

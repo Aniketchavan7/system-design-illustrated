@@ -99,7 +99,7 @@
 When a popular cache key (e.g., the homepage banner for *Stranger Things*) expires, thousands of concurrent requests miss simultaneously and slam the database.
 - Netflix uses **Probabilistic Early Expiration (Optimal Probabilistic Cache Refresh)**:
   - As a key approaches its expiration time, the EVCache client computes an algorithmically randomized probability based on remaining TTL and current read volume:
-    $$\Delta \cdot eta \cdot \log(	ext{random}())$$
+    $$\Delta \cdot \beta \cdot \log(	ext{random}())$$
   - A single random worker thread triggers a background refresh *before* the key physically expires, refreshing the cache smoothly with zero latency spike or database stampede!
 
 ---

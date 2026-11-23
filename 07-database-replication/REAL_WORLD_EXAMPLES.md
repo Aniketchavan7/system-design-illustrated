@@ -9,7 +9,7 @@
 ### 1. Production Context & Scale
 - **System**: Google Cloud Spanner Replication Engine.
 - **Footprint**: Thousands of database shards replicated across 5 continents (North America, Europe, Asia-Pacific, South America).
-- **SLA**: Five-nines (99.999%) availability with zero data loss ($	ext{RPO} = 0$) and automated failover ($	ext{RTO} pprox 0$).
+- **SLA**: Five-nines (99.999%) availability with zero data loss ($	ext{RPO} = 0$) and automated failover ($	ext{RTO} \approx 0$).
 
 ### 2. The Core Problem at Google Scale
 - **Asynchronous Replication Risks Data Loss**:
@@ -45,7 +45,7 @@
 
 #### B. The Quorum Invariant
 - For a Paxos group of size $N = 2F + 1$, the leader requires acknowledgments from only a simple majority ($F + 1$) before declaring a write committed:
-  $$	ext{Quorum Size} = \left\lfloor rac{N}{2} ightfloor + 1$$
+  $$	ext{Quorum Size} = \left\lfloor \frac{N}{2} ightfloor + 1$$
 - **Latency Optimization**: If $N=3$ (two in the US, one in Europe), the leader commits as soon as the other US replica acknowledges. The transatlantic replica catches up asynchronously. Fast writes occur without sacrificing durability!
 
 #### C. Witness Replicas
@@ -110,7 +110,7 @@
 | **Consistency Guarantee** | Strict Linearizability (External Consistency) | Eventual Consistency (Tunable Quorum) |
 | **Write Latency** | 30-70ms (bound by majority quorum RTT) | 2-5ms (bound by local AZ network speed) |
 | **Conflict Handling** | Prevented mathematically via TrueTime serialization | Resolved after-the-fact via Last-Write-Wins |
-| **Disaster Recovery** | Automatic $	ext{RTO} pprox 0$, $	ext{RPO} = 0$ | Automatic $	ext{RTO} = 0$, $	ext{RPO} < 	ext{replication lag}$ |
+| **Disaster Recovery** | Automatic $	ext{RTO} \approx 0$, $	ext{RPO} = 0$ | Automatic $	ext{RTO} = 0$, $	ext{RPO} < 	ext{replication lag}$ |
 
 ---
 

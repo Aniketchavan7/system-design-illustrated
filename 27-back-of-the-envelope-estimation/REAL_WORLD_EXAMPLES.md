@@ -13,7 +13,7 @@
 ### 2. Google's Web Search Index Sizing Model
 When Google sized its crawling and index storage:
 1. **The Crawl Target**: Estimate 20 Billion web pages indexed.
-2. **Page Content**: Average HTML page after compression is $pprox 20	ext{ KB}$.
+2. **Page Content**: Average HTML page after compression is $\approx 20	ext{ KB}$.
 3. **Raw Storage Requirement**:
    $$20,000,000,000 	imes 20	ext{ KB} = 400	ext{ Terabytes of raw text}$$
 4. **The Storage Multipliers**:
@@ -38,7 +38,7 @@ How does Netflix determine how many physical storage appliances to ship to an IS
 2. **OCA Hardware Capacity**:
    - Each custom Netflix OCA server has a **100Gbps network interface card** and **200TB of NVMe flash storage**.
 3. **Server Count Calculation**:
-   $$	ext{Servers Needed} = rac{1,200	ext{ Gbps}}{100	ext{ Gbps/server}} = 12	ext{ Servers}$$
+   $$	ext{Servers Needed} = \frac{1,200	ext{ Gbps}}{100	ext{ Gbps/server}} = 12	ext{ Servers}$$
    Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Servers}}$ deployed in the Chicago IXP rack.
 4. **Storage Sizing**:
    - 14 servers $	imes$ 200TB $= 2.8	ext{ Petabytes}$ of local flash storage.
@@ -58,6 +58,6 @@ How does Netflix determine how many physical storage appliances to ship to an IS
 ---
 
 ## 🎯 System Design Interview Takeaways
-1. **Memorize the Rule of Thumb**: Remember that $1	ext{M requests/day} pprox 12	ext{ QPS}$ and $1	ext{B requests/day} pprox 12,000	ext{ QPS}$. It allows you to produce immediate QPS answers in seconds.
+1. **Memorize the Rule of Thumb**: Remember that $1	ext{M requests/day} \approx 12	ext{ QPS}$ and $1	ext{B requests/day} \approx 12,000	ext{ QPS}$. It allows you to produce immediate QPS answers in seconds.
 2. **Always Account for Replication Overhead**: When calculating storage, never stop at raw data size. Always multiply by $3	imes$ for distributed replication (e.g. S3, GFS, Cassandra).
 3. **Buffer for Caching Overhead**: In RAM estimation, always add a 20–30% memory buffer for data structure pointers, slab fragmentation, and hash map overhead.

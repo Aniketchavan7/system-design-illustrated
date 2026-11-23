@@ -67,7 +67,7 @@ flowchart TD
         SidecarB <-->|"localhost (plaintext)"| AppB
     end
 
-    SidecarA ==="Mutual TLS (mTLS) + W3C Traceparent"===> SidecarB
+    SidecarA ==>|"Mutual TLS (mTLS) + W3C Traceparent"| SidecarB
     Pilot -.->|"Push Config via xDS (gRPC)"| SidecarA
     Pilot -.->|"Push Config via xDS (gRPC)"| SidecarB
     Citadel -.->|"Issue & Rotate x509 Certs"| SidecarA

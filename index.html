@@ -22,6 +22,7 @@
       </a>
 
       <div class="header-actions">
+        <a id="link-study-guide" href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/STUDY_GUIDE.md" class="btn-secondary">Study Guide</a>
         <a id="link-cheatsheet" href="./CHEATSHEET.md" class="btn-secondary" title="View Back-of-the-Envelope Master Cheat Sheet">
           📐 Cheat Sheet
         </a>
@@ -137,17 +138,17 @@
 
           <h2 id="card-title-back" class="card-title">Client-Server Networking</h2>
 
-          <div class="section-label">🏢 Production Implementations (Google vs. Netflix)</div>
+          <div class="section-label">🏢 Production Examples</div>
           <div class="case-studies-grid">
             <div class="company-card">
-              <div class="company-name company-google">🌐 Google Production Scale</div>
+              <div id="primary-case-label" class="company-name company-google">🌐 Google Production Scale</div>
               <div id="google-desc" class="company-desc">
                 Pioneered QUIC / HTTP/3 over UDP to eliminate head-of-line blocking and achieve 0-RTT handshakes.
               </div>
             </div>
 
             <div class="company-card">
-              <div class="company-name company-netflix">🍿 Netflix Production Scale</div>
+              <div id="secondary-case-label" class="company-name company-netflix">🍿 Netflix Production Scale</div>
               <div id="netflix-desc" class="company-desc">
                 Processes tens of billions of requests through Netty-based Zuul 2 edge proxies with TLS session tickets.
               </div>
