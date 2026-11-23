@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 📦 Install testing dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: 🔍 Compile Python bytecode (Syntax check)
+        run: |
+          python -m compileall -q -f .
+
+      - name: 🧪 Run Pytest test suite
+        run: |
+          pytest -v --tb=short
+
+      - name: 📊 Generate CI Job Summary
+        if: always()
+        run: |
+          echo "### 🧠 System Design Illustrated — Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Python Version**: \`${{ matrix.python-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **OS**: \`ubuntu-latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Verified Components**:" >> $GITHUB_STEP_SUMMARY
+          echo "  - 45 Runnable Module \`demo.py\` scripts" >> $GITHUB_STEP_SUMMARY
+          echo "  - \`calculate.py\` Capacity Planning Calculator" >> $GITHUB_STEP_SUMMARY
+          echo "  - Module directory structure and relative markdown links" >> $GITHUB_STEP_SUMMARY
+          echo "  - Flashcard Web App dataset (\`cards-data.js\`) and DOM bindings" >> $GITHUB_STEP_SUMMARY
+
+  lint-and-validate:
+    name: Asset & Link Integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: 🗂️ Verify root and docs/ parity
+        run: |
+          cmp app.css docs/app.css
+          cmp app.js docs/app.js
+          cmp cards-data.js docs/cards-data.js
+
+      - name: 🔗 Verify relative links and module integrity
+        run: |
+          pytest -v tests/test_structure_and_links.py tests/test_flashcard_app.py

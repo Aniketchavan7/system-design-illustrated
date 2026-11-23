@@ -3,6 +3,7 @@
 # 🧠 System Design Illustrated
 
 [![GitHub Stars](https://img.shields.io/github/stars/Aniketchavan7/system-design-illustrated?style=for-the-badge&logo=github&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/Aniketchavan7/system-design-illustrated/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7aa2f7?style=for-the-badge&labelColor=1a1b26)](./LICENSE)
 [![Author](https://img.shields.io/badge/Author-Aniket_Chavan-7dcfff?style=for-the-badge&logo=github&labelColor=1a1b26)](https://github.com/Aniketchavan7)
 
@@ -27,6 +28,7 @@
 3. **Run the code.** Every module has a standalone, zero-dependency `demo.py` you can execute immediately with `python demo.py`.
 4. **Study Real-World Production Case Studies.** Every single module contains a dedicated `REAL_WORLD_EXAMPLES.md` breaking down how **Google**, **Netflix**, and other tech leaders implement and scale that pattern at multi-billion request scale.
 5. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
+6. **Verify with the Automated Test Suite.** Validate all 45 runnable demos, capacity calculator, and architecture contracts locally with `python run_tests.py` or `pytest`.
 
 ---
 
@@ -38,6 +40,7 @@
 | 📐 **Back-of-the-Envelope Master Cheat Sheet** | Powers of 2, Latency numbers, QPS conversions, 5-step sizing formulas, SLA nines | [Open Cheat Sheet](./CHEATSHEET.md) |
 | 🔀 **Master Architectural Decision Flowcharts** | Interactive visual decision trees for Databases, Consistency, Caching, Protocols, and Sagas | [Open Flowcharts](./DECISION_FLOWCHARTS.md) |
 | 🧮 **Interactive Capacity Calculator** | Standalone zero-dependency Python CLI tool for QPS, bandwidth, storage & cache sizing | [View Script (`calculate.py`)](./calculate.py) |
+| 🧪 **Automated CI Test Suite** | 100+ tests validating all 45 module demos, CLI calculator, and schema contracts | [View Workflow (`ci.yml`)](./.github/workflows/ci.yml) · `python run_tests.py` |
 
 ### 🚦 Status legend
 
