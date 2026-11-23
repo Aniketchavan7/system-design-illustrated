@@ -14,6 +14,16 @@
 4. **Study Real-World Production Case Studies.** Every single module contains a dedicated `REAL_WORLD_EXAMPLES.md` breaking down how **Google**, **Netflix**, and other tech leaders implement and scale that pattern at multi-billion request scale.
 5. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
 
+---
+
+## ⚡ Master Tools & Quick References
+
+| Resource | Description | Direct Link |
+| :--- | :--- | :---: |
+| 📐 **Back-of-the-Envelope Master Cheat Sheet** | Powers of 2, Latency numbers, QPS conversions, 5-step sizing formulas, SLA nines | [Open Cheat Sheet](./CHEATSHEET.md) |
+| 🔀 **Master Architectural Decision Flowcharts** | Interactive visual decision trees for Databases, Consistency, Caching, Protocols, and Sagas | [Open Flowcharts](./DECISION_FLOWCHARTS.md) |
+| 🧮 **Interactive Capacity Calculator** | Standalone zero-dependency Python CLI tool for QPS, bandwidth, storage & cache sizing | [View Script (`calculate.py`)](./calculate.py) |
+
 ### 🚦 Status legend
 
 | Badge | Meaning |
