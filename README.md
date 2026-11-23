@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-7aa2f7?style=for-the-badge&labelColor=1a1b26)](./LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-7aa2f7?style=for-the-badge&logo=github&labelColor=1a1b26)](./CONTRIBUTING.md)
 [![Community Driven](https://img.shields.io/badge/Community-Open_Source-7aa2f7?style=for-the-badge&logo=git&labelColor=1a1b26)](./CONTRIBUTING.md)
+[![Reddit](https://img.shields.io/badge/Reddit-Discussions_&_Feedback-FF4500?style=for-the-badge&logo=reddit&logoColor=white&labelColor=1a1b26)](./COMMUNITY.md)
 [![Author](https://img.shields.io/badge/Author-Aniket_Chavan-7dcfff?style=for-the-badge&logo=github&labelColor=1a1b26)](https://github.com/Aniketchavan7)
 
 > ⭐ **If you find this visual reference helpful for interview preparation or distributed systems engineering, please consider starring the repository!**
@@ -263,6 +264,7 @@ System design is not a static dogma—it is an evolving, collaborative disciplin
 - 🐛 **Found a Mistake, Typo, or Inaccuracy?** Open an issue using our [Mistake Report Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=1_fix_mistake.md) or submit a PR. Catching mistakes makes the curriculum better for everyone.
 - 🏢 **Share Your Production War Stories:** Add your team's real-world architectural case study to any module's `REAL_WORLD_EXAMPLES.md` via our [Case Study Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=2_share_case_study.md).
 - 💡 **Propose New Topics or Labs:** Have an idea for a modern system design topic (e.g. Vector DBs, CRDTs, edge computing)? [Propose a new module](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=3_suggest_module.md).
+- 💬 **Discuss & Share Feedback on Reddit:** Share your interview debriefs, debate tradeoffs, and discuss lessons in [r/systemdesign](https://www.reddit.com/r/systemdesign/). See our [Community Guide](./COMMUNITY.md) for subreddits and topic ideas.
 - 📖 **Review Our Guidelines:** Read [CONTRIBUTING.md](./CONTRIBUTING.md) for step-by-step PR instructions and our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 All contributors who fix a typo, suggest a diagram, or write a case study will be proudly credited!

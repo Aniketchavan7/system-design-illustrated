@@ -449,6 +449,7 @@
   const csEl = document.getElementById('link-cheatsheet');
   const fcEl = document.getElementById('link-flowcharts');
   const contribEl = document.getElementById('link-contribute');
+  const redditEl = document.getElementById('link-reddit');
   if (contribEl && isFileProto) {
     contribEl.href = isDocsDir ? '../CONTRIBUTING.md' : './CONTRIBUTING.md';
   }

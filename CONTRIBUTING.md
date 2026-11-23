@@ -52,6 +52,10 @@ There are many ways to contribute to the project:
 ### 7. 🌐 Translations & Accessibility
 - Help translate modules or flashcards to other languages so developers worldwide can learn system design in their native tongue.
 
+### 8. 💬 Discuss Ideas & Share Feedback on Reddit
+- Before opening a large PR or proposing an extensive new module, feel free to bounce ideas off the community in **[r/systemdesign](https://www.reddit.com/r/systemdesign/)** or other subreddits.
+- See our **[Community & Reddit Guide](./COMMUNITY.md)** for discussion prompts, post templates, and how community feedback gets turned into repository updates.
+
 ---
 
 ## 🛠️ Step-by-Step Contribution Workflow
