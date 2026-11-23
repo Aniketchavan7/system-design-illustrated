@@ -89,7 +89,7 @@ def main():
             encoding="utf-8",
             timeout=5
         )
-        if res.returncode == 0 and "ESTIMATED INFRASTRUCTURE PROFILE" in res.stdout:
+        if res.returncode == 0 and "SYSTEM DESIGN CAPACITY ESTIMATION REPORT" in res.stdout:
             passed += 1
         else:
             errors.append(f"calculate.py failed on preset '{preset}'")
