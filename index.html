@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Design Illustrated — Interactive Flashcards</title>
+  <meta name="description" content="Master 45 core system design concepts, real numbers math, and FAANG case studies (Google, Netflix, Meta) with interactive 3D flashcards.">
+  <link rel="stylesheet" href="app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20y=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+</head>
+<body>
+
+  <!-- Top App Navigation -->
+  <header>
+    <div class="header-container">
+      <a href="./" class="brand">
+        <span class="brand-icon">🧠</span>
+        <div>
+          <span class="brand-title">System Design Illustrated</span>
+          <span class="brand-badge">Flashcards</span>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <a id="link-cheatsheet" href="./CHEATSHEET.md" class="btn-secondary" title="View Back-of-the-Envelope Master Cheat Sheet">
+          📐 Cheat Sheet
+        </a>
+        <a id="link-flowcharts" href="./DECISION_FLOWCHARTS.md" class="btn-secondary" title="View Master Architectural Decision Flowcharts">
+          🔀 Flowcharts
+        </a>
+        <a href="https://github.com/Aniketchavan7/system-design-illustrated" target="_blank" rel="noopener" class="btn-secondary">
+          ⭐ GitHub Repo
+        </a>
+        <button id="btn-reset" class="btn-secondary" title="Reset all mastery and study status">
+          🔄 Reset
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Progress Bar Section -->
+  <section class="progress-section">
+    <div class="progress-header">
+      <span id="progress-text">Card 1 of 45</span>
+      <span id="progress-percentage">0/45 Mastered (0%)</span>
+    </div>
+    <div class="progress-track">
+      <div id="progress-fill" class="progress-fill"></div>
+    </div>
+  </section>
+
+  <!-- Search and Filtering Section -->
+  <section class="controls-section">
+    <div class="search-and-status">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="Search concepts, keywords, Google/Netflix notes... (/)" autocomplete="off">
+      </div>
+
+      <div id="status-filters" class="status-filters">
+        <button class="status-pill active" data-status="all">All Cards</button>
+        <button class="status-pill" data-status="unseen">Unseen</button>
+        <button class="status-pill" data-status="review">Review Later</button>
+        <button class="status-pill" data-status="mastered">Mastered</button>
+      </div>
+
+      <button id="btn-shuffle" class="btn-secondary" title="Shuffle Card Deck (S)">
+        🔀 Shuffle
+      </button>
+    </div>
+
+    <!-- Category Filter Chips -->
+    <div id="category-chips" class="category-chips">
+      <button class="category-chip active" data-cat="all">All Topics <span class="chip-count">45</span></button>
+      <button class="category-chip" data-cat="foundations">Foundations <span class="chip-count">3</span></button>
+      <button class="category-chip" data-cat="networking">Networking & Traffic <span class="chip-count">6</span></button>
+      <button class="category-chip" data-cat="storage">Storing Data <span class="chip-count">6</span></button>
+      <button class="category-chip" data-cat="caching">Caching & Edge <span class="chip-count">3</span></button>
+      <button class="category-chip" data-cat="distributed">Distributed Systems <span class="chip-count">5</span></button>
+      <button class="category-chip" data-cat="async">Async & Microservices <span class="chip-count">5</span></button>
+      <button class="category-chip" data-cat="system_design">Full System Designs <span class="chip-count">17</span></button>
+    </div>
+  </section>
+
+  <!-- Main Flashcard Stage -->
+  <main>
+    <div id="flashcard-container" class="flashcard-container">
+      <div id="flashcard" class="flashcard">
+        
+        <!-- Front of Card: Concept & ELI5 -->
+        <div class="card-face card-front">
+          <div class="card-header">
+            <div class="card-meta">
+              <span id="card-number" class="card-number">Module 01</span>
+              <span id="card-category" class="card-category-badge">Networking & Traffic</span>
+              <span id="card-status" class="card-status-badge status-unseen">Unseen</span>
+            </div>
+            <span class="flip-prompt">Click to flip ↺</span>
+          </div>
+
+          <h2 id="card-title-front" class="card-title">Client-Server Networking</h2>
+
+          <div class="section-label">🧒 The 30-Second Version (ELI5)</div>
+          <div id="card-eli5" class="card-body-text">
+            Every digital product is a conversation between a client (your phone) and a server.
+          </div>
+
+          <div class="section-label">💡 Physical Analogy</div>
+          <div id="card-analogy" class="analogy-box">
+            Think of ordering at a drive-thru window versus mailing a registered postal letter.
+          </div>
+
+          <div class="section-label">🔢 Real Numbers Math & Latency</div>
+          <div id="card-numbers" class="numbers-box">
+            TCP 3-way handshake adds 1 RTT (40-60ms) overhead before data transfer.
+          </div>
+
+          <div class="card-footer">
+            <div class="card-links">
+              <a id="link-readme" href="#" target="_blank" class="card-link">📖 Read Chapter</a>
+              <a id="link-examples" href="#" target="_blank" class="card-link">🏢 Case Studies</a>
+              <a id="link-demo" href="#" target="_blank" class="card-link">⚡ Runnable Demo</a>
+            </div>
+            <span class="flip-prompt">Press Space to flip ↺</span>
+          </div>
+        </div>
+
+        <!-- Back of Card: Deep Dive, FAANG & Interview QA -->
+        <div class="card-face card-back">
+          <div class="card-header">
+            <div class="card-meta">
+              <span class="card-number">Interview & Architecture</span>
+              <span class="card-category-badge">Deep Dive</span>
+            </div>
+            <span class="flip-prompt">Click to flip back ↺</span>
+          </div>
+
+          <h2 id="card-title-back" class="card-title">Client-Server Networking</h2>
+
+          <div class="section-label">🏢 Production Implementations (Google vs. Netflix)</div>
+          <div class="case-studies-grid">
+            <div class="company-card">
+              <div class="company-name company-google">🌐 Google Production Scale</div>
+              <div id="google-desc" class="company-desc">
+                Pioneered QUIC / HTTP/3 over UDP to eliminate head-of-line blocking and achieve 0-RTT handshakes.
+              </div>
+            </div>
+
+            <div class="company-card">
+              <div class="company-name company-netflix">🍿 Netflix Production Scale</div>
+              <div id="netflix-desc" class="company-desc">
+                Processes tens of billions of requests through Netty-based Zuul 2 edge proxies with TLS session tickets.
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label">🎯 Top Interview Question & Model Answer</div>
+          <div class="qa-card">
+            <div id="interview-q" class="qa-question">
+              Why does HTTP/3 run over UDP instead of TCP?
+            </div>
+            <div id="interview-a" class="qa-answer">
+              TCP enforces strict byte-stream ordering. If one packet drops, all streams pause (head-of-line blocking). HTTP/3 uses QUIC over UDP so dropped packets only pause that specific stream.
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="card-links">
+              <a id="link-readme-back" href="#" target="_blank" class="card-link">📖 Read Chapter</a>
+              <a id="link-examples-back" href="#" target="_blank" class="card-link">🏢 Case Studies</a>
+              <a id="link-demo-back" href="#" target="_blank" class="card-link">⚡ Runnable Demo</a>
+            </div>
+            <span class="flip-prompt">Press Space to flip back ↺</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom Study Action Bar -->
+    <div class="action-bar">
+      <button id="btn-prev" class="nav-btn" title="Previous Card (Left Arrow)">
+        ← Previous
+      </button>
+
+      <button id="btn-flip" class="btn-flip" title="Flip Card (Spacebar / Up / Down)">
+        ↺ Flip Card
+      </button>
+
+      <div class="study-buttons">
+        <button id="btn-review" class="btn-review" title="Mark for Review Later (2 or R)">
+          ⏳ Review Later
+        </button>
+        <button id="btn-master" class="btn-master" title="Mark as Mastered (1 or M)">
+          ✓ Mastered
+        </button>
+      </div>
+
+      <button id="btn-next" class="nav-btn" title="Next Card (Right Arrow)">
+        Next →
+      </button>
+    </div>
+  </main>
+
+  <!-- Keyboard Shortcuts Footer -->
+  <footer>
+    <p>
+      Keyboard Shortcuts: 
+      <span class="kbd-shortcut">Space</span> Flip Card &nbsp;|&nbsp;
+      <span class="kbd-shortcut">←</span> <span class="kbd-shortcut">→</span> Navigate &nbsp;|&nbsp;
+      <span class="kbd-shortcut">1</span> Mastered &nbsp;|&nbsp;
+      <span class="kbd-shortcut">2</span> Review Later &nbsp;|&nbsp;
+      <span class="kbd-shortcut">S</span> Shuffle
+    </p>
+  </footer>
+
+  <!-- App Data and Controller Scripts -->
+  <script src="cards-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
