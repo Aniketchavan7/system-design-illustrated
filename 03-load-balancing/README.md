@@ -67,7 +67,7 @@ On a cache miss the browser asks its resolver for the public address, then conne
 
 </details>
 
-Use the existing [Python simulator](#run-the-demo) to see how the balancer routes requests after ejection. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Load Balancing** and explain why a healthy route alone cannot cover a capacity shortfall.
+Use the existing [Python simulator](#run-the-demo) to see how the balancer routes requests after ejection. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html), search for **Load Balancing** and explain why a healthy route alone cannot cover a capacity shortfall.
 
 **Continue learning** · [Cache popular guides](../10-caching-patterns/#trail-notes-exercise), [queue background jobs](../17-message-queues/#trail-notes-exercise), and [practice regional failover](../advanced/multi-region-recovery.md#trail-notes-exercise).
 

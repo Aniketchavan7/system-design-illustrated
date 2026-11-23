@@ -25,6 +25,7 @@ def test_master_files_exist():
         "app.js",
         "cards-data.js",
         "docs/index.html",
+        "docs/flashcards.html",
         "docs/app.css",
         "docs/app.js",
         "docs/cards-data.js"

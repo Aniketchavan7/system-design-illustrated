@@ -36,7 +36,7 @@ At **09:00:30**, the cached answer still has 30 seconds left, so it returns `192
 
 </details>
 
-Use the existing [Python simulator](#run-the-demo) to watch a cached answer expire. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Domain Name System** and explain why two clients can receive different answers during a change.
+Use the existing [Python simulator](#run-the-demo) to watch a cached answer expire. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html), search for **Domain Name System** and explain why two clients can receive different answers during a change.
 
 **Next lesson** · [Route the request to a healthy server](../03-load-balancing/#first-pass)
 

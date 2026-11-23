@@ -46,7 +46,7 @@ def test_html_and_dom_ids():
     dom_ids = set(re.findall(r"getElementById\(['\"]([^'\"]+)['\"]\)", app_js))
     assert len(dom_ids) > 0, "No getElementById calls found in app.js"
     
-    for html_rel in ["index.html", "docs/index.html"]:
+    for html_rel in ["index.html", "docs/flashcards.html"]:
         p = os.path.join(REPO_ROOT, html_rel)
         assert os.path.isfile(p), f"Missing {html_rel}"
         with open(p, "r", encoding="utf-8") as f:

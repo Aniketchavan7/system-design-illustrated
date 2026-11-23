@@ -40,7 +40,7 @@ About **70 ms** in this model. The outbound request and inbound response use one
 
 </details>
 
-Use the existing [Python simulator](#run-the-demo) to compare connection setup and request patterns. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/), search for **Client–Server Networking** and explain how you estimated 70 ms.
+Use the existing [Python simulator](#run-the-demo) to compare connection setup and request patterns. In the [flashcards](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html), search for **Client–Server Networking** and explain how you estimated 70 ms.
 
 **Next lesson** · [Find the website's address with DNS](../02-domain-name-system/#first-pass)
 

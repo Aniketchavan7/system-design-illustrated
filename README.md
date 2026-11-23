@@ -20,9 +20,11 @@
 
 > You do **not** need a computer-science degree to read this. If a module uses a word before explaining it, that's a bug — please open an issue.
 
-> 🗂️ **Interactive Study Flashcards**: Practice all 45 modules with 3D flashcards, review tracking, ELI5 summaries, and FAANG case studies directly in your browser: **[Launch Flashcards App (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/)** or open [local `index.html`](./index.html).
+> 🗂️ **Interactive Study Flashcards**: Practice all 45 modules with 3D flashcards, review tracking, ELI5 summaries, and FAANG case studies directly in your browser: **[Launch Flashcards App (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html)** or open [local `index.html`](./index.html).
 
 ---
+
+**[Start the free Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)**. Follow six short lessons, save your progress in the browser, and test a backend outage in the simulator.
 
 ## 🧭 How to use this repo
 
@@ -41,7 +43,7 @@ Start with the [study guide](./STUDY_GUIDE.md) for a first pass, interview prep,
 
 | Resource | Description | Direct Link |
 | :--- | :--- | :---: |
-| 🗂️ **Interactive Flashcard Web App** | 3D study cards with review tracking, ELI5s, and FAANG case studies | [Launch Flashcards (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/) · [Local App](./index.html) |
+| 🗂️ **Interactive Flashcard Web App** | 3D study cards with review tracking, ELI5s, and FAANG case studies | [Launch Flashcards (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html) · [Local App](./index.html) |
 | 📐 **Back-of-the-Envelope Master Cheat Sheet** | Powers of 2, Latency numbers, QPS conversions, 5-step sizing formulas, SLA nines | [Open Cheat Sheet](./CHEATSHEET.md) |
 | 🔀 **Master Architectural Decision Flowcharts** | Interactive visual decision trees for Databases, Consistency, Caching, Protocols, and Sagas | [Open Flowcharts](./DECISION_FLOWCHARTS.md) |
 | 🧮 **Interactive Capacity Calculator** | Standalone zero-dependency Python CLI tool for QPS, bandwidth, storage & cache sizing | [View Script (`calculate.py`)](./calculate.py) |

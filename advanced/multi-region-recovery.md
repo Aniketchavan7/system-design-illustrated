@@ -43,7 +43,7 @@ With consensus replication, 2F+1 voting replicas need a majority of F+1. Place t
 
 ## Trail Notes exercise
 
-Trail Notes now has [cached guide pages](../10-caching-patterns/#trail-notes-exercise) and [queued photo previews](../17-message-queues/#trail-notes-exercise). A region fails at **12:00**. A standby can serve guide reads at **12:08**, but its latest recoverable committed guide update is at **11:59:20**. The team set a **10-minute RTO for public reads** and a **30-second RPO for guide updates**.
+Trail Notes now has [cached guide pages](../10-caching-patterns/#trail-notes-exercise) and [queued photo previews](../17-message-queues/#trail-notes-exercise). A region fails at **12:00**. A standby can serve guide reads at **12:08**, but its latest recoverable committed guide update is at **11:59:20**. The team set a **10-minute recovery time objective (RTO)** for public reads and a **30-second recovery point objective (RPO)** for guide updates. RTO limits how long a function can be down. RPO limits how far back recovered data may fall.
 
 **Predict.** Which target did the incident meet? What would you verify before reopening writes and restarting preview workers?
 

@@ -6,7 +6,7 @@
 
 Start with one of these routes. The reading and paper exercises are free and need only a browser.
 
-- **First pass** · Follow one fictional website through [networking](./01-client-server-networking/#first-pass), [DNS](./02-domain-name-system/#first-pass), and [load balancing](./03-load-balancing/#first-pass). Finish by tracing a request through a server failure. Then draw a [URL shortener](./21-system-design-url-shortener/) and estimate its traffic.
+- **[First pass on the course site](https://aniketchavan7.github.io/system-design-illustrated/)** · Follow one fictional website through [networking](./01-client-server-networking/#first-pass), [DNS](./02-domain-name-system/#first-pass), and [load balancing](./03-load-balancing/#first-pass). Finish by tracing a request through a server failure. Then draw a [URL shortener](./21-system-design-url-shortener/) and estimate its traffic.
 - **Interview prep** · Review the [estimation cheat sheet](./CHEATSHEET.md) and [decision flowcharts](./DECISION_FLOWCHARTS.md), then try the [timed mock interviews](#timed-mock-interviews).
 - **Production reliability** · Read about [queues](./17-message-queues/) and [idempotency](./32-rest-api-design-and-idempotency/), run the [order lab](./labs/order-processing/), and work through [regional recovery](./advanced/multi-region-recovery.md) and [tenant authorization](./advanced/authentication-and-authorization.md).
 - **Open source community** · Found a gap, typo, or want to share your team's production war stories? Read our [contributing guide](./CONTRIBUTING.md), [code of conduct](./CODE_OF_CONDUCT.md), and [Reddit community discussions](./COMMUNITY.md).
@@ -135,7 +135,7 @@ Before your on-site interview, ensure you can confidently answer and draw diagra
 - [ ] **Consensus**: Can you explain why Raft requires a minimum of 3 nodes for single failure tolerance ($2F+1$ quorum)?
 - [ ] **Sharding**: Can you explain why resharding a hash-modulo ($N \pmod M$) database requires moving 90%+ of keys, and how Consistent Hashing fixes it?
 - [ ] **Idempotency**: Can you draw how Stripe or payment systems prevent double-charges using an idempotency key and a durable record of the operation?
-- [ ] **Flashcards**: Can you explain the cards you marked for review in the [Interactive Flashcard Web App](https://aniketchavan7.github.io/system-design-illustrated/)?
+- [ ] **Flashcards**: Can you explain the cards you marked for review in the [Interactive Flashcard Web App](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html)?
 
 ## Timed mock interviews
 

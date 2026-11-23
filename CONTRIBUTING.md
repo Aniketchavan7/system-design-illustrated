@@ -121,6 +121,10 @@ To ensure technical accuracy, consistency, and educational rigor, **all pull req
 
 ---
 
+## Update the Trail Notes course
+
+Edit the source chapters and regenerate the Pages lessons. The [course contributor guide](./course/README.md) covers the build and browser checks.
+
 ## 📐 Content Style Guide
 
 To maintain high educational quality across all 45 modules, please keep these guidelines in mind:
