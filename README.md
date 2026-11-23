@@ -1,4 +1,16 @@
+<div align="center">
+
 # 🧠 System Design Illustrated
+
+[![GitHub Stars](https://img.shields.io/github/stars/Aniketchavan7/system-design-illustrated?style=for-the-badge&logo=github&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-7aa2f7?style=for-the-badge&labelColor=1a1b26)](./LICENSE)
+[![Author](https://img.shields.io/badge/Author-Aniket_Chavan-7dcfff?style=for-the-badge&logo=github&labelColor=1a1b26)](https://github.com/Aniketchavan7)
+
+> ⭐ **If you find this visual reference helpful for interview preparation or distributed systems engineering, please consider starring the repository!**
+
+</div>
+
+---
 
 **System design explained so that anyone can follow it**, one concept per folder, with everyday analogies, step-by-step pictures, worked examples with real numbers, runnable code, and a quick self-check at the end.
 
