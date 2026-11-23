@@ -123,7 +123,7 @@ Google SRE solves the problem of a struggling server being killed by client retr
 Clients track the number of requests they sent in the last 2 minutes (`requests`) and the number of requests accepted by the server without error (`accepts`).
 Clients compute the probability of dropping their own request before sending it:
 
-$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}ight)$$
+$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}\right)$$
 
 - Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).
 - **How it behaves**:

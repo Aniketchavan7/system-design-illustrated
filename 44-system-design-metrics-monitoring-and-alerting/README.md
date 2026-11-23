@@ -149,9 +149,7 @@ To keep query times fast across months of data:
 ---
 
 ## Try It Yourself
-A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (`OK` $
-ightarrow$ `PENDING` $
-ightarrow$ `FIRING`) is included in this directory.
+A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (`OK` $\rightarrow$ `PENDING` $\rightarrow$ `FIRING`) is included in this directory.
 
 Run the simulation:
 ```bash

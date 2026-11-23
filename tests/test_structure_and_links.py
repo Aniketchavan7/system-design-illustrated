@@ -88,11 +88,13 @@ def test_relative_markdown_links():
 
 
 def test_markdown_has_no_unexpected_control_characters():
-    invalid = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+    invalid = re.compile(r"[\x00-\x08\x0b-\x1f]")
     root = Path(REPO_ROOT)
     findings = []
     for path in curriculum_markdown():
-        for line, text in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+        with path.open(encoding="utf-8", newline="") as file:
+            lines = file.read().replace("\r\n", "\n").split("\n")
+        for line, text in enumerate(lines, 1):
             for match in invalid.finditer(text):
                 findings.append(
                     f"{path.relative_to(root)}:{line}:{match.start() + 1} "

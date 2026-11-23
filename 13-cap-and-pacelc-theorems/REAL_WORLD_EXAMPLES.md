@@ -33,7 +33,7 @@
 
 #### A. The Paxos Majority Rule
 - Spanner partitions data across Paxos groups of size $N$ (e.g., 5 replicas).
-- A write transaction requires a majority quorum ($\lfloor N/2 floor + 1 = 3$).
+- A write transaction requires a majority quorum ($\lfloor N/2 \rfloor + 1 = 3$).
 - If a network partition isolates 2 European replicas from the 3 US replicas:
   - The US group still has 3 replicas, maintains majority quorum, and continues processing transactions normally.
   - The EU group only has 2 replicas. It **cannot form a majority**. Instead of returning stale data or accepting localized writes, it **halts and times out writes with an error**.

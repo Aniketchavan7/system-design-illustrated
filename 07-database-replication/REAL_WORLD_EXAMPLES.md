@@ -45,7 +45,7 @@
 
 #### B. The Quorum Invariant
 - For a Paxos group of size $N = 2F + 1$, the leader requires acknowledgments from only a simple majority ($F + 1$) before declaring a write committed:
-  $$	ext{Quorum Size} = \left\lfloor \frac{N}{2} ightfloor + 1$$
+  $$	ext{Quorum Size} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$
 - **Latency Optimization**: If $N=3$ (two in the US, one in Europe), the leader commits as soon as the other US replica acknowledges. The transatlantic replica catches up asynchronously. Fast writes occur without sacrificing durability!
 
 #### C. Witness Replicas
