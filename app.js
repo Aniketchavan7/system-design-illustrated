@@ -87,6 +87,8 @@
     escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     // Format italic
     escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Format markdown links
+    escaped = escaped.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="inline-link">$1</a>');
 
     // Split paragraphs
     const blocks = escaped.split(/\n\n+/);

@@ -515,6 +515,17 @@ main {
   font-weight: 600;
 }
 
+.inline-link {
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.inline-link:hover {
+  color: var(--ink-primary);
+}
+
 .card-body-text code,
 .company-desc code,
 .qa-answer code {
