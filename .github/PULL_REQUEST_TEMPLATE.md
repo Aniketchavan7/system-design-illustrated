@@ -13,6 +13,11 @@
 ## 🔗 Related Issue(s)
 <!-- Fixes #(issue number) if applicable -->
 
+
+## 🔒 Review & Merge Policy
+- [x] I understand that this pull request requires explicit review and approval from maintainer **@Aniketchavan7** before it can be merged into `main`.
+- [x] Branch protection requires all automated CI tests to pass.
+
 ## ✅ Contributor Checklist
 - [ ] I have read the [CONTRIBUTING.md](file:///C:/Users/Aniket/OneDrive/Desktop/github/system-design-illustrated/CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](file:///C:/Users/Aniket/OneDrive/Desktop/github/system-design-illustrated/CODE_OF_CONDUCT.md) guidelines.
 - [ ] My changes maintain plain language, clear physical analogies, and accurate latency figures.

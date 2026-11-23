@@ -107,6 +107,14 @@ git push origin feat/your-feature-name
 - Explain what you changed, why it helps, and any references or links.
 - Don't worry if CI catches an issue—maintainers will gladly help guide you through it!
 
+### Step 7: Review & Merge Policy (Maintainer Review Required)
+To ensure technical accuracy, consistency, and educational rigor, **all pull requests require explicit review and approval from maintainer [@Aniketchavan7](https://github.com/Aniketchavan7) before merging into `main`**:
+1. **Branch Protection Enforced**: The `main` branch is protected. Direct commits are disallowed, and pull requests cannot be merged without review.
+2. **Code Owner Approval**: Every PR automatically assigns [@Aniketchavan7](https://github.com/Aniketchavan7) as the designated code owner (defined in [`.github/CODEOWNERS`](./.github/CODEOWNERS)). Approval from the code owner is mandatory to unlock merging.
+3. **Automated CI Checks**: All automated test checks (`Test (Python 3.12)` and `Asset & Link Integrity`) must pass.
+4. **Stale Review Dismissal**: If you push new commits after receiving approval, GitHub resets the approval status to ensure all final changes are re-reviewed before merge.
+5. **Constructive Collaboration**: Reviews are supportive and focused on clarity, real numbers, and accurate system tradeoffs. We will gladly help you get your PR across the finish line!
+
 ---
 
 ## 📐 Content Style Guide

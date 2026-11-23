@@ -1,0 +1,26 @@
+# ==============================================================================
+# System Design Illustrated - Code Owners Configuration
+# ==============================================================================
+# Defines repository maintainers responsible for reviewing and approving changes.
+# In accordance with branch protection rules on `main`, pull requests modifying
+# any file in this repository require explicit review and approval from @Aniketchavan7
+# before they can be merged.
+# ==============================================================================
+
+# Global owner for all files, modules, documentation, and web assets
+* @Aniketchavan7
+
+# Dedicated ownership for CI workflows and deployment scripts
+.github/workflows/ @Aniketchavan7
+
+# Master educational assets and web engine
+cards-data.js @Aniketchavan7
+docs/ @Aniketchavan7
+app.js @Aniketchavan7
+app.css @Aniketchavan7
+index.html @Aniketchavan7
+calculate.py @Aniketchavan7
+CHEATSHEET.md @Aniketchavan7
+DECISION_FLOWCHARTS.md @Aniketchavan7
+STUDY_GUIDE.md @Aniketchavan7
+README.md @Aniketchavan7
