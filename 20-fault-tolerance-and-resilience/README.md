@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## ⏱️ Prerequisites: What You Need to Know First
 
 To get the most out of this module, make sure you understand:

@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 Replication makes copies of the **same** data across multiple servers to handle read traffic. But what happens when you have so much data (e.g. 50 Terabytes) that it physically cannot fit on one computer's hard drive? Or when you have so many writes (e.g. 100,000 writes/second) that one Primary server catches fire?

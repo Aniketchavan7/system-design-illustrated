@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 A **relational (SQL) database** is like a formal financial spreadsheet with strict rules: every row must follow the exact same column structure, every ID must point to a real record (**foreign keys**), and a transaction either succeeds $100\%$ or rolls back completely (**ACID**).

@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 When your backend grows from one server into 50 different microservices (User Service, Payment Service, Recommendation Service), you should **never** let external mobile apps call those 50 services directly. 

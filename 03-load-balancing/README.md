@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 A single computer can only handle so much traffic before its CPU catches fire or runs out of RAM. Rather than buying an impossibly expensive supercomputer (**vertical scaling**), engineers run dozens of cheap computers in parallel (**horizontal scaling**).

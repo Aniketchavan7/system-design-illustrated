@@ -11,7 +11,8 @@
 1. **Go in order** within a part. Each module builds on the ones before it.
 2. In every module, read **🧒 The 30-second version** first. If that clicks, keep going. If not, re-read the analogy, then look at the picture.
 3. **Run the code.** Every upgraded module has a small `demo.py` you can play with.
-4. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
+4. **Study Real-World Production Case Studies.** Every module contains a dedicated `REAL_WORLD_EXAMPLES.md` breaking down how **Google**, **Netflix**, and other tech leaders implement and scale that pattern at multi-billion request scale.
+5. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
 
 ### 🚦 Status legend
 
@@ -155,6 +156,40 @@ All explanations here are written from scratch in plain language. The books are 
 | — | Real-time leaderboard | ⬜ | Sorted sets at scale | SDI-2 ch 10 |
 
 **Progress:** 0 verified · 25 under review · 24 planned
+
+---
+
+## 🏢 Real-World Production Case Studies (Google, Netflix, Meta, Amazon)
+
+Every single module includes a dedicated `REAL_WORLD_EXAMPLES.md` deep dive detailing how tech titans run these concepts at multi-billion request scale:
+
+| Module | Core Topic | Production Deep Dives & Architectures | Link |
+| :--- | :--- | :--- | :---: |
+| **01** | Client–Server Networking | **Google** QUIC / HTTP/3 & BBR vs **Netflix** Zuul 2/3 Netty Edge TLS & Session Tickets | [Read Deep Dive](./01-client-server-networking/REAL_WORLD_EXAMPLES.md) |
+| **02** | Domain Name System (DNS) | **Google** 8.8.8.8 Anycast BGP & ECS vs **Netflix** Route 53 Latency-Based Regional Evacuation | [Read Deep Dive](./02-domain-name-system/REAL_WORLD_EXAMPLES.md) |
+| **03** | Load Balancing | **Google** Maglev (L4 Kernel-Bypass Consistent Hashing) vs **Netflix** Ribbon & Eureka Client-Side Balancing | [Read Deep Dive](./03-load-balancing/REAL_WORLD_EXAMPLES.md) |
+| **04** | API Gateways & Proxies | **Netflix** Zuul 2/3 Async EventLoop Gateway vs **Google** Envoy Service Mesh & xDS Control Plane | [Read Deep Dive](./04-api-gateways-and-proxies/REAL_WORLD_EXAMPLES.md) |
+| **05** | Rate Limiting | **Stripe** 4-Tier Distributed Rate Limiter vs **Netflix** Adaptive Concurrency Limits (Little's Law) | [Read Deep Dive](./05-rate-limiting/REAL_WORLD_EXAMPLES.md) |
+| **06** | SQL vs NoSQL Databases | **Google** Spanner (TrueTime Relational ACID) vs **Netflix** Polyglot Cassandra & Aurora | [Read Deep Dive](./06-relational-and-non-relational-databases/REAL_WORLD_EXAMPLES.md) |
+| **07** | Database Replication | **Google** Spanner Multi-Paxos Quorums vs **Netflix** Multi-Region Active-Active Cassandra | [Read Deep Dive](./07-database-replication/REAL_WORLD_EXAMPLES.md) |
+| **08** | Database Partitioning | **Google** Bigtable Tablet Splitting vs **Uber** Schemaless Sharded MySQL | [Read Deep Dive](./08-database-partitioning/REAL_WORLD_EXAMPLES.md) |
+| **09** | Storage Engines & Indexes | **Google** LevelDB / Bigtable LSM-Trees vs **Meta / Netflix** RocksDB in Production | [Read Deep Dive](./09-storage-engines-and-indexing/REAL_WORLD_EXAMPLES.md) |
+| **10** | Caching Patterns | **Meta** TAO Social Graph Cache vs **Netflix** EVCache Distributed Memcached Fleet | [Read Deep Dive](./10-caching-patterns/REAL_WORLD_EXAMPLES.md) |
+| **11** | Cache Invalidation & Eviction | **Meta** mcrouter Lease Tokens & Wormhole vs **Google** Caffeine W-TinyLFU Eviction | [Read Deep Dive](./11-cache-eviction-and-invalidation/REAL_WORLD_EXAMPLES.md) |
+| **12** | Content Delivery Networks | **Netflix** Open Connect Custom Hardware OCAs vs **Cloudflare / Google** Anycast Edge CDNs | [Read Deep Dive](./12-content-delivery-networks/REAL_WORLD_EXAMPLES.md) |
+| **13** | CAP & PACELC Theorems | **Google** Spanner (CP / PC-EC) vs **Amazon** Dynamo & **Netflix** Cassandra (AP / PA-EL) | [Read Deep Dive](./13-cap-and-pacelc-theorems/REAL_WORLD_EXAMPLES.md) |
+| **14** | Consistency Models | **Google** Spanner TrueTime Linearizability vs **Netflix** Session & Eventual Consistency | [Read Deep Dive](./14-consistency-models/REAL_WORLD_EXAMPLES.md) |
+| **15** | Consensus & Leader Election | **Google** Chubby Paxos Distributed Locks vs **Kubernetes / Netflix** Titus Raft & etcd | [Read Deep Dive](./15-consensus-and-leader-election/REAL_WORLD_EXAMPLES.md) |
+| **16** | Consistent Hashing | **Discord** 100M+ Gateway Ring vs **Amazon** DynamoDB & Cassandra Virtual Nodes (Vnodes) | [Read Deep Dive](./16-consistent-hashing/REAL_WORLD_EXAMPLES.md) |
+| **17** | Message Queues & Streaming | **Netflix** Keystone Kafka (1.5T events/day) vs **Google** Cloud Pub/Sub Serverless Routing | [Read Deep Dive](./17-message-queues/REAL_WORLD_EXAMPLES.md) |
+| **18** | Event Sourcing & CQRS | **Uber** Trip Lifecycle Platform & CQRS vs **Netflix** Studio Production Asset Pipeline | [Read Deep Dive](./18-event-sourcing-and-cqrs/REAL_WORLD_EXAMPLES.md) |
+| **19** | Distributed Transactions | **Google** Percolator Snapshot 2PC vs **Uber / Netflix** Temporal Saga Orchestrator | [Read Deep Dive](./19-distributed-transactions/REAL_WORLD_EXAMPLES.md) |
+| **20** | Fault Tolerance & Resilience | **Netflix** Chaos Engineering (Chaos Monkey, ChAP) vs **Google** SRE Overload Shedding & Deadlines | [Read Deep Dive](./20-fault-tolerance-and-resilience/REAL_WORLD_EXAMPLES.md) |
+| **21** | System Design: URL Shortener | **Bitly** 10B+ Clicks/Mo Base62 Platform vs **Google / Twitter** Malware Defense & 302 Redirects | [Read Deep Dive](./21-system-design-url-shortener/REAL_WORLD_EXAMPLES.md) |
+| **22** | System Design: In-Memory Cache | **Twitter / X** Twemproxy & Pelikan Segregated Slabs vs **Netflix** EVCache Hybrid Tier | [Read Deep Dive](./22-system-design-in-memory-cache/REAL_WORLD_EXAMPLES.md) |
+| **23** | System Design: Real-Time Chat | **WhatsApp** 100B Msgs/Day Erlang BEAM Engine vs **Discord** 100M+ WebSocket Elixir/Rust | [Read Deep Dive](./23-system-design-chat-app/REAL_WORLD_EXAMPLES.md) |
+| **24** | System Design: Video Streaming | **Netflix** Dynamic Optimizer & Chunked ABR vs **YouTube** Parallel Transcoding & VCUs | [Read Deep Dive](./24-system-design-video-streaming/REAL_WORLD_EXAMPLES.md) |
+| **25** | System Design: Rate Limiter | **Cloudflare** eBPF / XDP Line-Rate Drops vs **Stripe** Atomic Redis Lua Sliding Windows | [Read Deep Dive](./25-system-design-rate-limiter/REAL_WORLD_EXAMPLES.md) |
 
 ---
 

@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 Every digital product is a conversation between two computers: a **client** (your phone or browser) asking for something, and a **server** (a computer in a datacenter) answering. Before they can speak English or JSON, they must agree on a set of rules called **protocols**. 

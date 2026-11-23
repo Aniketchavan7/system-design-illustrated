@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 Computers on the internet don't understand names like `google.com` or `netflix.com`—they only understand numerical coordinates called **IP addresses** (like `142.250.190.46` or `2607:f8b0:4005::200e`).

@@ -4,6 +4,8 @@
 
 ---
 
+> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+
 ## 🧒 The 30-second version
 
 Fetching data from a database on a hard drive takes about **15 milliseconds**. Reading data from a computer's RAM memory takes about **100 nanoseconds**—over **$100,000\times$ faster**.
