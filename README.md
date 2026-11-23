@@ -5,6 +5,8 @@
 [![GitHub Stars](https://img.shields.io/github/stars/Aniketchavan7/system-design-illustrated?style=for-the-badge&logo=github&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/stargazers)
 [![CI](https://img.shields.io/github/actions/workflow/status/Aniketchavan7/system-design-illustrated/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7aa2f7?style=for-the-badge&labelColor=1a1b26)](./LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-7aa2f7?style=for-the-badge&logo=github&labelColor=1a1b26)](./CONTRIBUTING.md)
+[![Community Driven](https://img.shields.io/badge/Community-Open_Source-7aa2f7?style=for-the-badge&logo=git&labelColor=1a1b26)](./CONTRIBUTING.md)
 [![Author](https://img.shields.io/badge/Author-Aniket_Chavan-7dcfff?style=for-the-badge&logo=github&labelColor=1a1b26)](https://github.com/Aniketchavan7)
 
 > ⭐ **If you find this visual reference helpful for interview preparation or distributed systems engineering, please consider starring the repository!**
@@ -248,6 +250,22 @@ Each module includes a `REAL_WORLD_EXAMPLES.md` companion with production exampl
 3. Put any runnable code in the same folder as `demo.py`.
 4. Create a companion `REAL_WORLD_EXAMPLES.md` with primary sources for production claims. Include the date and measurement window for company metrics. Label your own sketches and workloads as illustrative.
 5. Update the row in the syllabus above: add the link, set the status, update the progress line.
+
+---
+
+## 🤝 Open Source Community: Build & Learn Together
+
+> **"This is an open source project. We are happy to accept changes, catch mistakes, and allow everyone to share their own knowledge. It is built for people to use as well as develop together."**
+
+System design is not a static dogma—it is an evolving, collaborative discipline. No single engineer or organization has all the answers. This project is built and maintained by developers worldwide who want to make distributed systems accessible to everyone.
+
+### How You Can Participate & Share Knowledge
+- 🐛 **Found a Mistake, Typo, or Inaccuracy?** Open an issue using our [Mistake Report Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=1_fix_mistake.md) or submit a PR. Catching mistakes makes the curriculum better for everyone.
+- 🏢 **Share Your Production War Stories:** Add your team's real-world architectural case study to any module's `REAL_WORLD_EXAMPLES.md` via our [Case Study Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=2_share_case_study.md).
+- 💡 **Propose New Topics or Labs:** Have an idea for a modern system design topic (e.g. Vector DBs, CRDTs, edge computing)? [Propose a new module](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=3_suggest_module.md).
+- 📖 **Review Our Guidelines:** Read [CONTRIBUTING.md](./CONTRIBUTING.md) for step-by-step PR instructions and our [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+All contributors who fix a typo, suggest a diagram, or write a case study will be proudly credited!
 
 ---
 

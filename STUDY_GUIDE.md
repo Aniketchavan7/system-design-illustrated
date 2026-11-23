@@ -9,6 +9,7 @@ Start with one of these routes. The reading and paper exercises are free and nee
 - **First pass** · Follow one fictional website through [networking](./01-client-server-networking/#first-pass), [DNS](./02-domain-name-system/#first-pass), and [load balancing](./03-load-balancing/#first-pass). Finish by tracing a request through a server failure. Then draw a [URL shortener](./21-system-design-url-shortener/) and estimate its traffic.
 - **Interview prep** · Review the [estimation cheat sheet](./CHEATSHEET.md) and [decision flowcharts](./DECISION_FLOWCHARTS.md), then try the [timed mock interviews](#timed-mock-interviews).
 - **Production reliability** · Read about [queues](./17-message-queues/) and [idempotency](./32-rest-api-design-and-idempotency/), run the [order lab](./labs/order-processing/), and work through [regional recovery](./advanced/multi-region-recovery.md) and [tenant authorization](./advanced/authentication-and-authorization.md).
+- **Open source community** · Found a gap, typo, or want to share your team's production war stories? Read our [contributing guide](./CONTRIBUTING.md) and [code of conduct](./CODE_OF_CONDUCT.md).
 
 
 ## 🎯 The 3 Study Tracks
@@ -190,3 +191,9 @@ Two people try to book the last suitable room over three nights. A payment succe
 [Hotel reservation walkthrough](./41-system-design-hotel-reservation/)
 
 </details>
+
+---
+
+## 🤝 Community Contributions
+
+Have an alternative solution, post-mortem war story, or interview question? We welcome community contributions! Check out [CONTRIBUTING.md](./CONTRIBUTING.md) to see how you can add your own knowledge to this guide.

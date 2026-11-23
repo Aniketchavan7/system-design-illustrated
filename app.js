@@ -448,6 +448,10 @@
   }
   const csEl = document.getElementById('link-cheatsheet');
   const fcEl = document.getElementById('link-flowcharts');
+  const contribEl = document.getElementById('link-contribute');
+  if (contribEl && isFileProto) {
+    contribEl.href = isDocsDir ? '../CONTRIBUTING.md' : './CONTRIBUTING.md';
+  }
   if (csEl) {
     csEl.href = isFileProto ? (isDocsDir ? '../CHEATSHEET.md' : './CHEATSHEET.md') : 'https://github.com/Aniketchavan7/system-design-illustrated/blob/main/CHEATSHEET.md';
   }
