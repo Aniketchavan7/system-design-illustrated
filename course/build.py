@@ -2,6 +2,7 @@
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import escape
+import json
 from pathlib import Path, PurePosixPath
 from posixpath import normpath
 from string import Template
@@ -174,6 +175,7 @@ def lesson_page(index, lesson):
         f'<p class="reference-link"><a href="{REPO}/blob/main/{lesson.source}">Read the full technical chapter</a></p>'
     )
     return Template((COURSE / "lesson.html").read_text(encoding="utf-8")).substitute(
+        navigation=site_navigation("../"),
         id=lesson.id,
         title=escape(lesson.title),
         description=escape(lesson.description),
@@ -181,22 +183,131 @@ def lesson_page(index, lesson):
         total=len(LESSONS),
         content=render_lesson_content(lesson),
         resources="\n".join(sections),
-        next_url=f"{following.id}.html" if following else "../#lessons",
-        next_label="Next lesson" if following else "Back to all lessons",
+        next_url=f"{following.id}.html" if following else "capstone.html",
+        next_label="Next lesson" if following else "Take the capstone",
         previous=(f'<a class="previous-link" href="{previous.id}.html">Previous lesson</a>' if previous else ""),
         outline=outline(current=lesson.id),
         progress_controls=progress_controls(),
     )
 
 
+def site_navigation(prefix="./", current=None):
+    destinations = (
+        ("lessons", f"{prefix}#lessons", "Lessons"),
+        ("library", f"{prefix}library.html", "Library"),
+        ("simulator", f"{prefix}learn/simulator.html", "Simulator"),
+        ("flashcards", f"{prefix}flashcards.html", "Flashcards"),
+    )
+    links = []
+    for key, href, title in destinations:
+        active = ' aria-current="page"' if key == current else ""
+        links.append(f'      <a href="{href}"{active}>{title}</a>')
+    return '<nav aria-label="Main navigation">\n' + "\n".join(links) + "\n    </nav>"
+
+
+def tool_page(title, description, prefix, script, content, current=None):
+    template = Template((COURSE / "tool.html").read_text(encoding="utf-8"))
+    return template.substitute(
+        title=escape(title), description=escape(description), prefix=prefix,
+        script=script, navigation=site_navigation(prefix, current), content=content,
+    )
+
+
+def library_page():
+    source = (PAGES / "cards-data.js").read_text(encoding="utf-8")
+    _, separator, payload = source.partition("window.SYSTEM_DESIGN_FLASHCARDS = ")
+    if not separator:
+        raise ValueError("Missing flashcard dataset")
+    rows = json.loads(payload.strip().removesuffix(";"))
+    groups = {}
+    labels = {}
+    for row in rows:
+        key = row["category_id"]
+        labels[key] = row["category"]
+        groups.setdefault(key, []).append(row)
+    category_order = ("foundations", "networking", "storage", "caching",
+                      "distributed", "async", "system_design")
+    categories = sorted(groups, key=lambda key: category_order.index(key)
+                        if key in category_order else len(category_order))
+    sections = []
+    for key in categories:
+        items = []
+        for row in groups[key]:
+            folder = row["folder"]
+            guided = LOCAL_TARGETS.get(folder)
+            href = f"learn/{guided}" if guided else f"{REPO}/blob/main/{quote(folder)}/README.md"
+            badge = '<span class="catalog-kind">Guided lesson</span>' if guided else ""
+            search = " ".join((row["number"], row["title"], row["category"], folder))
+            items.append(
+                f'<li data-topic-row data-search="{escape(search)}"><a href="{href}">'
+                f'<span class="lesson-index" aria-hidden="true">{escape(row["number"])}</span>'
+                f'<span>{escape(row["title"])}</span>{badge}</a></li>'
+            )
+        sections.append(
+            f'<section class="catalog-group" data-topic-group="{escape(key)}">'
+            f'<h2>{escape(labels[key])}</h2><ul>\n' + "\n".join(items) + "\n</ul></section>"
+        )
+
+    content = Template((COURSE / "library.html").read_text(encoding="utf-8")).substitute(
+        total=len(rows),
+        options="\n".join(f'<option value="{escape(key)}">{escape(labels[key])}</option>'
+                          for key in categories),
+        groups="\n".join(sections),
+    )
+    return tool_page("Topic library", "Search the system design curriculum by topic or category.",
+                     "./", "library.js", content, "library")
+
+
+def capstone_page():
+    questions = json.loads((COURSE / "capstone.json").read_text(encoding="utf-8"))
+    items = []
+    for number, (lesson, item) in enumerate(zip(LESSONS, questions, strict=True), 1):
+        correct = item["correct"]
+        options = item["options"]
+        if len(options) < 2 or not 0 <= correct < len(options):
+            raise ValueError(f"Question {number} must have options and a valid answer")
+        choices = []
+        for index, option in enumerate(options):
+            choices.append(
+                f'<label><input type="radio" name="{lesson.id}" value="{index}" required>'
+                f'<span>{escape(option)}</span></label>'
+            )
+        items.append(f'''
+      <div class="capstone-question" data-question="{lesson.id}" data-correct="{correct}">
+        <fieldset disabled>
+          <legend><span class="question-number">Question {number}</span>{escape(item["prompt"])}</legend>
+          <div class="answer-options">
+            {"".join(choices)}
+          </div>
+        </fieldset>
+        <p class="question-feedback" data-feedback hidden></p>
+        <details>
+          <summary>Reveal explanation</summary>
+          <p><strong>{escape(options[correct])}.</strong> {escape(item["explanation"])}</p>
+          <p><a href="{lesson.id}.html">Review the lesson</a></p>
+        </details>
+      </div>''')
+    content = Template((COURSE / "capstone.html").read_text(encoding="utf-8")).substitute(
+        questions="\n".join(items),
+    )
+    return tool_page("Trail Notes capstone", "Practice six system design decisions and check your answers.",
+                     "../", "capstone.js", content)
+
 def outputs():
     banner = "<!-- Generated by course/build.py. Edit the course templates or source lessons. -->\n"
     home = Template((COURSE / "home.html").read_text(encoding="utf-8")).substitute(
-        outline=outline("learn/"), progress_controls=progress_controls(),
+        navigation=site_navigation(), outline=outline("learn/"), progress_controls=progress_controls(),
     )
     yield PAGES / "index.html", (banner + home).encode()
     for index, lesson in enumerate(LESSONS):
         yield PAGES / "learn" / f"{lesson.id}.html", (banner + lesson_page(index, lesson)).encode()
+    yield PAGES / "library.html", (banner + library_page()).encode()
+    yield PAGES / "learn/capstone.html", (banner + capstone_page()).encode()
+    simulator = (COURSE / "simulator.html").read_text(encoding="utf-8")
+    yield PAGES / "learn/simulator.html", (banner + tool_page(
+        "Traffic simulator", "Change request volume and simulate server failures.",
+        "../", "simulator.js", simulator.strip(), "simulator",
+    )).encode()
     source = ROOT / "03-load-balancing/assets/load_balancer.gif"
     yield PAGES / "course/load-balancer.gif", source.read_bytes()
 

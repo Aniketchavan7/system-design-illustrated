@@ -66,7 +66,7 @@ def test_resume(browser_type, base_url, launch, backup):
         do_remaining_lessons(page)
         open_page(page, base_url)
         expect(page.get_by_text("6 of 6 lessons complete")).to_be_visible()
-        expect(page.get_by_role("link", name="Practice failures")).to_be_visible()
+        expect(page.locator("[data-resume]")).to_have_text("Take the capstone")
         with page.expect_download() as download:
             page.get_by_role("button", name="Export progress").click()
         download.value.save_as(backup)
@@ -109,7 +109,7 @@ def test_import_and_simulator(browser, base_url, backup):
     page.reload(wait_until="domcontentloaded")
     expect(page.get_by_text("6 of 6 lessons complete")).to_be_visible()
 
-    page.get_by_role("link", name="Practice failures").click()
+    page.get_by_role("link", name="Simulator", exact=True).click()
     page.get_by_role("button", name="Fail one server").click()
     expect(page.locator("[data-capacity]")).to_have_text("1,800")
     expect(page.locator("[data-shortfall]")).to_have_text("200")
@@ -125,6 +125,60 @@ def test_import_and_simulator(browser, base_url, backup):
     page.get_by_role("link", name="Flashcards", exact=True).click()
     expect(page.locator("#search-input")).to_be_visible()
     assert not errors, errors
+    page.close()
+
+
+def test_library(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    open_page(page, base_url + "library.html?q=client%20server&topic=networking")
+    expect(page.get_by_role("status")).to_have_text("1 of 45 topics")
+    guided = page.locator("[data-topic-row]:visible a")
+    expect(guided).to_have_attribute("href", "learn/networking.html")
+
+    page.get_by_label("Category").select_option("storage")
+    expect(page.get_by_role("status")).to_have_text("0 of 45 topics")
+    expect(page.get_by_text("No topics match", exact=False)).to_be_visible()
+    page.get_by_role("button", name="Clear filters").click()
+    expect(page.get_by_role("status")).to_have_text("45 of 45 topics")
+
+    page.get_by_role("searchbox", name="Search topics").fill("idempotency")
+    expect(page.get_by_role("status")).to_have_text("1 of 45 topics")
+    page.reload(wait_until="domcontentloaded")
+    expect(page.get_by_role("searchbox", name="Search topics")).to_have_value("idempotency")
+    expect(page.locator("[data-topic-row]:visible a")).to_have_attribute(
+        "href",
+        "https://github.com/Aniketchavan7/system-design-illustrated/blob/main/32-rest-api-design-and-idempotency/README.md",
+    )
+    page.close()
+
+
+def test_capstone(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    open_page(page, base_url + "learn/regional-recovery.html")
+    page.get_by_role("link", name="Take the capstone", exact=True).click()
+    expect(page.get_by_role("heading", name="Trail Notes capstone")).to_be_visible()
+    questions = page.locator("[data-question]")
+    expect(questions).to_have_count(6)
+    page.get_by_role("button", name="Check answers").click()
+    expect(page.locator("[data-capstone-result]")).to_be_hidden()
+
+    for index, answer in enumerate((1, 2, 1, 1, 2, 0)):
+        questions.nth(index).get_by_role("radio").nth(answer).check()
+    page.get_by_role("button", name="Check answers").click()
+    expect(page.locator("[data-capstone-result]")).to_contain_text("5 of 6 correct")
+    expect(questions.nth(2).locator("[data-feedback]")).to_have_text("Review this question")
+    expect(questions.nth(2).get_by_text("250 requests per second.", exact=True)).to_be_visible()
+    expect(questions.nth(2).get_by_role("link", name="Review the lesson")).to_have_attribute(
+        "href", "load-balancing.html",
+    )
+
+    questions.nth(2).get_by_role("radio").first.check()
+    expect(page.locator("[data-capstone-result]")).to_be_hidden()
+    page.get_by_role("button", name="Check answers").click()
+    expect(page.locator("[data-capstone-result]")).to_contain_text("6 of 6 correct")
+    page.get_by_role("button", name="Try again").click()
+    expect(page.locator("input:checked")).to_have_count(0)
+    expect(page.locator("[data-capstone-result]")).to_be_hidden()
     page.close()
 
 
@@ -150,6 +204,11 @@ def test_no_script(browser, base_url):
     expect(page.get_by_text("70 ms", exact=True)).to_be_visible()
     page.get_by_role("link", name="Next lesson", exact=True).click()
     expect(page.get_by_role("heading", name="Find the website’s address")).to_be_visible()
+    open_page(page, base_url + "library.html")
+    expect(page.locator("[data-topic-row]:visible")).to_have_count(45)
+    open_page(page, base_url + "learn/capstone.html")
+    page.get_by_text("Reveal explanation", exact=True).first.click()
+    expect(page.get_by_text("75 ms.", exact=True)).to_be_visible()
     page.close()
 
 
@@ -164,6 +223,8 @@ def run(base_url, chrome):
             test_import_and_simulator(browser, base_url, backup)
             test_storage_denied(browser, base_url)
             test_no_script(browser, base_url)
+            test_library(browser, base_url)
+            test_capstone(browser, base_url)
         finally:
             browser.close()
 
@@ -178,4 +239,4 @@ if __name__ == "__main__":
     else:
         with local_site() as base_url:
             run(base_url, args.chrome)
-    print("Verified six lessons, browser restart, progress transfer, blocked storage, simulator, and flashcards.")
+    print("Verified six lessons, browser restart, progress transfer, blocked storage, simulator, flashcards, library, and capstone.")

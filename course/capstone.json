@@ -1,0 +1,62 @@
+[
+  {
+    "prompt": "The browser already has a secure connection. Its round-trip time is 60 ms, and the server needs 15 ms to generate a small page. What is the estimated response time before rendering, ignoring payload transfer?",
+    "options": [
+      "15 ms",
+      "75 ms",
+      "135 ms"
+    ],
+    "correct": 1,
+    "explanation": "The request and response use one round trip. Add 60 ms of network time and 15 ms of server work."
+  },
+  {
+    "prompt": "A resolver caches the old address at 10:00:00 with a 90-second TTL. Trail Notes publishes a new address at 10:00:25. At 10:01:00, which address can that resolver still return?",
+    "options": [
+      "The new address, because publication invalidates every cache",
+      "The new address, because cached answers only last one minute",
+      "The old address, because 30 seconds remain on the cached answer"
+    ],
+    "correct": 2,
+    "explanation": "The old answer expires at 10:01:30. A successful fresh lookup after expiry can return the new address."
+  },
+  {
+    "prompt": "Four servers handle 700 requests per second each. One fails and the load balancer has removed it. Incoming demand is steady at 2,350. What capacity shortfall remains?",
+    "options": [
+      "250 requests per second",
+      "No shortfall because new traffic is rerouted",
+      "700 requests per second"
+    ],
+    "correct": 0,
+    "explanation": "Three healthy servers provide 2,100 requests per second. Subtract that capacity from 2,350 requests per second of demand."
+  },
+  {
+    "prompt": "The public guide cache has a 68% hit rate at 2,500 eligible requests per second. Each miss reaches the origin once. How much traffic reaches the origin?",
+    "options": [
+      "680 requests per second",
+      "800 requests per second",
+      "1,700 requests per second"
+    ],
+    "correct": 1,
+    "explanation": "A 68% hit rate leaves a 32% miss rate. Multiply 2,500 by 0.32 to get 800 requests per second."
+  },
+  {
+    "prompt": "An empty preview queue receives 90 jobs per second for 12 seconds. Workers complete 30 per second. Then arrivals drop to 10 per second. How large is the backlog after the burst, and how long until it drains?",
+    "options": [
+      "720 jobs, 24 seconds",
+      "1,080 jobs, 36 seconds",
+      "720 jobs, 36 seconds"
+    ],
+    "correct": 2,
+    "explanation": "The queue grows by 60 jobs per second during the burst, so 720 remain. Afterward it drains by 30 minus 10, or 20 jobs per second."
+  },
+  {
+    "prompt": "A region fails at 12:30. Public reads work again at 12:38. The latest recoverable guide update is at 12:29:10. Which targets are met if the read RTO is 10 minutes and the guide-update RPO is 30 seconds?",
+    "options": [
+      "Read RTO only",
+      "Guide-update RPO only",
+      "Both targets"
+    ],
+    "correct": 0,
+    "explanation": "Read recovery took eight minutes, within the 10-minute target. The recoverable data is 50 seconds behind the outage, beyond the 30-second target."
+  }
+]

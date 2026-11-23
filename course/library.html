@@ -1,0 +1,23 @@
+<main id="main" class="catalog container">
+    <header class="practice-header">
+      <h1>Topic library</h1>
+      <p class="lead">Browse all $total modules. Guided lessons open here. Full chapters open on GitHub.</p>
+    </header>
+    <form class="library-filter" role="search" data-library-filter hidden>
+      <label for="topic-search">Search topics
+        <input id="topic-search" name="q" type="search" maxlength="120" placeholder="For example, caching or consensus">
+      </label>
+      <label for="topic-category">Category
+        <select id="topic-category" name="topic">
+          <option value="">All categories</option>
+          $options
+        </select>
+      </label>
+      <button class="text-link" type="reset">Clear filters</button>
+    </form>
+    <p class="catalog-count" data-catalog-count role="status" hidden></p>
+    <div class="catalog-groups" data-catalog>
+      $groups
+    </div>
+    <p data-no-topics hidden>No topics match. Try a shorter search or another category.</p>
+  </main>

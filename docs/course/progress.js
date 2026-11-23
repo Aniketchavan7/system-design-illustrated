@@ -75,9 +75,9 @@
     const resume = document.querySelector("[data-resume]");
     const caption = document.querySelector("[data-resume-caption]");
     if (resume && caption) {
-      resume.href = next?.href ?? document.querySelector("[data-practice-link]").href;
+      resume.href = next?.href ?? document.querySelector("[data-capstone-link]").href;
       const started = state.lastLesson !== null || done.size > 0;
-      resume.textContent = next ? (started ? "Continue learning" : "Start learning") : "Practice failures";
+      resume.textContent = next ? (started ? "Continue learning" : "Start learning") : "Take the capstone";
       caption.textContent = next ? next.dataset.lessonTitle : "All lessons complete";
       caption.hidden = !started;
     }

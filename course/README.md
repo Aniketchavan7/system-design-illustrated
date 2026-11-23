@@ -1,6 +1,6 @@
 # Trail Notes course site
 
-GitHub Pages serves the checked-in files under `docs/`. The six beginner lessons are generated from the First pass and Trail Notes exercise sections in the repository chapters.
+GitHub Pages serves the checked-in files under `docs/`. The six beginner lessons are generated from the First pass and Trail Notes exercise sections in the repository chapters. The topic library uses the same module list as the flashcards. Edit the capstone questions in `capstone.json` and regenerate the site when questions change.
 
 ## Update the lessons
 
