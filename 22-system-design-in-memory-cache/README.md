@@ -216,38 +216,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-DISTRIBUTED IN-MEMORY CACHE (REDIS-LIKE) SIMULATION
-======================================================================
-
---- Phase 1: Writing Keys to Distributed Shards ---
-Key 'user:101' -> Routed to Cache-Shard-03 | Readback: Alice
-Key 'user:102' -> Routed to Cache-Shard-03 | Readback: Bob
-Key 'user:103' -> Routed to Cache-Shard-03 | Readback: Charlie
-Key 'user:104' -> Routed to Cache-Shard-02 | Readback: Diana
-
---- Phase 2: Testing O(1) LRU Eviction ---
-Targeting Cache-Shard-01 (Capacity = 3)
-Initial keys on Cache-Shard-01: ['item:A', 'item:B', 'item:C']
-Accessing 'item:A' to make it Most Recently Used (MRU)...
-Adding 'item:D' (exceeds capacity)...
-  [Cache-Shard-01] Memory limit (3) reached -> Evicting LRU key 'item:B'!
-Keys on Cache-Shard-01 after LRU eviction: ['item:A', 'item:C', 'item:D']
-Notice: 'item:B' was evicted because 'item:A' was recently refreshed!
-
---- Phase 3: Testing TTL Expiration (Lazy Check) ---
-Immediate read: TokenXYZ (Valid)
-Sleeping 0.25s for TTL to expire...
-Read after TTL expiry: None (Expired & auto-purged!)
-
---- Phase 4: Persistence & Node Crash Recovery (AOF) ---
-Simulating crash and reboot of Cache-Shard-01...
-  [Cache-Shard-01] Replaying 5 commands from AOF log...
-  [Cache-Shard-01] Recovery complete! Active keys in memory: ['item:C', 'item:D', 'temp:session']
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

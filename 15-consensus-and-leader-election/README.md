@@ -212,31 +212,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-RAFT DISTRIBUTED CONSENSUS: LEADER ELECTION SIMULATION
-Cluster: [Node-A, Node-B, Node-C] (N=3, Quorum=2)
-======================================================================
-Initial State: Node-A is LEADER of Term 1.
-
---- Phase 1: Normal Heartbeat Cycles ---
-Heartbeats acknowledged by Node-B and Node-C. Cluster is stable.
-
---- Phase 2: Leader Crash & Election Trigger ---
-💥 [Crash] Node-A has crashed!
-Waiting for election timeout to expire on remaining followers...
-⏰ [Timeout] Node-B became CANDIDATE for Term 2!
-👑 [Victory] Node-B secured 2/3 votes -> ELECTED LEADER for Term 2!
-
-New Cluster Leader: Node-B (Term 2)
-
---- Phase 3: Old Leader Node-A Reconnects ---
-🔄 [Recover] Node-A has rebooted as FOLLOWER.
-Node-A role after receiving Term 2 heartbeats: FOLLOWER
-✅ Split-Brain avoided! Old leader safely demoted to Follower.
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

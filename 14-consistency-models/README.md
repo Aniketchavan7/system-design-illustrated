@@ -217,31 +217,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-DISTRIBUTED CONSISTENCY MODELS SIMULATION
-Replicas: [Replica-1 (Primary), Replica-2 (Lagging), Replica-3 (Lagging)]
-======================================================================
-
---- 1. Eventual Consistency Anomaly: Time-Travel Reads ---
-User updates status to 'ONLINE'...
-Request 1 hits Replica-1: Status = 'ONLINE' (Latest!)
-Request 2 hits Replica-2: Status = 'OFFLINE' (💥 TIME TRAVEL! User sees old state!)
-
---- 2. Fix: Monotonic Reads (Client Session Tokens) ---
-Client requests with session header: `X-Last-Seen-Version: 2`
-Cluster rejected stale replicas and served: 'ONLINE' (Version 2)
-✅ Backward time-travel prevented!
-
---- 3. Causal Consistency: Preserving Cause & Effect ---
-⚡ Network Race: Replica-3 receives Answer A1 before Question Q1!
-Replica-3 causal check: Parent 'msg:Q1' missing? -> Buffered: True
-Now Question Q1 arrives at Replica-3...
-Replica-3 auto-flushed buffer! Keys now visible: ['user:123:status', 'msg:Q1', 'msg:A1']
-✅ Question and Answer rendered in strict causal order!
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

@@ -217,37 +217,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-1. DEMONSTRATING O(1) LRU CACHE EVICTION
-======================================================================
-Initialized LRUCache with capacity = 3
-Putting: ('A', 'alpha') -> Cache: ['A:alpha']
-Putting: ('B', 'beta') -> Cache: ['B:beta', 'A:alpha']
-Putting: ('C', 'gamma') -> Cache: ['C:gamma', 'B:beta', 'A:alpha']
-Reading key 'A': alpha -> Promoted 'A' to Head: ['A:alpha', 'C:gamma', 'B:beta']
-Putting: ('D', 'delta') -> Capacity exceeded! Evicting LRU Tail ('B')
-Cache State after Eviction: ['D:delta', 'A:alpha', 'C:gamma']
-
-======================================================================
-2. SIMULATING CACHE STAMPEDE (WITHOUT SINGLEFLIGHT)
-======================================================================
-Simulating 50 concurrent workers requesting expired key 'hot_deal_42'...
-💥 [Cache Miss] Worker-1 querying DB for 'hot_deal_42' (takes 100ms)...
-💥 [Cache Miss] Worker-7 querying DB for 'hot_deal_42' (takes 100ms)...
-...
-Total DB Queries Triggered: 50 (Connection Pool Collapsed!)
-
-======================================================================
-3. SIMULATING SINGLEFLIGHT DEFENSE (MUTEX COALESCING)
-======================================================================
-🛡️ Worker-0 acquired mutex lock! Fetching from DB...
-⏳ Worker-4 waiting for in-flight request...
-...
-Total DB Queries Triggered: 1 (49 Requests Coalesced into Zero DB Load!)
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

@@ -196,43 +196,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-FAULT TOLERANCE & RESILIENCE PATTERNS SIMULATION
-======================================================================
-
---- Test 1: Circuit Breaker Lifecycle & Fail-Fast ---
-Step 1: Normal call (Downstream healthy):
-  Response: 200 OK: Recommendations Data
-
-Step 2: Downstream dependency experiences an outage!
-  Call 1: State=CLOSED | Dur=0.007ms | Resp=[Fallback Cache] Default Recommendations
-  Call 2: State=CLOSED | Dur=0.003ms | Resp=[Fallback Cache] Default Recommendations
-  [CircuitBreaker] 🔴 Failure threshold (3) reached! Circuit tripped to OPEN!
-  Call 3: State=OPEN | Dur=0.006ms | Resp=[Fallback Cache] Default Recommendations
-  Call 4: State=OPEN | Dur=0.001ms | Resp=[Fallback Cache] Default Recommendations (Fail-Fast: Circuit is OPEN!)
-
-Step 3: Waiting 0.35s for cooldown timer to expire...
-Step 4: Next request (Probe):
-  [CircuitBreaker] 🟡 Cooldown expired! Transitioning to HALF-OPEN (Testing canary probe)...
-  [CircuitBreaker] 🟢 Canary probe succeeded! Circuit reset to CLOSED.
-  Probe Result: State=CLOSED | Resp=200 OK: Recommendations Data
-
---- Test 2: Exponential Backoff with Full Jitter ---
-Simulating retry sleep intervals across 4 retry attempts:
-  Retry #1: Backoff sleep =  89.35 ms
-  Retry #2: Backoff sleep = 109.68 ms
-  Retry #3: Backoff sleep = 393.44 ms
-  Retry #4: Backoff sleep = 462.05 ms
-
---- Test 3: Bulkhead Pattern (Preventing Resource Exhaustion) ---
-Simulating 2 hanging requests to Recommendations...
-Recommendation Pool Active: 2/2 (Saturated!)
-3rd Recommendation request allowed? False (🛑 Bulkhead rejected to protect memory!)
-Checkout request allowed? True (✅ Checkout operates with 100% capacity in its own bulkhead!)
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

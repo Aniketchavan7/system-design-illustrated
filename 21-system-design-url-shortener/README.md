@@ -230,35 +230,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-SYSTEM DESIGN: HIGH-SCALE URL SHORTENER SIMULATION
-======================================================================
-
---- Phase 1: Shortening Long URLs ---
-Original: https://github.com/Aniketchavan7/system-desig...
-Shortened: https://tiny.url/006LAze (ID: 100000000)
-
-Original: https://aws.amazon.com/architecture/well-arch...
-Shortened: https://tiny.url/006LAzf (ID: 100000001)
-
---- Phase 2: Resolving Short URLs (Read Path) ---
-Request 1 for '006LAze': Status=CACHE_HIT | Latency=0.0010 ms
-  Redirects to: https://github.com/Aniketchavan7/system-design-ill...
-
-Evicting '006LAze' from Redis cache to simulate Cache Miss...
-Request 2 for '006LAze': Status=CACHE_MISS_DB | Latency=5.28 ms
-  Redirects to: https://github.com/Aniketchavan7/system-design-ill...
-Request 3 for '006LAze': Status=CACHE_HIT | Latency=0.0009 ms (Re-cached!)
-
---- Phase 3: High-Throughput Redirection Benchmark (1,000 Reads) ---
-Processed 1,000 redirect requests in 0.48 ms
-Throughput: 2,066,116 redirects/sec
-Cache Hit Ratio: 100.0%
-Total Click Count Tracked in Analytics: 1003
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

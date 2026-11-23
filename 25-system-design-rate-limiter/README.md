@@ -53,11 +53,9 @@ Without a distributed rate limiter:
 If your API gateway runs on 20 independent server instances:
 - **Local In-Memory Counter (Flawed)**: If each gateway keeps its own local counter in RAM, a user sending 100 requests load-balanced across 20 servers can legally execute $20 \times \text{limit}$ requests, completely defeating the rate limit!
 - **Central Database Counter (Race Condition Flaw)**:
-  ```python
-  count = redis.get(key)      # Gateway A and B both read count = 9 (Limit = 10)
-  if count < 10:
-      redis.set(key, count + 1) # Both write count = 10 -> 11 requests admitted!
-  ```
+  - **Step 1**: Gateway A and Gateway B both read `count = 9` simultaneously (Limit = 10).
+- **Step 2**: Both gateways see `9 < 10`, increment the counter to `10`, and both admit their requests.
+- **Result**: 11 requests are admitted instead of 10. Under 50 gateways, this race condition can double or triple the allowed traffic!
 - **The Solution**: An atomic, centralized in-memory datastore (Redis) executing token refills and decrement operations in a **single atomic step**.
 
 ---
@@ -162,38 +160,7 @@ When a request arrives at timestamp $T_{\text{now}}$:
 
 Because Redis executes Lua scripts as a single atomic transaction without interruption, the read-modify-write cycle is completely immune to race conditions:
 
-```lua
--- Lua script executed atomically inside Redis:
-local key = KEYS[1]
-local capacity = tonumber(ARGV[1])
-local refill_rate = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
-local requested = tonumber(ARGV[4])
-
-local data = redis.call('HMGET', key, 'tokens', 'last_refill')
-local tokens = tonumber(data[1])
-local last_refill = tonumber(data[2])
-
-if not tokens then
-    tokens = capacity
-    last_refill = now
-else
-    local elapsed = now - last_refill
-    tokens = math.min(capacity, tokens + elapsed * refill_rate)
-    last_refill = now
-end
-
-if tokens >= requested then
-    tokens = tokens - requested
-    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', last_refill)
-    redis.call('EXPIRE', key, math.ceil(capacity / refill_rate))
-    return {1, math.floor(tokens), 0} -- Allowed!
-else
-    local retry_after = (requested - tokens) / refill_rate
-    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', last_refill)
-    return {0, math.floor(tokens), retry_after} -- Throttled!
-end
-```
+*(The complete production Lua script is separated into [`rate_limiter.lua`](./rate_limiter.lua), and its atomic execution is simulated in [`demo.py`](./demo.py).)*
 
 ---
 
@@ -249,30 +216,6 @@ The companion simulation script [`demo.py`](./demo.py) implements:
 Run it locally in your terminal:
 ```bash
 python demo.py
-```
-
-Expected output preview:
-```
-======================================================================
-DISTRIBUTED TOKEN BUCKET RATE LIMITER SIMULATION
-Configuration: Capacity = 5 tokens | Refill Rate = 2.0 tokens/second
-======================================================================
-
---- Test 1: Rapid Burst of 8 Concurrent Requests ---
-Request 1: [STATUS 200] Remaining: 4 | 200 OK: Request processed successfully
-Request 2: [STATUS 200] Remaining: 3 | 200 OK: Request processed successfully
-Request 3: [STATUS 200] Remaining: 2 | 200 OK: Request processed successfully
-Request 4: [STATUS 200] Remaining: 1 | 200 OK: Request processed successfully
-Request 5: [STATUS 200] Remaining: 0 | 200 OK: Request processed successfully
-Request 6: [STATUS 429] 🛑 Remaining: 0 | Retry-After: 0.50s | 429 Too Many Requests: Rate limit exceeded!
-Request 7: [STATUS 429] 🛑 Remaining: 0 | Retry-After: 0.50s | 429 Too Many Requests: Rate limit exceeded!
-Request 8: [STATUS 429] 🛑 Remaining: 0 | Retry-After: 0.50s | 429 Too Many Requests: Rate limit exceeded!
-
---- Test 2: Waiting 1.0 second for token refill (+2 tokens) ---
-Sending Request 9 after 1.0s sleep:
-Request 9: [STATUS 200] Remaining: 1 | 200 OK: Request processed successfully
-Sending Request 10 immediately:
-Request 10: [STATUS 200] Remaining: 0 | 200 OK: Request processed successfully
 ```
 
 ---

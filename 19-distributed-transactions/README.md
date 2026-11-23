@@ -45,11 +45,10 @@ Imagine booking a vacation: you need a **Flight**, a **Hotel**, and a **Rental C
 
 ### The Dual-Write Problem
 In a microservice checkout handler:
-```python
-def checkout(order):
-    db.save(order)                     # Step 1: Write to local SQL database
-    kafka_producer.send("OrderCreated")# Step 2: Publish event to Kafka
-```
+1. **Step 1 (Local DB Write)**: Save the order record to the local SQL database.
+2. **Step 2 (Network Event Publish)**: Publish an `OrderCreated` event to Apache Kafka.
+
+*(See [`demo.py`](./demo.py) for an executable simulation of this dual-write failure mode and its outbox solution.)*
 **This is fundamentally broken.**
 - If Step 1 succeeds, but the network drops or the server crashes before Step 2, the order exists in the database, but downstream billing, shipping, and notification services never receive the event.
 - If you flip the order (send event first, then save to DB), Kafka emits the event, but the database transaction rolls back due to a constraint violation $\rightarrow$ downstream services charge the customer for a non-existent order!
@@ -215,11 +214,7 @@ To completely eliminate the Dual-Write problem, services use the **Transactional
 
 3. **Writing to Kafka Inside a DB Transaction Block**:
    - *Pitfall*:
-     ```python
-     with db.transaction():
-         db.save(user)
-         kafka.send("UserCreated") # 💥 DANGER!
-     ```
+     Placing network I/O calls (`kafka.send()`) inside a database transaction block (`with db.transaction():`). If the message broker takes 2 seconds to respond, database connection locks remain held open, exhausting connection pools. Always use the Transactional Outbox pattern instead.
    - *Result*: If Kafka takes 2 seconds to respond, the database connection and row locks are held open for 2 seconds, destroying database connection pool capacity. Never place network I/O inside SQL transactions; use Transactional Outbox instead.
 
 ---
@@ -234,31 +229,6 @@ The companion simulation script [`demo.py`](./demo.py) implements:
 Run it locally in your terminal:
 ```bash
 python demo.py
-```
-
-Expected output preview:
-```
-======================================================================
-DISTRIBUTED TRANSACTIONS: SAGAS & OUTBOX SIMULATION
-======================================================================
-
---- Scenario 1: Saga Happy Path (Order #101) ---
-  [Step 1] OrderService created order 'order-101' (Status: PENDING)
-  [Step 2] InventoryService reserved 1 item(s). Remaining stock: 9
-  [Step 4] Payment Charged! Order 'order-101' CONFIRMED.
-Result: SUCCESS: Order Fully Completed
-Current Order Status: CONFIRMED
-Current Inventory Stock: 9
-
---- Scenario 2: Saga Failure & Compensating Rollback (Order #102) ---
-  [Step 1] OrderService created order 'order-102' (Status: PENDING)
-  [Step 2] InventoryService reserved 2 item(s). Remaining stock: 7
-  [Step 3] 💥 PaymentService: Payment Declined (Card Invalid)!
-  [Compensation] Rolling back Step 2: Restoring inventory stock...
-  [Compensation] Order 'order-102' marked CANCELLED. Restored stock: 9
-Result: FAILED: Payment Declined -> Cleanly Rolled Back via Compensation
-Current Order Status: CANCELLED
-Current Inventory Stock: 9 (Stock cleanly preserved!)
 ```
 
 ---

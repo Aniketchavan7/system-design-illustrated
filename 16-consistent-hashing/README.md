@@ -206,37 +206,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-CONSISTENT HASHING & VIRTUAL NODES BENCHMARK
-======================================================================
-
---- Test 1: Cluster Scale-Out Remapping Test (4 Nodes -> 5 Nodes) ---
-Traditional Modulo (hash % N):
-  Total Keys Remapped: 8025 / 10,000 (80.2%)
-  💥 Cache Invalidation Rate: 80.2% (Causes Severe Cache Stampede!)
-
-Consistent Hashing Ring (with 150 V-nodes):
-  Total Keys Remapped: 2004 / 10,000 (20.0%)
-  ✅ Cache Preserved: 80.0% of cache intact!
-  Theoretical minimum remapping (1/N): 20.0%
-
---- Test 2: Key Distribution With vs Without Virtual Nodes ---
-
-Key Distribution WITHOUT Virtual Nodes (1 token / node):
-  Node-4:   361 keys (3.6%)
-  Node-C:  8954 keys (89.5%)
-  ⚠️ Variance: Heaviest node has 159.9x the load of the lightest node!
-
-Key Distribution WITH Virtual Nodes (150 tokens / node):
-  Node-4:  2530 keys (25.3%)
-  Node-A:  2824 keys (28.2%)
-  Node-B:  2285 keys (22.9%)
-  Node-C:  2361 keys (23.6%)
-  ✅ Near-Perfect Balance: Heaviest node has only 1.24x the load of lightest node.
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

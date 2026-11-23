@@ -120,17 +120,7 @@ Suppose a popular e-commerce inventory item undergoes $1,000,000$ stock adjustme
 
 An Event Store is typically built using specialized engines (like **EventStoreDB**) or modeled inside PostgreSQL/DynamoDB with strict table constraints:
 
-```sql
-CREATE TABLE event_store (
-    stream_id       VARCHAR(64) NOT NULL,
-    version         BIGINT NOT NULL,
-    event_type      VARCHAR(128) NOT NULL,
-    payload         JSONB NOT NULL,
-    metadata        JSONB NOT NULL,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (stream_id, version) -- Guarantees optimistic concurrency!
-);
-```
+``*(The event store schema is defined in [schema.sql](./schema.sql); run [demo.py](./demo.py) for the executable simulation with Optimistic Concurrency Control.)*``
 
 #### Optimistic Concurrency Control (OCC)
 When two users concurrently attempt to modify the same account:
@@ -199,36 +189,6 @@ The companion simulation script [`demo.py`](./demo.py) implements:
 Run it locally in your terminal:
 ```bash
 python demo.py
-```
-
-Expected output preview:
-```
-======================================================================
-EVENT SOURCING & CQRS SIMULATION
-======================================================================
-
---- Phase 1: Executing Commands (Write Side) ---
-Executed: OpenAccount($50) -> Event: AccountOpened (Version 1)
-Executed: Deposit($150) -> Event: MoneyDeposited (Version 2)
-Executed: Withdraw($60) -> Event: MoneyWithdrawn (Version 3)
-
---- Phase 2: Querying Materialized Read Model (Read Side) ---
-GET /accounts/acc-101/summary:
-  Current Balance:     $140.00
-  Total Deposited:     $200.00
-  Total Withdrawn:     $60.00
-  Transaction History: 3 operations
-
---- Phase 3: Business Logic Protection ---
-🛡️ Business rule blocked invalid withdraw: Insufficient funds! Current balance: $140.00, tried to withdraw: $500.00
-
---- Phase 4: Disaster Recovery (Full Event Replay) ---
-Simulating catastrophic read database corruption: Wiping read table...
-Read DB contents: {} (Wiped!)
-
-Replaying raw event log from Event Store to reconstruct read views...
-✅ State reconstructed in 0.004 ms!
-  Reconstructed Balance: $140.00 (100% Fidelity)
 ```
 
 ---

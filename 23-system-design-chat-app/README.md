@@ -168,15 +168,7 @@ Relational databases (MySQL/Postgres) struggle with chat history because:
 **Wide-Column NoSQL (Cassandra) is perfect for chat**:
 - **LSM-Tree Storage Engine**: Writes are sequential appends to memory (Memtable) and flushed sequentially to disk (SSTables), providing massive write throughput.
 - **Clustered Primary Key Design**:
-  ```sql
-  CREATE TABLE messages (
-      channel_id      UUID,
-      message_id      TIMEUUID, -- Embeds timestamp; guarantees chronological ordering!
-      sender_id       UUID,
-      content         TEXT,
-      PRIMARY KEY (channel_id, message_id)
-  ) WITH CLUSTERING ORDER BY (message_id DESC);
-  ```
+  ``*(The ScyllaDB/Cassandra message table schema is separated into [schema.sql](./schema.sql); run [demo.py](./demo.py) for the complete chat gateway simulation.)*``
 - **$O(1)$ Range Lookups**: Fetching the latest 50 messages for a channel translates to a single contiguous sequential disk scan!
 
 ---
@@ -220,39 +212,6 @@ The companion simulation script [`demo.py`](./demo.py) implements:
 Run it locally in your terminal:
 ```bash
 python demo.py
-```
-
-Expected output preview:
-```
-======================================================================
-REAL-TIME DISTRIBUTED CHAT APPLICATION SIMULATION
-======================================================================
-
---- Phase 1: WebSocket Client Connections ---
-Alice connected to: GW-Tokyo-01 (Online: True)
-Bob connected to:   GW-London-02 (Online: True)
-
---- Phase 2: Cross-Gateway Messaging via Redis Pub/Sub ---
-Alice sends: 'Hey Bob, how is London?'
-Latency to deliver cross-gateway: 0.012 ms
-Bob's WebSocket Screen: ['[Alice]: Hey Bob, how is London?']
-
-Bob replies: 'Raining as usual! Working on System Design.'
-Alice's WebSocket Screen: ['[Bob]: Raining as usual! Working on System Design.']
-
---- Phase 3: Offline Messaging & Push Notifications ---
-Charlie is offline (no WebSocket connection)...
-Alice sends to Charlie: 'Are you joining the meeting?'
-  🔔 [APNs/FCM Push Alert] Sent to Charlie: New message from Alice: 'Are you joining the meeting?'
-
-Charlie wakes up and connects to GW-Tokyo-01...
-Charlie synced 1 offline message(s) upon login!
-Charlie's WebSocket Screen: ['[Alice]: Are you joining the meeting?']
-
---- Phase 4: Fetching Channel History from Cassandra ---
-Fetched 2 messages for channel 'dm:Alice_Bob':
-  [Alice -> Bob]: Hey Bob, how is London?
-  [Bob -> Alice]: Raining as usual! Working on System Design.
 ```
 
 ---

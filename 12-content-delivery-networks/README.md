@@ -232,28 +232,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output:
-```
-======================================================================
-CONTENT DELIVERY NETWORK (CDN) SIMULATION
-Simulated Topology: Tokyo Client -> Tokyo Edge PoP -> US-East Origin
-======================================================================
-
---- Test 1: Cold Cache Request (MISS) ---
-Client received: console.log('App v1.0.0');
-X-Cache Status: MISS | Latency: 120.5 ms | Origin Requests: 1
-
---- Test 2: Warm Cache Request (HIT) ---
-Client received: console.log('App v1.0.0');
-X-Cache Status: HIT | Latency: 0.00 ms | Origin Requests: 1
-⚡ Latency reduction: 85714x faster!
-
---- Test 3: Simulating 50 Regional Users Visiting Site ---
-Processed 50 requests in total time: 0.02 ms
-Edge Cache Hits: 50/50 (100% cache hit rate)
-Total Origin Requests incurred across all 50 users: 0 (100% origin offload)
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

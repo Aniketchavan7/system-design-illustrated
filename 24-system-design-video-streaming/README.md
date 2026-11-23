@@ -148,26 +148,9 @@ A raw uncompressed $4\text{K}$ video frame ($3840 \times 2160 \times 3\text{ byt
 
 HLS (RFC 8216) works entirely over standard HTTP/HTTPS ports ($80/443$). There are no proprietary streaming server sockets!
 1. The client player requests the **Master Manifest** (`master.m3u8`):
-   ```m3u8
-   #EXTM3U
-   #EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080
-   1080p/index.m3u8
-   #EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
-   720p/index.m3u8
-   #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360
-   360p/index.m3u8
-   ```
+   *(Refer to the companion playlist file [`master.m3u8`](./master.m3u8) for the multi-bitrate index manifest.)*
 2. The player inspects its local network connection speed (e.g. 8 Mbps) and chooses `1080p/index.m3u8`:
-   ```m3u8
-   #EXTM3U
-   #EXT-X-TARGETDURATION:4
-   #EXTINF:4.000,
-   chunk_000.ts
-   #EXTINF:4.000,
-   chunk_001.ts
-   #EXTINF:4.000,
-   chunk_002.ts
-   ```
+   *(Refer to the segment playlist file [`stream.m3u8`](./stream.m3u8) for 4-second chunk declarations.)*
 3. The player issues standard HTTP GET requests:
    `GET /video/1080p/chunk_000.ts`
    `GET /video/1080p/chunk_001.ts`
@@ -223,37 +206,6 @@ The companion simulation script [`demo.py`](./demo.py) implements:
 Run it locally in your terminal:
 ```bash
 python demo.py
-```
-
-Expected output preview:
-```
-======================================================================
-PETABYTE-SCALE VIDEO STREAMING & ABR PLAYER SIMULATION
-======================================================================
-
---- Phase 1: Transcoding 4K Master into HLS Streams ---
-Generated 6 chunks (4s each) across 4 resolution profiles:
-  Profile 1080p | Bitrate: 6000 kbps | Chunk Size: 2929.7 KB
-  Profile 720p  | Bitrate: 2500 kbps | Chunk Size: 1220.7 KB
-  Profile 480p  | Bitrate: 1000 kbps | Chunk Size: 488.3 KB
-  Profile 360p  | Bitrate:  400 kbps | Chunk Size: 195.3 KB
-
-HLS Master Manifest (.m3u8):
-#EXTM3U
-#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1080p
-video_black_friday_keynote_1080p.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=720p
-video_black_friday_keynote_720p.m3u8
-
---- Phase 2: Simulating ABR Playback Under Fluctuating Bandwidth ---
-Chunk 0 | Net: 12.0 Mbps -> Stream Quality: 1080p | Dl Time: 2.00s | Buffer Ahead: 2.00s
-Chunk 1 | Net: 10.0 Mbps -> Stream Quality: 1080p | Dl Time: 2.40s | Buffer Ahead: 3.60s
-Chunk 2 | Net:  3.2 Mbps -> Stream Quality: 480p  | Dl Time: 1.25s | Buffer Ahead: 6.35s
-Chunk 3 | Net:  2.8 Mbps -> Stream Quality: 480p  | Dl Time: 1.43s | Buffer Ahead: 8.92s
-Chunk 4 | Net:  0.8 Mbps -> Stream Quality: 360p  | Dl Time: 2.00s | Buffer Ahead: 10.92s
-Chunk 5 | Net:  0.6 Mbps -> Stream Quality: 360p  | Dl Time: 2.67s | Buffer Ahead: 12.25s
-
-✅ Playback Result: 100% smooth playback with ZERO rebuffering interruptions!
 ```
 
 ---

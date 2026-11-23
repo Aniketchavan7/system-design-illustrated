@@ -198,31 +198,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-CAP & PACELC THEOREMS: DISTRIBUTED SIMULATION
-Cluster Topology: 3 Nodes [Node-A, Node-B, Node-C]
-======================================================================
-
---- Phase 1: Normal Network Operation (No Partition) ---
-Write to Node-A: CP Write Committed successfully across 3 nodes (Majority Quorum met).
-Reading from Node-B: $100
-Reading from Node-C: $100
-
---- Phase 2: Injecting Network Partition (P) ---
-⚡ Fiber cut: [Node-A, Node-B] (Majority) <--- X ---> [Node-C] (Minority)
-
-[CP System Evaluation under Partition]
-Write attempt to isolated Node-C: CP Quorum Failed! Node Node-C can only reach 1 nodes (Quorum needs 2). WRITE REJECTED.
-Write attempt to majority Node-A: CP Write Committed successfully across 2 nodes (Majority Quorum met).
-
-[AP System Evaluation under Partition]
-Write to isolated Node-C: AP Write Accepted on Node Node-C at timestamp 1795368253.1284. Status: 200 OK.
-Node-C sees status = 'ONLINE_IN_ISOLATION'
-Node-A sees status = 'None' (Divergence!)
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production

@@ -1,0 +1,8 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4.000,
+chunk_000.ts
+#EXTINF:4.000,
+chunk_001.ts
+#EXTINF:4.000,
+chunk_002.ts

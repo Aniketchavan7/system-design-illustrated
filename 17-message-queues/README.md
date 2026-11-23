@@ -213,37 +213,6 @@ Run it locally in your terminal:
 python demo.py
 ```
 
-Expected output preview:
-```
-======================================================================
-MESSAGE QUEUES & DISTRIBUTED COMMIT LOGS SIMULATION
-======================================================================
-
---- Part 1: Partitioned Commit Log & Independent Consumer Groups ---
-Produced: 'OrderPlaced(id=1, total=$99)' -> Partition 0, Offset 0
-Produced: 'OrderPlaced(id=2, total=$249)' -> Partition 0, Offset 1
-Produced: 'OrderPaid(id=1)' -> Partition 0, Offset 2
-Produced: 'OrderPlaced(id=3, total=$15)' -> Partition 1, Offset 0
-
-[PaymentService Group] Processed 4 events. Offsets: {0: 3, 1: 1}
-[AnalyticsService Group] Starting from offsets: {0: 0, 1: 0} (Lagging behind)
-
---- Part 2: Event Replay (Offset Rewind) ---
-Bug found in PaymentService accounting! Rewinding Partition 0 offset back to 0...
-PaymentService replayed 3 historical events from Partition 0:
-  Re-processed: Offset 0 | Payload: OrderPlaced(id=1, total=$99)
-  Re-processed: Offset 1 | Payload: OrderPlaced(id=2, total=$249)
-  Re-processed: Offset 2 | Payload: OrderPaid(id=1)
-Notice: AnalyticsService state and offsets were completely untouched!
-
---- Part 3: Competing Consumer Queue with DLQ Failures ---
-1. Task email_1 successfully processed and ACKed.
-2. Task email_bad failed (attempt 1) -> Re-queued with backoff.
-3. Task email_bad failed (attempt 2) -> Re-queued with backoff.
-4. Task email_bad FAILED permanently -> Routed to DLQ!
-DLQ contents: ['email_bad']
-```
-
 ---
 
 ## 🌍 Where You'll See It in Production
@@ -316,12 +285,7 @@ Therefore, 'Exactly-Once' in practice is achieved via **At-Least-Once Delivery +
 1. **Idempotent Producers**: The producer assigns a unique transaction ID and sequence number to each message. The broker automatically de-duplicates retried messages.
 2. **Idempotent Consumer State Storage**:
    - The consumer saves the message processing result and the message ID in the **same atomic database transaction**:
-     ```sql
-     BEGIN;
-     INSERT INTO bank_transactions (id, amount, account_id) VALUES ('tx_88', 100, 'acc_1');
-     INSERT INTO processed_events (event_id) VALUES ('evt_msg_9918');
-     COMMIT;
-     ```
+     ``*(The SQL transaction pattern is separated into [idempotent_consumer.sql](./idempotent_consumer.sql); run [demo.py](./demo.py) for the executable simulation.)*``
    - If a duplicate message arrives, the unique constraint on `processed_events.event_id` detects the collision, and the consumer drops it safely with zero side effects."
 
 ---
