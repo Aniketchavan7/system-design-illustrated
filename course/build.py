@@ -178,6 +178,8 @@ def lesson_page(index, lesson):
             'alt="Requests pass from the client through the balancer to servers 1 and 2. Server 3 is unavailable.">'
             '<p><a href="simulator.html">Try the capacity simulator</a></p></details>'
         )
+    if lesson.id == "caching":
+        sections.append('<p><a href="simulator.html">Test a cache outage in the traffic simulator</a></p>')
     if lesson.id == "dns":
         sections.append('<p><a href="dns-lab.html">Try the DNS cache lab</a></p>')
     if lesson.id == "queues":
