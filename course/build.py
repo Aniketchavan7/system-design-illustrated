@@ -184,6 +184,7 @@ def lesson_page(index, lesson):
     if lesson.id == "dns":
         sections.append('<p><a href="dns-lab.html">Try the DNS cache lab</a></p>')
     if lesson.id == "queues":
+        sections.append('<p><a href="queue-lab.html">Try the queue backlog simulator</a></p>')
         sections.append(f'<p><a href="{REPO}/tree/main/labs/order-processing">Try the order-processing lab</a></p>')
     if lesson.id == "regional-recovery":
         sections.append(f'<p><a href="{REPO}/blob/main/STUDY_GUIDE.md#timed-mock-interviews">Try a timed design interview</a></p>')
@@ -377,6 +378,11 @@ def outputs():
     yield PAGES / "learn/simulator.html", (banner + tool_page(
         "Traffic simulator", "Change request volume and simulate server failures.",
         "../", "simulator.js", simulator.strip(), "simulator",
+    )).encode()
+    queue_lab = (COURSE / "queue-lab.html").read_text(encoding="utf-8")
+    yield PAGES / "learn/queue-lab.html", (banner + tool_page(
+        "Queue backlog simulator", "Predict when a worker pool will clear a burst of photo jobs.",
+        "../", "queue-lab.js", queue_lab.strip(),
     )).encode()
     dns_lab = (COURSE / "dns-lab.html").read_text(encoding="utf-8")
     yield PAGES / "learn/dns-lab.html", (banner + tool_page(

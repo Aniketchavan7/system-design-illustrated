@@ -1,0 +1,47 @@
+<main id="main" class="practice-body container">
+    <header class="practice-header"><h1>When will the queue empty?</h1>
+      <p class="lead">Size a photo-preview worker pool and see how long a burst delays recovery.</p></header>
+    <section class="simulator" aria-label="Queue backlog simulator">
+      <div class="sim-controls">
+        <fieldset id="queue-controls" disabled><legend>Set the workload</legend>
+          <div class="sim-input">
+            <label for="burst">Arrivals during burst (jobs/s)</label><span data-value="burst" aria-hidden="true">100</span>
+            <input type="range" id="burst" min="0" max="200" step="10" value="100">
+          </div>
+          <div class="sim-input">
+            <label for="duration">Burst duration (seconds)</label><span data-value="duration" aria-hidden="true">10</span>
+            <input type="range" id="duration" min="0" max="120" step="1" value="10">
+          </div>
+          <div class="sim-input">
+            <label for="workers">Workers (20 jobs/s each)</label><span data-value="workers" aria-hidden="true">1</span>
+            <input type="range" id="workers" min="0" max="10" step="1" value="1">
+          </div>
+          <div class="sim-input">
+            <label for="after">Arrivals after burst (jobs/s)</label><span data-value="after" aria-hidden="true">0</span>
+            <input type="range" id="after" min="0" max="200" step="10" value="0">
+          </div>
+        </fieldset>
+        <p>The queue starts empty. Arrivals are evenly spaced, workers run at a constant rate, and each photo creates one job.</p>
+        <noscript><p>Enable JavaScript to change the workload. The chart shows the lesson example.</p></noscript>
+      </div>
+      <figure class="sim-result">
+        <figcaption>Pending photo jobs over time</figcaption>
+        <svg viewBox="0 0 320 130" width="100%" role="img" aria-labelledby="queue-chart-title">
+          <title id="queue-chart-title">Backlog rises to 800 jobs at 10 seconds and falls to zero at 50 seconds.</title>
+          <path d="M10 8 V115 H310" fill="none" stroke="currentColor" opacity=".45"/>
+          <polyline id="queue-line" points="10,115 53,10 224,115 310,115" fill="none" stroke="currentColor" stroke-width="3"/>
+        </svg>
+        <p id="axis">0 to 70 seconds · vertical scale 0 to 800 jobs</p>
+        <dl class="sim-metrics">
+          <div><dt>Pending at burst end</dt><dd id="pending">800</dd></div>
+          <div><dt>Worker capacity</dt><dd id="capacity">20 jobs/s</dd></div>
+        </dl>
+        <p class="sim-message" id="recovery" role="status">The queue drains 40 seconds after the burst.</p>
+      </figure>
+    </section>
+    <section class="sim-exercise"><h2>Predict before you test</h2>
+      <p>Four workers handle 80 jobs per second. If 120 arrive each second for 30 seconds, then arrivals fall to 60 per second, how long does recovery take?</p>
+      <details><summary>Reveal the calculation</summary><p>The burst leaves (120 − 80) × 30 = 1,200 jobs waiting. Afterward, the workers clear 20 extra jobs each second. The queue empties 60 seconds after the burst. Set later arrivals to 80 and the backlog stays at 1,200 even while individual jobs finish.</p></details>
+      <a href="queues.html">Return to the queue lesson</a>
+    </section>
+  </main>

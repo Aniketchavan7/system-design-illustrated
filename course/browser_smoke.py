@@ -237,6 +237,25 @@ def test_capstone(browser, base_url, backup):
     fresh.close()
 
 
+def test_queue_lab(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    open_page(page, base_url + "learn/queues.html")
+    page.get_by_role("link", name="Try the queue backlog simulator").click()
+    expect(page.locator("#pending")).to_have_text("800")
+    expect(page.locator("#recovery")).to_contain_text("40 seconds")
+    after = page.locator("#after")
+    after.press("ArrowRight")
+    after.press("ArrowRight")
+    expect(page.locator("#recovery")).to_contain_text("stays at 800")
+    after.press("ArrowRight")
+    expect(page.locator("#recovery")).to_contain_text("grows by 10")
+    page.locator("#duration").press("Home")
+    expect(page.locator("#pending")).to_have_text("0")
+    after.press("Home")
+    expect(page.locator("#recovery")).to_contain_text("stays empty")
+    page.close()
+
+
 def test_dns_lab(browser, base_url):
     page = browser.new_page(viewport=MOBILE)
     open_page(page, base_url + "learn/dns.html")
@@ -317,6 +336,7 @@ def run(base_url, chrome):
             test_no_script(browser, base_url)
             test_library(browser, base_url)
             test_capstone(browser, base_url, Path(directory) / "capstone.json")
+            test_queue_lab(browser, base_url)
             test_dns_lab(browser, base_url)
         finally:
             browser.close()
