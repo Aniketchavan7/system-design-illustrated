@@ -26,6 +26,8 @@
 
 **[Start the free Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)**. Follow six short lessons, experiment with DNS caching and backend outages, then take the capstone. Your lesson progress and capstone results save in your browser.
 
+Use the [book-to-course reading map](./advanced/resource-reading-map.md) to find exercises for each chapter of Kleppmann and Xu.
+
 ## 🧭 How to use this repo
 
 Start with the [study guide](./STUDY_GUIDE.md) for a first pass, interview prep, or production reliability. Every reading and diagram is available on GitHub without an account.

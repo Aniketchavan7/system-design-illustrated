@@ -4,6 +4,8 @@
 
 ---
 
+Use the [book-to-course reading map](./advanced/resource-reading-map.md) to find exercises for each chapter of Kleppmann and Xu.
+
 Start with one of these routes. The reading and paper exercises are free and need only a browser.
 
 - **[First pass on the course site](https://aniketchavan7.github.io/system-design-illustrated/)** · Follow one fictional website through [networking](./01-client-server-networking/#first-pass), [DNS](./02-domain-name-system/#first-pass), and [load balancing](./03-load-balancing/#first-pass). Finish by tracing a request through a server failure. Then draw a [URL shortener](./21-system-design-url-shortener/) and estimate its traffic.
