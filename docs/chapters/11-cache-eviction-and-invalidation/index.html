@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cache Eviction Policies &amp; Invalidation Pitfalls">
+  <title>Cache Eviction Policies &amp; Invalidation Pitfalls | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="11---cache-eviction-policies--invalidation-pitfalls">11 - Cache Eviction Policies &amp; Invalidation Pitfalls</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> RAM is finite and expensive, while database storage is virtually infinite and cheap. Cache eviction algorithms (LRU, LFU, FIFO) govern which data to discard when memory runs out. Meanwhile, cache invalidation failure modes—Cache Stampede (Thundering Herd), Cache Penetration, and Cache Avalanche—represent three of the most notorious causes of catastrophic site-wide outages in distributed systems.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../11-cache-eviction-and-invalidation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Latency differences between RAM lookups (~100 ns) and network/disk calls (~10–100 ms).</li>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Connection pooling limits, IOPS constraints, and DB query execution costs.</li>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside, Write-Through, Write-Behind, and basic read-through caching.</li>
+<li><strong>Data Structures</strong>: Doubly linked lists, hash tables, and probabilistic bit arrays (Bloom filters).</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine you have a small desk where you keep books you are actively reading. Your desk can only hold 3 books, but you own thousands of books on shelves downstairs.</p>
+<ul>
+<li>When you bring a 4th book to your desk, you must send one back downstairs to make room. If you send back the book you haven't touched for the longest time, that is <strong>LRU (Least Recently Used)</strong>.</li>
+<li>If someone constantly knocks on your door asking for books that don't even exist on your shelves, and you walk downstairs every single time to check, that is <strong>Cache Penetration</strong>.</li>
+<li>If all 3 books on your desk vanish at the exact same minute because a timer rang, and 50 people run into your room demanding to read them at once, causing a human pileup at the staircase, that is <strong>Cache Avalanche</strong> and <strong>Cache Stampede</strong>.</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<p>Imagine a busy coffee table in a doctor's waiting room that can hold exactly 4 magazines:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Concept</th>
+<th style="text-align:left">Waiting Room Analogy</th>
+<th style="text-align:left">Technical Reality in Distributed Systems</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Cache Capacity</strong></td>
+<td style="text-align:left">Coffee table space (holds 4 magazines)</td>
+<td style="text-align:left">Allocated RAM budget (e.g., 64 GB in Redis cluster)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Eviction (LRU)</strong></td>
+<td style="text-align:left">Throwing out the magazine no one picked up for 3 days</td>
+<td style="text-align:left">Discarding the least recently accessed key in $O(1)$ time</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cache Stampede</strong></td>
+<td style="text-align:left">The magazine with celebrity gossip is removed; 20 patients all shout at the nurse at once demanding she sprint to the store</td>
+<td style="text-align:left">Hot key expires; 50,000 concurrent threads simultaneously hammer the database</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Singleflight Mutex</strong></td>
+<td style="text-align:left">Nurse tells the crowd: <em>&quot;Only Bob will go get a copy; everyone else sit down and wait for Bob to return&quot;</em></td>
+<td style="text-align:left">Exactly one worker thread queries the DB and repopulates cache; others await the promise</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cache Penetration</strong></td>
+<td style="text-align:left">Pranksters repeatedly ask for a magazine that doesn't exist; the nurse walks downstairs every time</td>
+<td style="text-align:left">Malicious/buggy requests query <code>user_id=-99999</code>; bypasses cache and exhausts DB IOPS</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Bloom Filter</strong></td>
+<td style="text-align:left">A receptionist desk checklist that knows every magazine title ever printed; immediately denies fake titles</td>
+<td style="text-align:left">Space-efficient probabilistic bit-set checking key existence before querying cache or DB</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cache Avalanche</strong></td>
+<td style="text-align:left">All 4 magazines have an expiration sticker for Friday 5:00 PM; at 5:01 PM the table is empty and everyone panics</td>
+<td style="text-align:left">Millions of keys set with identical 2-hour TTL expire at the exact same second</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>TTL Jitter</strong></td>
+<td style="text-align:left">Staggering sticker dates: one expires at 4:45, one at 5:10, one at 5:30</td>
+<td style="text-align:left">Adding random noise ($\pm 10%$) to key TTLs so expirations are smoothed over time</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="without-proper-eviction--invalidation-protections">Without Proper Eviction &amp; Invalidation Protections</h3>
+<ul>
+<li><strong>Memory Exhaustion (OOM Panic)</strong>: When cache runs out of RAM, unmanaged Redis/Memcached instances crash, drop connections, or freeze due to Linux kernel Out-Of-Memory killer.</li>
+<li><strong>Thundering Herd Collapse</strong>: An ultra-popular homepage banner or World Cup live score expires. Within 100 milliseconds, 50,000 backend application threads miss the cache and issue the exact same expensive SQL query. The database connection pool is immediately exhausted, connection timeouts spike, and the entire platform cascadingly crashes.</li>
+<li><strong>DDoS via Non-Existent Keys</strong>: Attackers scan an e-commerce catalog using non-existent random UUIDs (<code>/product/uuid-999999999</code>). Because these keys do not exist in the cache, 100% of attacker traffic punches straight through to disk-bound database queries.</li>
+</ul>
+<h3 id="with-modern-eviction--fault-tolerant-cache-architecture">With Modern Eviction &amp; Fault-Tolerant Cache Architecture</h3>
+<ul>
+<li><strong>Deterministic Memory Bound</strong>: $O(1)$ LRU/LFU eviction guarantees memory never exceeds provisioned hardware thresholds.</li>
+<li><strong>Singleflight De-duplication</strong>: Only 1 request queries the DB upon a hot key expiration; 49,999 requests wait for the in-flight result and return immediately.</li>
+<li><strong>Zero-Cost Negative Filtering</strong>: Bloom filters reject non-existent requests at the cache layer with 0 database round-trips.</li>
+<li><strong>Jittered Expirations</strong>: Smooth database load curves with no sudden cliff-edge expiration waves.</li>
+</ul>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-architecture-animation">High-Resolution Architecture Animation</h3>
+<p>Below is an animated trace of an $O(1)$ Doubly Linked List LRU Cache evicting the oldest key upon capacity overflow, alongside the defensive architectures for Cache Stampede and Cache Avalanche:</p>
+<p><img src="./assets/cache_eviction.gif" alt="Cache Eviction &amp; Fault Modes Architecture" /></p>
+<hr />
+<h3 id="invalidation-failure-modes--mitigations-flowchart">Invalidation Failure Modes &amp; Mitigations Flowchart</h3>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Stampede[&quot;1. Cache Stampede (Thundering Herd)&quot;]
+        A[🔥 Hot Key Expires] --&gt; B[100k Simultaneous Requests]
+        B --&gt;|Without Singleflight| C[💥 100k Concurrent DB Queries -&gt; Outage]
+        B --&gt;|With Distributed Mutex| D[🔒 Only 1 Thread Queries DB]
+        D --&gt; E[Populate Cache &amp; Unblock Waiting 99,999 Requests]
+    end
+
+    subgraph Penetration[&quot;2. Cache Penetration (Attacker Scanning Fake IDs)&quot;]
+        F[Request for Non-Existent ID] --&gt; G{Bloom Filter Check}
+        G --&gt;|Key Definitely Not in DB| H[🛑 Return 404 Immediately in 100ns]
+        G --&gt;|Key Might Exist| I[Query Cache -&gt; Query DB -&gt; Cache NULL Object]
+    end
+
+    subgraph Avalanche[&quot;3. Cache Avalanche (Synchronized Expirations)&quot;]
+        J[10 Million Keys Written at Midnight] --&gt; K{TTL Configuration}
+        K --&gt;|Fixed TTL: 3600s| L[💥 All 10M Keys Expire at 1:00:00 AM -&gt; DB Crashes]
+        K --&gt;|Jittered TTL: 3600s +/- 300s| M[✅ Keys Expire Smoothly Over 10 Minutes]
+    end
+
+    style Stampede fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style Penetration fill:#161b22,stroke:#3fb950,stroke-width:2px;
+    style Avalanche fill:#161b22,stroke:#d29922,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's model an e-commerce platform during Black Friday to calculate the blast radius of cache failure modes:</p>
+<h3 id="scenario-black-friday-hot-deal-flash-sale">Scenario: Black Friday Hot Deal Flash Sale</h3>
+<ul>
+<li><strong>Peak Throughput</strong>: 100,000 HTTP requests per second for the featured deal (<code>deal:blackfriday_special</code>).</li>
+<li><strong>Database Capacity</strong>: PostgreSQL read replica can handle at most 2,500 queries per second before connection pool exhaustion.</li>
+<li><strong>Query Cost</strong>: Complex product bundle calculation takes 40 ms of database CPU time.</li>
+</ul>
+<pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│ Scenario A: Cache Stampede (No Mutex / Singleflight)                    │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Deal key expires at t = 0.000s                                      │
+│ 2. In the next 40 ms (DB query time), 4,000 incoming requests miss.    │
+│    (100,000 req/sec * 0.040 sec = 4,000 queries)                       │
+│ 3. Database connection pool limit = 200 connections.                   │
+│ 4. Result: 3,800 connection requests queued, 504 Gateway Timeouts,     │
+│    DB CPU spikes to 100%, health checks fail, replica gets killed.     │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ Scenario B: Protected with Singleflight (Mutex Locking)                │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Deal key expires at t = 0.000s                                      │
+│ 2. Request #1 acquires distributed mutex lock (`lock:deal:blackfriday`) │
+│ 3. Requests #2 through #4,000 fail to acquire lock -&gt; sleep / subscribe│
+│ 4. Request #1 finishes DB query in 40 ms, writes key to Redis, releases│
+│ 5. Requests #2 through #4,000 read fresh key directly from Redis (1 ms)│
+│ 6. Total DB Queries issued: Exactly 1. Peak DB CPU delta: 0.04%.       │
+└────────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-the-classic-eviction-algorithms">1. The Classic Eviction Algorithms</h3>
+<h4 id="lru-least-recently-used">LRU (Least Recently Used)</h4>
+<ul>
+<li><strong>Data Structure</strong>: Combination of a <strong>Hash Map</strong> (<code>Key -&gt; Node Pointer</code>) and a <strong>Doubly Linked List</strong> (<code>Head &lt;-&gt; Node1 &lt;-&gt; Node2 &lt;-&gt; Tail</code>).</li>
+<li><strong>Lookup ($O(1)$)</strong>: Find node pointer in Hash Map; detach node from its current position in list and move it directly to <code>Head</code> (Most Recently Used).</li>
+<li><strong>Eviction ($O(1)$)</strong>: When size exceeds capacity, remove node directly preceding <code>Tail</code> (Least Recently Used), and delete its key from the Hash Map.</li>
+<li><strong>Weakness</strong>: Vulnerable to &quot;Cache Pollution&quot; (e.g., a batch script or full-table scan touches every record once, evicting all hot, valuable data).</li>
+</ul>
+<h4 id="lfu-least-frequently-used">LFU (Least Frequently Used)</h4>
+<ul>
+<li><strong>Data Structure</strong>: Hash Map for keys + Doubly Linked Lists grouped by access frequency bucket, with a <code>min_frequency</code> tracking pointer.</li>
+<li><strong>Lookup ($O(1)$)</strong>: Increment key's access counter; move node from frequency bucket $k$ to bucket $k+1$.</li>
+<li><strong>Eviction ($O(1)$)</strong>: Evict node from the bucket corresponding to <code>min_frequency</code>.</li>
+<li><strong>Weakness</strong>: Historical bias—a key that received 10,000 views last week will never be evicted, even if nobody reads it today. Requires frequency aging/decay algorithms (e.g., divide all counters by 2 every hour).</li>
+</ul>
+<h4 id="advanced-w-tinylfu-window-tinylfu">Advanced: W-TinyLFU (Window TinyLFU)</h4>
+<ul>
+<li>Used in state-of-the-art caches like <strong>Caffeine</strong> (Java) and <strong>Ristretto</strong> (Go).</li>
+<li>Maintains a small &quot;admission window&quot; (LRU) for new entries and a frequency filter (Count-Min Sketch) to determine whether incoming data is more likely to be accessed again than the current eviction candidate. Prevents single-scan cache pollution completely.</li>
+</ul>
+<hr />
+<h3 id="2-the-three-critical-invalidation-failures">2. The Three Critical Invalidation Failures</h3>
+<h4 id="threat-1-cache-stampede-thundering-herd">Threat 1: Cache Stampede (Thundering Herd)</h4>
+<ul>
+<li><strong>Mechanism</strong>: A heavily accessed key expires or is deleted. A surge of parallel application workers detect a cache miss and all try to compute/fetch the replacement concurrently.</li>
+<li><strong>Solutions</strong>:
+<ol>
+<li><strong>Singleflight / Distributed Lock</strong>: Ensure only one worker computes the value.</li>
+<li><strong>Probabilistic Early Expiration (XFetch Algorithm)</strong>:
+$$\Delta \cdot \beta \cdot \ln(\text{random}()) &gt; \text{time_to_expire}$$
+Background worker recalculates and refreshes the key <em>before</em> it actually expires when access probability is high.</li>
+</ol>
+</li>
+</ul>
+<h4 id="threat-2-cache-penetration">Threat 2: Cache Penetration</h4>
+<ul>
+<li><strong>Mechanism</strong>: Client requests keys that exist in neither cache nor storage (e.g., <code>SELECT * FROM users WHERE id = -404</code>). Every lookup hits disk.</li>
+<li><strong>Solutions</strong>:
+<ol>
+<li><strong>Cache Null Values</strong>: Set <code>redis.setex(&quot;user:-404&quot;, 60, &quot;NULL&quot;)</code> so subsequent queries return nil immediately from cache.</li>
+<li><strong>Bloom Filter</strong>: A bit-array that guarantees: if it says <em>No</em>, the key 100% does not exist in the database. Filter sits in front of the cache.</li>
+</ol>
+</li>
+</ul>
+<h4 id="threat-3-cache-avalanche">Threat 3: Cache Avalanche</h4>
+<ul>
+<li><strong>Mechanism</strong>: A large batch of keys are loaded into cache with the same fixed TTL (e.g., 2 hours). When 2 hours elapse, millions of keys evaporate at the exact same millisecond.</li>
+<li><strong>Solution</strong>:
+<ul>
+<li><strong>TTL Jitter</strong>: Inject random variance into the expiration:
+$$\text{TTL} = \text{BaseTTL} + \text{random}(-\text{Delta}, +\text{Delta})$$</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Eviction Policy</th>
+<th style="text-align:left">Lookup Time</th>
+<th style="text-align:left">Space Overhead</th>
+<th style="text-align:left">Best Suited For</th>
+<th style="text-align:left">Major Vulnerability</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>LRU</strong></td>
+<td style="text-align:left">$O(1)$</td>
+<td style="text-align:left">Medium (2 pointers per node)</td>
+<td style="text-align:left">Temporal locality (recently read will be read again)</td>
+<td style="text-align:left">Batch scans completely wipe hot working set</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>LFU</strong></td>
+<td style="text-align:left">$O(1)$</td>
+<td style="text-align:left">High (frequency nodes + lists)</td>
+<td style="text-align:left">Long-term stable access patterns</td>
+<td style="text-align:left">Stale keys with old high counts resist eviction</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>FIFO</strong></td>
+<td style="text-align:left">$O(1)$</td>
+<td style="text-align:left">Lowest (simple queue)</td>
+<td style="text-align:left">Streaming data where age strictly predicts irrelevance</td>
+<td style="text-align:left">Evicts heavily used keys simply because they are old</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Random</strong></td>
+<td style="text-align:left">$O(1)$</td>
+<td style="text-align:left">Zero extra metadata</td>
+<td style="text-align:left">Memory-constrained systems (e.g., low-RAM edge routers)</td>
+<td style="text-align:left">Suboptimal hit rates compared to LRU</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>W-TinyLFU</strong></td>
+<td style="text-align:left">$O(1)$</td>
+<td style="text-align:left">Low (~8 bits per key)</td>
+<td style="text-align:left">High-throughput, mixed read/write microservices</td>
+<td style="text-align:left">Higher implementation complexity</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Setting TTL Without Jitter in Batch Scripts</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: A nightly sync job writes 5,000,000 customer records to Redis at 03:00 AM with <code>TTL = 86400</code> (24 hours). At 03:00 AM the next night, all 5M keys expire simultaneously, killing the DB during early morning traffic.</li>
+<li><em>Fix</em>: Apply jitter: <code>TTL = 86400 + random.randint(-3600, 3600)</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Unbounded Cache Memory</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Running Redis with <code>maxmemory</code> disabled on a 16 GB instance. Keys grow until Linux invokes <code>OOM-Killer</code>, violently terminating the <code>redis-server</code> process with SIGKILL.</li>
+<li><em>Fix</em>: Always define <code>maxmemory 12gb</code> and set an explicit policy like <code>maxmemory-policy allkeys-lru</code> or <code>volatile-lru</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Re-fetching on Stampede Instead of Singleflight</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Relying solely on caching without request coalescing. When a key expires, 5,000 identical SQL queries are fired in 50 ms.</li>
+<li><em>Fix</em>: Implement Go's <code>singleflight</code> or Python's mutex coalescer to share 1 execution among all concurrent callers.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/11-cache-eviction-and-invalidation/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>An $O(1)$ Doubly Linked List LRU Cache with automatic eviction.</li>
+<li>A multi-threaded simulation of a <strong>Cache Stampede</strong> vs. a <strong>Mutex Singleflight Defense</strong>.</li>
+<li>A benchmark showing DB query count dropping from 50 concurrent calls down to <strong>1 single query</strong>.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Redis</strong>: Provides 8 distinct eviction policies via <code>maxmemory-policy</code>: <code>noeviction</code>, <code>allkeys-lru</code>, <code>volatile-lru</code>, <code>allkeys-lfu</code>, <code>volatile-lfu</code>, <code>allkeys-random</code>, <code>volatile-random</code>, and <code>volatile-ttl</code>. Note that Redis uses an <em>approximated LRU/LFU</em> algorithm (sampling 5–10 random keys) to avoid the memory overhead of actual linked list pointers.</li>
+<li><strong>Go <code>golang.org/x/sync/singleflight</code></strong>: Standard library extension used by Google, CockroachDB, and Docker to suppress duplicate function calls and prevent cache stampedes.</li>
+<li><strong>Cloudflare Edge CDN</strong>: Implements stale-while-revalidate and origin request coalescing so millions of global users requesting an uncached asset only produce a single origin pull.</li>
+<li><strong>Meta (Facebook) TAO</strong>: Uses Cache-Aside with distributed invalidation buses and leases (tokens returned on cache misses) to avoid stampedes across thousands of memcached nodes.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-do-you-implement-an-lru-cache-with-o1-operations-for-both-get-and-put">Q1: &quot;How do you implement an LRU Cache with $O(1)$ operations for both <code>get</code> and <code>put</code>?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing data structure mastery, pointer manipulation, and memory complexity.</p>
+<p><strong>Model Answer</strong>:
+&quot;To achieve $O(1)$ time complexity for both <code>get</code> and <code>put</code>, we combine two data structures:</p>
+<ol>
+<li>A <strong>Hash Map</strong> that maps each key to its corresponding node pointer in memory.</li>
+<li>A <strong>Doubly Linked List</strong> where the head represents the Most Recently Used (MRU) item and the tail represents the Least Recently Used (LRU) item.</li>
+</ol>
+<ul>
+<li><strong><code>get(key)</code></strong>: We look up the key in the hash map in $O(1)$. If found, we detach the node from its current position in the doubly linked list and re-attach it immediately after the dummy head node (marking it MRU), returning the value.</li>
+<li><strong><code>put(key, value)</code></strong>: If the key already exists, we update its value and move it to the head. If it is new, we check current size against capacity. If full, we delete the node directly preceding the dummy tail node (the LRU node), remove its key from the hash map, and insert the new node at the head. All pointer adjustments (updating <code>.prev</code> and <code>.next</code>) take constant $O(1)$ operations.&quot;</li>
+</ul>
+<hr />
+<h3 id="q2-what-is-the-difference-between-cache-stampede-cache-penetration-and-cache-avalanche-and-how-do-you-protect-against-each">Q2: &quot;What is the difference between Cache Stampede, Cache Penetration, and Cache Avalanche, and how do you protect against each?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking whether the candidate has lived through or prepared for real-world production cache outages.</p>
+<p><strong>Model Answer</strong>:
+&quot;These are three distinct failure modes with different root causes:</p>
+<ol>
+<li><strong>Cache Stampede (Thundering Herd)</strong>:
+<ul>
+<li><em>Cause</em>: A high-concurrency <em>valid</em> key expires. Thousands of simultaneous requests miss the cache and all run the same heavy database query.</li>
+<li><em>Defense</em>: Request coalescing / <strong>Singleflight Mutex</strong> (only 1 thread queries the DB; others wait for its completion) or <strong>probabilistic early refresh</strong> (XFetch algorithm refreshes the key before actual TTL expiry).</li>
+</ul>
+</li>
+<li><strong>Cache Penetration</strong>:
+<ul>
+<li><em>Cause</em>: High volume of requests for keys that <em>do not exist</em> in either cache or database (e.g., malicious enumeration of <code>id = -1</code> or random UUIDs).</li>
+<li><em>Defense</em>: Deploy a <strong>Bloom Filter</strong> in front of the cache to drop non-existent keys in $O(k)$ bit-lookups, and <strong>cache NULL results</strong> with a short TTL (e.g., 30–60s) for missing items.</li>
+</ul>
+</li>
+<li><strong>Cache Avalanche</strong>:
+<ul>
+<li><em>Cause</em>: Millions of cached keys are set with the <em>identical TTL</em> (e.g., 2 hours). When that duration elapses, a massive volume of keys drop out at the exact same second, overwhelming the database.</li>
+<li><em>Defense</em>: Add <strong>random jitter</strong> to expiration times (e.g., $\text{TTL} = 7200 \pm \text{random}(0, 600)$) to disperse expirations across time.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q3-redis-claims-to-support-lru-but-why-does-its-documentation-say-it-uses-an-approximated-lru-instead-of-true-lru">Q3: &quot;Redis claims to support LRU, but why does its documentation say it uses an 'approximated LRU' instead of true LRU?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing deep knowledge of systems programming trade-offs and memory efficiency.</p>
+<p><strong>Model Answer</strong>:
+&quot;In a standard LRU implementation, every entry requires a doubly linked list node containing two 64-bit pointers (<code>prev</code> and <code>next</code>), consuming at least 16 additional bytes of RAM per key. Across 100,000,000 keys, that overhead alone wastes 1.6 GB of expensive RAM purely for pointer bookkeeping. Furthermore, updating pointers on every single read operation degrades memory locality and creates lock contention.</p>
+<p>To solve this, Redis uses <strong>Approximated LRU</strong>:</p>
+<ul>
+<li>Each Redis object stores a 24-bit timestamp field recording its last access time.</li>
+<li>When memory limit is reached and eviction triggers, Redis does not inspect a global linked list. Instead, it randomly samples a small pool of keys (configurable by <code>maxmemory-samples</code>, default 5), and evicts the key with the oldest timestamp among that sampled pool.</li>
+<li>With a sample size of 10, Redis's approximated LRU behavior becomes virtually indistinguishable from true LRU, while saving hundreds of megabytes of RAM and eliminating linked list overhead.&quot;</li>
+</ul>
+<hr />
+<h3 id="q4-in-a-write-heavy-microservices-architecture-how-do-you-handle-cache-invalidation-consistency-without-race-conditions">Q4: &quot;In a write-heavy microservices architecture, how do you handle cache invalidation consistency without race conditions?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking distributed systems rigor regarding Cache-Aside vs. Write-Through race conditions.</p>
+<p><strong>Model Answer</strong>:
+&quot;A classic race condition occurs in Cache-Aside when:</p>
+<ol>
+<li>Thread A reads from DB (returns version 1).</li>
+<li>Before Thread A can write version 1 to Cache, Thread B writes version 2 to DB and deletes the key from Cache.</li>
+<li>Thread A now writes stale version 1 into Cache. Stale data remains indefinitely until TTL expires.</li>
+</ol>
+<p>To resolve this in production:</p>
+<ol>
+<li><strong>Always Delete, Never Update</strong>: In Cache-Aside, mutating operations must <strong>delete/invalidate</strong> the cache key rather than updating it, avoiding serialization race order issues.</li>
+<li><strong>Short TTL as a Safety Net</strong>: Always assign a reasonable TTL (e.g., 5–15 minutes) to ensure that any temporary inconsistency is self-healing.</li>
+<li><strong>Change Data Capture (CDC)</strong>: Use Debezium or DynamoDB Streams with a dedicated invalidator service that tails the database Write-Ahead Log (WAL) and publishes invalidation events to Redis, decoupling application workers from the cache invalidation contract.&quot;</li>
+</ol>
+<hr />
+<h3 id="q5-how-does-a-bloom-filter-work-and-what-are-its-trade-offs-when-protecting-against-cache-penetration">Q5: &quot;How does a Bloom Filter work, and what are its trade-offs when protecting against Cache Penetration?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing understanding of probabilistic algorithms and space-efficiency tradeoffs.</p>
+<p><strong>Model Answer</strong>:
+&quot;A Bloom Filter is a space-efficient probabilistic data structure used to test set membership:</p>
+<ul>
+<li>It consists of an array of $m$ bits (initially all 0) and $k$ independent hash functions.</li>
+<li><strong>Adding an item</strong>: Compute $k$ hashes of the key and set the corresponding bit positions in the array to 1.</li>
+<li><strong>Querying an item</strong>: Hash the key with all $k$ functions. If <strong>any</strong> bit is 0, the item is <strong>definitely not in the set</strong>. If all bits are 1, the item <strong>might be in the set</strong>.</li>
+</ul>
+<p><strong>Trade-offs</strong>:</p>
+<ul>
+<li><strong>Pros</strong>: Extremely fast $O(k)$ operations and tiny memory footprint (less than 10 bits per item for a 1% false positive rate).</li>
+<li><strong>Cons</strong>: It has <strong>false positives</strong> (may report an item exists when it doesn't, causing an occasional DB lookup), but <strong>zero false negatives</strong> (never says an item doesn't exist if it actually does).</li>
+<li><strong>Deletion is impossible</strong>: Standard Bloom filters cannot delete items because clearing a bit might affect other keys sharing that bit. If item deletions are required, a <strong>Counting Bloom Filter</strong> or <strong>Cuckoo Filter</strong> must be used.&quot;</li>
+</ul>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. Why is LRU vulnerable to batch scanning scripts (e.g. daily backup or analytics queries)?</b></summary>
+<br>
+Because LRU only tracks recency. A batch script reading 1,000,000 old records touches each once, moving them to the front of the LRU list and evicting all high-frequency, highly active keys from RAM. Solutions like <b>W-TinyLFU</b> or <b>2Q (Two-Queue)</b> defend against this by requiring an item to be accessed more than once before admission into the main cache.
+</details>
+<details>
+<summary><b>2. If you set 1,000,000 keys with a 60-second TTL at 12:00:00 without jitter, what happens at 12:01:00?</b></summary>
+<br>
+You cause a <b>Cache Avalanche</b>. All 1,000,000 keys expire at the exact same millisecond. If traffic is active, millions of incoming queries miss the cache simultaneously and hit the database tier at once, likely exhausting connection pools and causing cascading service failures.
+</details>
+<details>
+<summary><b>3. Can a Bloom Filter ever return a False Negative (telling you an item does not exist when it actually is in the database)?</b></summary>
+<br>
+<b>No.</b> Bloom filters have a mathematical guarantee of zero false negatives. If an item was added, all $k$ of its hash bits were set to 1. If any hash bit is 0, the item was definitely never added.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 3: Storage and Retrieval (Caches and In-Memory Stores)</em>.</li>
+<li><strong>Systems Performance</strong> by Brendan Gregg — <em>Chapter 4: Memory Architecture and Caching Mechanics</em>.</li>
+<li><strong>The XFetch Algorithm Paper</strong>: <em>Optimal Probabilistic Cache Stampede Prevention</em> (Vattani, Chierichetti, Lowenstein).</li>
+<li><strong>Redis Documentation</strong>: <em>Redis as an LRU Cache</em> (<code>https://redis.io/docs/reference/eviction/</code>).</li>
+<li><strong>Caffeine Cache Design Document</strong>: <em>Window TinyLFU Eviction Policy (Ben Manes)</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside, Write-Through, Write-Behind fundamentals.</li>
+<li><a href="../12-content-delivery-networks/index.html">12 - Content Delivery Networks</a>: Caching and invalidating assets at edge PoPs globally.</li>
+<li><a href="../22-system-design-in-memory-cache/index.html">22 - System Design: Distributed In-Memory Cache</a>: Full architectural end-to-end design of a Redis-like distributed cache cluster.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

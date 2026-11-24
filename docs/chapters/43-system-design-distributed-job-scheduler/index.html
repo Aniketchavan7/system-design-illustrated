@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Distributed Job Scheduler">
+  <title>System Design Distributed Job Scheduler | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-43-system-design--distributed-job--task-scheduler">Module 43: System Design — Distributed Job &amp; Task Scheduler</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a large-scale Distributed Job &amp; Task Scheduler (Google Chronos, Netflix Conductor, Quartz, Celery), covering distributed cron coordination, delayed execution engines (Hashed Time Wheels &amp; Redis ZSETs), worker failure failover, and idempotent task execution.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling distributed job schedulers, review these core modules:</p>
+<ul>
+<li><a href="../15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a> (Raft, leader coordination, split-brain avoidance)</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (Delayed queues, dead-letter queues, worker groups)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Heartbeats, failure detection, exponential retry)</li>
+<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent task execution)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine a giant hospital where 1,000 nurses need to administer medicine to 50,000 patients at exact times: <em>&quot;Patient #42 needs insulin at 2:00 PM; Patient #99 needs antibiotics every 6 hours&quot;</em>.</p>
+<p>If every nurse maintained their own personal paper notebook, two nurses might give Patient #42 two doses of insulin (<strong>Double Execution</strong>), or if a nurse gets sick and faints in the hallway, their patients would receive no medicine at all (<strong>Dropped Tasks</strong>)!</p>
+<p>A <strong>Distributed Job Scheduler</strong> uses a single Chief Coordinator (with backup coordinators elected via <strong>Raft</strong>) that places all medicine tasks on a giant automated conveyor belt (<strong>Time Wheel / Priority Queue</strong>). When a task's clock strikes, the coordinator dispatches it to an available nurse. If that nurse doesn't send a radio &quot;I'm alive&quot; ping (<strong>Heartbeat</strong>) within 30 seconds, the task is immediately reassigned to another nurse!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Mechanical Grandfather Clock with an Automated Factory Dispatch Chute</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Factory Analogy</th>
+<th style="text-align:left">Job Scheduler Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Rotating Clock Gear (60 Second Tick)</strong></td>
+<td style="text-align:left">Hashed Timing Wheel / Tick Loop</td>
+<td style="text-align:left">Constant-time $O(1)$ timer wheel advancing execution pointers.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Scheduled Work Order Envelope</strong></td>
+<td style="text-align:left">Job Metadata Record</td>
+<td style="text-align:left">Defines payload, trigger timestamp, recurrence interval, and execution timeout.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Factory Shift Foreman</strong></td>
+<td style="text-align:left">Scheduler Leader / Coordinator</td>
+<td style="text-align:left">Node holding master lock via etcd/ZooKeeper, dispatching tasks.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Factory Assembly Line Workers</strong></td>
+<td style="text-align:left">Worker Nodes (Execution Fleet)</td>
+<td style="text-align:left">Stateless compute instances executing containerized jobs.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Worker Clocking in every 10 seconds</strong></td>
+<td style="text-align:left">Worker Heartbeat Ping</td>
+<td style="text-align:left">Ephemeral lease key confirming worker health and processing progress.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Foreman re-assigning task if worker vanishes</strong></td>
+<td style="text-align:left">Automatic Task Re-Queueing</td>
+<td style="text-align:left">Detects missing heartbeats and re-dispatches tasks to healthy nodes.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Single-server cron daemons (<code>crontab</code>) fail at enterprise scale due to critical limitations:</p>
+<ol>
+<li><strong>Single Point of Failure (SPOF)</strong>: If the cron machine crashes, power fails, or its disk corrupts, all corporate scheduled workflows stop executing.</li>
+<li><strong>Resource Exhaustion</strong>: Running 500 heavy machine learning or database backup jobs simultaneously on one machine spikes CPU/memory to 100%, causing out-of-memory kernel kills.</li>
+<li><strong>No Execution History or Retries</strong>: Traditional cron drops failed tasks silently with zero automated retry logic, exponential backoff, or distributed logging.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph ControlPlane[&quot;1. Scheduler Coordination Plane (High Availability)&quot;]
+        Leader[&quot;Scheduler Leader (Elected via Raft/Etcd)&quot;]
+        Follower[&quot;Scheduler Standby Replica&quot;]
+        Etcd[(&quot;Etcd / ZooKeeper (Distributed Lock &amp; Leader Lease)&quot;)]
+        Leader &lt;--&gt;|&quot;Heartbeat Lease (TTL 5s)&quot;| Etcd
+        Follower -.-&gt;|&quot;Watch Lease&quot;| Etcd
+    end
+
+    subgraph Storage[&quot;2. Job Storage &amp; Delayed Queue&quot;]
+        JobDB[(&quot;Job Metadata Database (PostgreSQL / Spanner)&quot;)]
+        TimeWheel[(&quot;Delayed Execution Engine (Redis ZSET / Kafka Wheel)&quot;)]
+        Leader --&gt;|&quot;Poll Due Jobs (ts &lt;= NOW)&quot;| TimeWheel
+        Leader &lt;--&gt; JobDB
+    end
+
+    subgraph Workers[&quot;3. Distributed Worker Fleet&quot;]
+        TaskQ[&quot;Dispatch Message Queue (RabbitMQ / SQS)&quot;]
+        Leader --&gt;|&quot;Push Executable Task&quot;| TaskQ
+        
+        TaskQ --&gt; Worker1[&quot;Worker Node A&quot;]
+        TaskQ --&gt; Worker2[&quot;Worker Node B&quot;]
+        TaskQ --&gt; Worker3[&quot;Worker Node C&quot;]
+        
+        Worker1 --&gt;|&quot;Send Heartbeat &amp; Result&quot;| Leader
+        Worker2 --&gt;|&quot;Send Heartbeat &amp; Result&quot;| Leader
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
+<p>Consider a scheduler managing <strong>100 Million Jobs Daily</strong> (e.g., Uber trip receipts, payment retries, daily summaries):</p>
+<ul>
+<li><strong>Throughput Sizing</strong>:
+<ul>
+<li>$100\text{M} / 86,400 \approx 1,160\text{ jobs scheduled &amp; executed/second}$.</li>
+<li>Peak dispatch bursts (e.g., Top of the Hour at midnight): <strong>$25,000\text{ jobs/second}$</strong>.</li>
+</ul>
+</li>
+<li><strong>Job Record Sizing</strong>:
+<ul>
+<li>Average job record: Job ID (8 bytes) + Next Run Timestamp (8 bytes) + Recurrence Cron (16 bytes) + Target Handler URI (64 bytes) + Payload JSON (500 bytes) $\approx 600\text{ bytes}$.</li>
+<li>Active scheduled jobs (10 million in queue): $10\text{M} \times 600\text{ bytes} \approx 6.0\text{ Gigabytes}$.</li>
+</ul>
+</li>
+<li><strong>Redis Sorted Set Memory</strong>:
+<ul>
+<li>Store scheduled execution timestamps as scores: <code>ZADD delayed_jobs &lt;timestamp_ms&gt; &lt;job_id&gt;</code>.</li>
+<li>10 million entries in Redis ZSET: $10\text{M} \times 64\text{ bytes} \approx 640\text{ Megabytes}$ of RAM!</li>
+<li>Redis can query and pop due jobs (<code>ZRANGEBYSCORE delayed_jobs 0 &lt;now_ms&gt;</code>) in sub-millisecond execution times.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-timing-mechanics-redis-zset-vs-hashed-timing-wheel">1. Timing Mechanics: Redis ZSET vs. Hashed Timing Wheel</h3>
+<ul>
+<li><strong>Redis Sorted Set Approach</strong>:
+<ul>
+<li>Score = UTC execution timestamp in milliseconds.</li>
+<li>Schedulers execute <code>ZRANGEBYSCORE delayed_jobs 0 &lt;current_time_ms&gt; LIMIT 0 100</code> every 100ms.</li>
+<li>Atomic pop is achieved via Redis 6.2+ <code>ZPOPMIN</code> or Lua scripts.</li>
+</ul>
+</li>
+<li><strong>Hierarchical Hashed Timing Wheel (George Varghese &amp; Tony Lauck Algorithm)</strong>:
+<ul>
+<li>An array of circular buckets representing time units (e.g., a 60-slot second wheel, a 60-slot minute wheel, a 24-slot hour wheel).</li>
+<li>A tick pointer advances every second ($O(1)$ time complexity).</li>
+<li>When the pointer lands on slot 14, all tasks attached to slot 14's linked list are executed immediately!</li>
+<li>Incurs <strong>zero sort overhead</strong> ($O(1)$ insertion and $O(1)$ retrieval).</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-leader-election--high-availability">2. Leader Election &amp; High Availability</h3>
+<p>To prevent two scheduler nodes from executing the same cron job simultaneously:</p>
+<ul>
+<li>Schedulers compete for a distributed lock lease in <strong>etcd</strong>: <code>PUT /scheduler/leader node_1 LEASE 10s</code>.</li>
+<li>Only the node holding the active lease runs the polling loop.</li>
+<li>The leader refreshes its lease every 3 seconds.</li>
+<li>If the leader crashes, etcd's lease expires after 10 seconds; standby followers detect the deletion and elect a new leader automatically.</li>
+</ul>
+<h3 id="3-worker-heartbeating--resiliency">3. Worker Heartbeating &amp; Resiliency</h3>
+<ul>
+<li>When Worker A pulls a task, the task status transitions to <code>RUNNING</code> with an expiration deadline: <code>deadline = NOW() + 30s</code>.</li>
+<li>While processing, Worker A sends periodic heartbeats every 10 seconds: <code>heartbeat(task_id) -&gt; updates deadline = NOW() + 30s</code>.</li>
+<li>If Worker A experiences an out-of-memory crash or network split, the heartbeat stops.</li>
+<li>The Scheduler Leader detects that <code>NOW() &gt; deadline</code>, transitions the task back to <code>SCHEDULED</code>, and re-dispatches it to Worker B.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Standalone Linux Cron</th>
+<th style="text-align:left">Redis ZSET Delayed Queue</th>
+<th style="text-align:left">Hierarchical Timing Wheel (In-Memory)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Scalability</strong></td>
+<td style="text-align:left">Single machine only</td>
+<td style="text-align:left">Scales to millions of jobs</td>
+<td style="text-align:left">Scales to tens of millions of jobs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Retrieval Complexity</strong></td>
+<td style="text-align:left">$O(N)$ scan of crontab</td>
+<td style="text-align:left">$O(\log N + M)$ sorted set range</td>
+<td style="text-align:left">Constant $O(1)$ circular bucket tick</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Fault Tolerance</strong></td>
+<td style="text-align:left">Zero (SPOF)</td>
+<td style="text-align:left">High (Redis replication / AOF)</td>
+<td style="text-align:left">Requires external persistence checkpoint</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Delayed Precision</strong></td>
+<td style="text-align:left">1 Minute</td>
+<td style="text-align:left">1 Millisecond</td>
+<td style="text-align:left">1 Millisecond / 1 Tick</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Non-Idempotent Tasks</strong>: Assuming a job will only ever execute once. In distributed networks, worker timeouts and network retries guarantee <strong>at-least-once execution</strong>. If a charge job isn't protected by an <code>Idempotency-Key</code>, retry recovery will charge customers twice! <em>Rule: All scheduled job handlers must be idempotent.</em></li>
+<li><strong>Top-of-the-Hour Thundering Herd</strong>: Every developer schedules batch jobs for <code>00:00:00</code> (midnight). At 12:00:00 AM, thousands of heavy jobs hit the worker pool simultaneously, exhausting CPU. <em>Rule: Introduce random jitter (e.g. <code>00:00:00</code> + random offset between 0-300 seconds) to smooth load spikes.</em></li>
+<li><strong>Database Polling Storms</strong>: 50 scheduler pods polling PostgreSQL <code>SELECT * FROM jobs WHERE run_at &lt;= NOW()</code> every 500ms will saturate database connection pools and cause CPU lockups.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating a distributed task scheduler with priority delay queue, multi-worker pool, heartbeating, and automatic worker failure recovery is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 2 - Chapter 6 (Distributed Job Scheduler)</a></li>
+<li><a href="https://www.cs.columbia.edu/~nahum/w6998/papers/ton97-timing-wheels.pdf">George Varghese and Tony Lauck: Hashed and Hierarchical Timing Wheels (ACM TOCS, 1997)</a></li>
+<li><a href="https://netflixtechblog.com">Netflix TechBlog: Meson - A Flexible System for Managing Large-Scale Machine Learning Pipelines</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-how-do-you-guarantee-that-a-scheduled-job-runs-at-most-once-versus-at-least-once">Q1: How do you guarantee that a scheduled job runs at most once versus at least once?</h3>
+<p><strong>Model Answer</strong>: In distributed systems with node crashes and network partitions, mathematically guaranteed &quot;exactly-once execution&quot; is impossible. We achieve effective exactly-once semantics by combining <strong>At-Least-Once Dispatch</strong> with <strong>Idempotent Execution</strong>:</p>
+<ol>
+<li>The scheduler dispatches the task with a unique <code>job_execution_id</code>.</li>
+<li>The worker executing the job uses an atomic database lock or Redis idempotency check (<code>SETNX job_exec_id &quot;LOCKED&quot;</code>).</li>
+<li>If a network blip causes the scheduler to re-dispatch the job to a second worker, the second worker recognizes the execution ID and returns immediately without repeating side-effects.</li>
+</ol>
+<h3 id="q2-how-does-a-hashed-timing-wheel-achieve-o1-time-complexity-for-scheduling-delayed-tasks">Q2: How does a Hashed Timing Wheel achieve $O(1)$ time complexity for scheduling delayed tasks?</h3>
+<p><strong>Model Answer</strong>: A Timing Wheel is a circular buffer of $N$ slots, where each slot represents a unit of time (e.g., 1 second). A hardware or software timer increments a circular pointer every tick (<code>tick = (tick + 1) % N</code>).</p>
+<ul>
+<li>When a job is scheduled for $T$ seconds in the future, its target slot is calculated in $O(1)$ time: $	ext{slot} = (	ext{current_tick} + T) \pmod N$.</li>
+<li>The job is appended to the linked list at that slot in $O(1)$ time.</li>
+<li>On every tick, the scheduler executes all tasks in the current slot linked list without scanning or sorting the remaining millions of tasks, achieving strictly $O(1)$ amortized insertion and retrieval.</li>
+</ul>
+<h3 id="q3-what-happens-when-the-active-scheduler-leader-crashes-while-jobs-are-executing">Q3: What happens when the active Scheduler Leader crashes while jobs are executing?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li><strong>Leader Failover</strong>: Standby scheduler replicas monitor the leader's lease in etcd. When the lease expires (e.g., after 5-10 seconds), the standby nodes initiate leader election via Raft/etcd; the winner becomes the new active leader.</li>
+<li><strong>State Reconciliation</strong>: The new leader inspects the persistent database/Redis store for tasks marked as <code>RUNNING</code>.</li>
+<li><strong>Heartbeat Evaluation</strong>: The new leader checks the <code>last_heartbeat_timestamp</code> of all in-flight jobs. If a task's heartbeat has expired, the new leader marks it as <code>FAILED</code> or re-queues it for retry.</li>
+</ol>
+<h3 id="q4-how-do-you-prevent-thundering-herd-spikes-when-thousands-of-jobs-are-scheduled-for-midnight">Q4: How do you prevent &quot;Thundering Herd&quot; spikes when thousands of jobs are scheduled for midnight?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li><strong>Automated Schedule Jitter</strong>: When a cron expression specifies midnight (<code>0 0 * * *</code>), the scheduling engine automatically adds a deterministic pseudorandom jitter offset: $	ext{offset} = 	ext{hash}(	ext{job_id}) \pmod{300	ext{ seconds}}$.</li>
+<li><strong>Backpressure Rate Limiting</strong>: The scheduler dispatches tasks through a token-bucket rate limiter that caps dispatch velocity to match worker pool concurrency capacity.</li>
+<li><strong>Priority Queue Separation</strong>: High-priority real-time business jobs (e.g., billing transfers) are placed in isolated queues so low-priority analytical reports cannot starve critical workflows.</li>
+</ol>
+<h3 id="q5-how-do-you-scale-the-scheduler-when-handling-millions-of-delayed-events-spanning-days-or-weeks">Q5: How do you scale the scheduler when handling millions of delayed events spanning days or weeks?</h3>
+<p><strong>Model Answer</strong>: A two-tier tiered storage architecture:</p>
+<ul>
+<li><strong>Long-Term Tier (Cold Storage)</strong>: Jobs scheduled days or weeks in the future are stored in a distributed relational database (PostgreSQL/Spanner) indexed by <code>run_at</code>.</li>
+<li><strong>Short-Term Tier (Hot Memory / Redis / Time Wheel)</strong>: An asynchronous pre-fetch daemon queries the database in batches every 10 minutes for jobs due in the next 15-minute window (<code>run_at BETWEEN NOW() AND NOW() + INTERVAL '15 minutes'</code>), loading them into the in-memory Time Wheel / Redis ZSET for high-precision, sub-millisecond execution.</li>
+</ul>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. What is the primary role of etcd or ZooKeeper in a distributed job scheduler architecture?</b></summary>
+A) To execute Python scripts.<br/>
+B) To manage distributed leader election leases and ensure only one active scheduler leader dispatches tasks.<br/>
+C) To store multi-gigabyte video files.<br/>
+D) To format HTML emails.<br/><br/>
+<b>Answer: B</b>. Distributed lock leases prevent split-brain dual-leader scenarios.
+</details>
+<details>
+<summary><b>2. What is the retrieval time complexity of a Hashed Timing Wheel on each tick?</b></summary>
+A) O(N log N)<br/>
+B) O(N) where N is all future tasks<br/>
+C) O(1) constant time to inspect the current circular bucket slot<br/>
+D) O(2^N)<br/><br/>
+<b>Answer: C</b>. Advancing the circular pointer directly retrieves the bucket's linked list in constant time.
+</details>
+<details>
+<summary><b>3. How does the scheduler detect that a worker node has crashed mid-task?</b></summary>
+A) By phoning the worker's engineer.<br/>
+B) By monitoring worker heartbeats; if heartbeat stops and deadline expires, the task is marked failed and re-queued.<br/>
+C) By restarting the entire cloud cluster.<br/>
+D) By deleting the database.<br/><br/>
+<b>Answer: B</b>. Heartbeat timeouts detect crashed or partitioned workers automatically.
+</details>
+<details>
+<summary><b>4. Why is schedule jitter necessary for cron jobs scheduled at the top of the hour?</b></summary>
+A) To make clocks run faster.<br/>
+B) To smooth out execution spikes and prevent the thundering herd problem from overwhelming workers at 00:00.<br/>
+C) To encrypt the cron expression.<br/>
+D) Because Linux does not support midnight.<br/><br/>
+<b>Answer: B</b>. Spreading execution over a small window prevents resource exhaustion.
+</details>
+<details>
+<summary><b>5. How can scheduled tasks achieve "effective exactly-once execution"?</b></summary>
+A) By disabling retries.<br/>
+B) By combining at-least-once queue dispatch with idempotent task execution handlers.<br/>
+C) By using single-threaded CPUs.<br/>
+D) By running tasks only on weekends.<br/><br/>
+<b>Answer: B</b>. Idempotency guarantees that duplicate dispatches produce identical safe state.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

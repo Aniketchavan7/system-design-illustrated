@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Rate limiting">
+  <title>Rate limiting | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="05--rate-limiting">05 · Rate limiting</h1>
+<blockquote>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../04-api-gateways-and-proxies/index.html">04 · API gateways</a></p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>A rate limiter is a rule like <strong>&quot;each user may send at most 100 requests per minute.&quot;</strong> When someone goes over the limit, the server politely says <em>&quot;slow down, try again later&quot;</em> (HTTP status <strong>429 Too Many Requests</strong>) instead of doing the work. This keeps one noisy user, buggy script or attacker from slowing the app down for everyone else.</p>
+<h2 id="everyday-analogy-the-bubble-tea-shop">🍕 Everyday analogy: the bubble-tea shop</h2>
+<p>A small bubble-tea shop has <strong>one person making drinks</strong>, and they can make about <strong>one drink every 12 seconds</strong> (5 per minute).</p>
+<ul>
+<li>Without a rule, a school bus arrives, 40 kids order at once, and everyone waits 8 minutes, including the regulars who just wanted one drink.</li>
+<li>So the shop gives every customer <strong>tokens</strong>: you get 5 tokens, each drink costs 1, and you get one token back every 12 seconds. A kid who already spent all 5 has to wait. Everyone else is still served quickly.</li>
+</ul>
+<p>| In the shop | In the system |
+| :---</p>
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../05-rate-limiting/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<p>| :--- |
+| Customer | A client (user, API key or IP address) |
+| Ordering a drink | Sending a request |
+| Tokens in your pocket | Requests you're still allowed to make |
+| &quot;Sorry, wait a bit&quot; | HTTP <code>429 Too Many Requests</code> + a <code>Retry-After</code> header |
+| The drink-maker | Your servers and database: the limited resource you're protecting |</p>
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<p>Your API runs happily at <strong>200 requests/second</strong>. Then:</p>
+<ul>
+<li>a customer's script has a bug and retries in a tight loop at <strong>5,000 req/s</strong>, or</li>
+<li>someone tries 1 million passwords against your login page, or</li>
+<li>a free-tier user scrapes your whole catalogue.</li>
+</ul>
+<p>Your database can handle maybe <strong>1,000 req/s</strong>. Without a limit it falls over, and <strong>every</strong> user gets errors, not just the misbehaving one. Rate limiting turns &quot;the whole site is down&quot; into &quot;one client gets 429s&quot;.</p>
+<p>It also helps with <strong>cost</strong> (paid APIs or LLM calls you forward to) and <strong>fairness</strong> (free vs paid tiers).</p>
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/token_bucket.gif" alt="Token Bucket Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant C as 👤 Client
+    participant RL as 🚦 Rate limiter
+    participant API as ⚙️ API server
+    C-&gt;&gt;RL: GET /orders
+    RL-&gt;&gt;RL: How many requests has this client made recently?
+    alt under the limit
+        RL-&gt;&gt;API: forward request
+        API--&gt;&gt;C: 200 OK + X-RateLimit-Remaining: 42
+    else over the limit
+        RL--&gt;&gt;C: 429 Too Many Requests + Retry-After: 30
+    end
+</code></pre>
+<ol>
+<li>The client sends a request as normal.</li>
+<li>The rate limiter, which usually lives in the <strong>API gateway</strong> (see module 04), works out <em>who</em> is asking (user ID, API key or IP address) and checks that client's counter.</li>
+<li>If there's room, the request goes through to the real server.</li>
+<li>The response tells the client how many requests it has left, so well-behaved clients can slow down on their own.</li>
+<li>If there's no room, the limiter answers immediately with <strong>429</strong>. The expensive server never even sees the request.</li>
+</ol>
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<p>Rule: <strong>5 requests per 60 seconds.</strong> A client sends <strong>5 requests between 55 s and 59 s</strong>, then <strong>5 more between 60.5 s and 62.5 s</strong>. That's 10 requests in under 8 seconds, double the limit. Here is what each algorithm does. This is real output from <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/05-rate-limiting/demo.py"><code>demo.py</code></a>:</p>
+<pre><code class="language-text">  time       fixed window      sliding log  sliding counter     token bucket     leaky bucket
+  55.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+  56.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+  57.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+  58.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+  59.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+  60.5s           ✅ allow          ❌ 429            ✅ allow          ❌ 429            ❌ 429
+  61.0s           ✅ allow          ❌ 429            ❌ 429            ❌ 429            ❌ 429
+  61.5s           ✅ allow          ❌ 429            ❌ 429            ❌ 429            ❌ 429
+  62.0s           ✅ allow          ❌ 429            ❌ 429            ❌ 429            ❌ 429
+  62.5s           ✅ allow          ❌ 429            ❌ 429            ❌ 429            ❌ 429
+  90.0s           ❌ 429            ❌ 429            ✅ allow          ✅ allow          ✅ allow
+ 110.0s           ❌ 429            ❌ 429            ✅ allow          ✅ allow          ✅ allow
+ 130.0s           ✅ allow          ✅ allow          ✅ allow          ✅ allow          ✅ allow
+</code></pre>
+<p><strong>Fixed window lets all 10 through.</strong> The next section explains why, and each algorithm in turn.</p>
+<h2 id="how-it-works-the-five-classic-algorithms">⚙️ How it works: the five classic algorithms</h2>
+<h3 id="1-fixed-window-counter-a-counter-that-resets-on-the-minute">1. Fixed window counter: &quot;a counter that resets on the minute&quot;</h3>
+<p>Keep one counter per client per minute: <code>requests[client][12:01] = 3</code>. When the clock moves to 12:02, start again from 0.</p>
+<pre><code class="language-text">window 0 (0–60s)                          window 1 (60–120s)
+|-----------------------------[▮▮▮▮▮]|[▮▮▮▮▮]-----------------------------|
+                               55–59s   60.5–62.5s
+              counter = 5 → full      ↑ counter resets to 0 here
+</code></pre>
+<ul>
+<li>✅ Very simple: one number per client, easy to store in Redis with <code>INCR</code> + <code>EXPIRE</code>.</li>
+<li>❌ <strong>Boundary burst:</strong> 5 requests at the end of one window plus 5 at the start of the next means 10 requests in a few seconds. In the table, that's every ✅ from 55 s to 62.5 s.</li>
+<li>❌ It also punishes unfairly. The 90 s and 110 s requests get rejected because window 1 is &quot;full&quot;, even though the burst ended long ago.</li>
+</ul>
+<h3 id="2-sliding-window-log-remember-every-timestamp">2. Sliding window log: &quot;remember every timestamp&quot;</h3>
+<p>Store the time of every accepted request. For a new request, throw away timestamps older than 60 s and count what's left.</p>
+<p>At <strong>60.5 s</strong> the log holds <code>[55, 56, 57, 58, 59]</code>. All five are within the last 60 s, so the count is 5 and the request is <strong>rejected</strong>. At <strong>90 s</strong> they're <em>still</em> within the last 60 s (90 − 60 = 30, and 55 &gt; 30), so that's rejected too. At <strong>130 s</strong> they've all expired, so it's allowed.</p>
+<ul>
+<li>✅ <strong>Exact.</strong> Never more than 5 in <em>any</em> 60-second stretch.</li>
+<li>❌ <strong>Memory-hungry.</strong> A limit of 10,000/hour means storing up to 10,000 timestamps per client.</li>
+</ul>
+<h3 id="3-sliding-window-counter-two-counters-and-a-bit-of-maths">3. Sliding window counter: &quot;two counters and a bit of maths&quot;</h3>
+<p>A clever middle ground. Keep only the counts for the <strong>current</strong> and <strong>previous</strong> fixed windows, and <em>estimate</em> the last 60 seconds by assuming the previous window's requests were spread evenly:</p>
+<pre><code class="language-text">estimate = current_count + previous_count × (fraction of the previous window still inside the last 60 s)
+</code></pre>
+<p>Worked example at <strong>61.0 s</strong>:</p>
+<ul>
+<li>previous window (0–60 s) accepted <strong>5</strong></li>
+<li>current window (60–120 s) has accepted <strong>1</strong> so far (the one at 60.5 s)</li>
+<li>we're 1 s into the current window, so 59/60 of the previous window still overlaps the last 60 s</li>
+</ul>
+<p><code>estimate = 1 + 5 × 59/60 ≈ 5.92</code> → that's ≥ 5, so <strong>reject</strong>.</p>
+<p>Notice it <strong>allowed 60.5 s</strong>: <code>0 + 5 × 59.5/60 ≈ 4.96</code> was just under 5. That's the approximation showing. It assumes the previous 5 requests were spread over the whole minute, when really they were bunched at the end. It slips by one, not by five, and it uses just two numbers per client. Big APIs often use this one.</p>
+<h3 id="4-token-bucket-pocket-full-of-tokens-that-slowly-refills">4. Token bucket: &quot;pocket full of tokens that slowly refills&quot;</h3>
+<p>This is the bubble-tea shop. Each client has a bucket that holds at most <strong>5 tokens</strong> and gets <strong>1 new token every 12 s</strong> (5 per minute). Each request costs 1 token. No token means 429.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">time</th>
+<th style="text-align:left">tokens before</th>
+<th style="text-align:left">request?</th>
+<th style="text-align:left">tokens after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">55 s</td>
+<td style="text-align:left">5.00</td>
+<td style="text-align:left">✅</td>
+<td style="text-align:left">4.00</td>
+</tr>
+<tr>
+<td style="text-align:left">59 s</td>
+<td style="text-align:left">≈1.33</td>
+<td style="text-align:left">✅</td>
+<td style="text-align:left">≈0.33</td>
+</tr>
+<tr>
+<td style="text-align:left">60.5 s</td>
+<td style="text-align:left">≈0.46</td>
+<td style="text-align:left">❌ (less than 1)</td>
+<td style="text-align:left">≈0.46</td>
+</tr>
+<tr>
+<td style="text-align:left">90 s</td>
+<td style="text-align:left">≈2.92</td>
+<td style="text-align:left">✅</td>
+<td style="text-align:left">≈1.92</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>✅ <strong>Allows short bursts</strong> (up to the bucket size) but keeps the long-run average fixed. Real users really do click a few times quickly.</li>
+<li>✅ Only two numbers per client: <code>tokens</code> and <code>last_refill_time</code>.</li>
+<li>Two knobs to tune: <strong>bucket size</strong> (how bursty) and <strong>refill rate</strong> (the average speed).</li>
+<li>Used widely, for example by AWS API Gateway and Stripe.</li>
+</ul>
+<h3 id="5-leaky-bucket-a-funnel-that-drips-at-a-fixed-speed">5. Leaky bucket: &quot;a funnel that drips at a fixed speed&quot;</h3>
+<p>Requests pour into a funnel (a queue) that holds 5. They drip out to the server at a <strong>constant</strong> rate of one every 12 s. If the funnel is full, new requests spill over and are rejected.</p>
+<ul>
+<li>✅ The server sees perfectly <strong>smooth</strong> traffic, which is great for something fragile like an old payment provider.</li>
+<li>❌ Bursts are queued, not served quickly. A user who clicks 3 times waits for all 3 drips.</li>
+</ul>
+<blockquote>
+<p>In the demo, the leaky bucket gives the same allow/reject answers as the token bucket, because both have size 5 and the same speed. The difference is <em>when</em> accepted requests run: the token bucket serves them immediately, the leaky bucket queues them and releases them one every 12 s.</p>
+</blockquote>
+<h2 id="trade-offs">⚖️ Trade-offs</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Algorithm</th>
+<th style="text-align:left">Memory per client</th>
+<th style="text-align:left">Accuracy</th>
+<th style="text-align:left">Bursts</th>
+<th style="text-align:left">Pick it when…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Fixed window</td>
+<td style="text-align:left">1 counter</td>
+<td style="text-align:left">❌ up to 2× at boundaries</td>
+<td style="text-align:left">uncontrolled</td>
+<td style="text-align:left">you need something simple <em>now</em>, and 2× spikes are OK</td>
+</tr>
+<tr>
+<td style="text-align:left">Sliding log</td>
+<td style="text-align:left">1 timestamp <strong>per request</strong></td>
+<td style="text-align:left">✅ exact</td>
+<td style="text-align:left">none</td>
+<td style="text-align:left">limits are small (e.g. 5 login attempts / 15 min)</td>
+</tr>
+<tr>
+<td style="text-align:left">Sliding window counter</td>
+<td style="text-align:left">2 counters</td>
+<td style="text-align:left">≈ very close</td>
+<td style="text-align:left">small</td>
+<td style="text-align:left">general API limits at scale</td>
+</tr>
+<tr>
+<td style="text-align:left">Token bucket</td>
+<td style="text-align:left">2 numbers</td>
+<td style="text-align:left">✅ exact average</td>
+<td style="text-align:left">✅ allowed, up to the bucket size</td>
+<td style="text-align:left">user-facing APIs where short bursts are normal</td>
+</tr>
+<tr>
+<td style="text-align:left">Leaky bucket</td>
+<td style="text-align:left">queue of size N</td>
+<td style="text-align:left">✅</td>
+<td style="text-align:left">smoothed out</td>
+<td style="text-align:left">protecting something that needs a steady flow</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Where to put the limiter</strong></p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Place</th>
+<th style="text-align:left">Good for</th>
+<th style="text-align:left">Watch out</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">In the client app</td>
+<td style="text-align:left">Being nice, avoiding wasted calls</td>
+<td style="text-align:left">Never <em>trust</em> it: attackers don't use your app</td>
+</tr>
+<tr>
+<td style="text-align:left">API gateway / load balancer</td>
+<td style="text-align:left">One place for all services; rejects early and cheaply</td>
+<td style="text-align:left">Needs shared state if you run many gateways</td>
+</tr>
+<tr>
+<td style="text-align:left">Inside each service</td>
+<td style="text-align:left">Per-endpoint rules (e.g. expensive <code>/export</code>)</td>
+<td style="text-align:left">Logic gets duplicated across services</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What to limit by</strong></p>
+<ul>
+<li><strong>API key / user ID:</strong> fairest, but only works after login.</li>
+<li><strong>IP address:</strong> works before login, but a whole office or mobile carrier can share one IP (NAT), so you may block innocent people.</li>
+<li>Often you need <strong>both</strong>: a loose per-IP limit plus a stricter per-user limit.</li>
+</ul>
+<h2 id="common-mistakes">🚫 Common mistakes</h2>
+<ul>
+<li><strong>Counting in each server's memory when you run 10 servers.</strong> Each server allows 100/min, so the real limit is 1,000/min. → Keep counters in a shared store like Redis. That's <a href="../25-system-design-rate-limiter/index.html">module 25</a>.</li>
+<li><strong>&quot;Read count, then write count+1&quot; as two steps.</strong> Two servers both read <code>99</code>, both allow, and you're at 101. → Use an <strong>atomic</strong> operation (Redis <code>INCR</code>, or a Lua script that checks and increments in one step).</li>
+<li><strong>Returning 500 or just dropping the connection.</strong> → Return <strong>429</strong> with <code>Retry-After</code>, so clients know it's on purpose and when to come back.</li>
+<li><strong>Clients retrying immediately after a 429.</strong> That makes the storm worse. → Retry with <strong>exponential backoff + jitter</strong> (<a href="../20-fault-tolerance-and-resilience/index.html">module 20</a>).</li>
+<li><strong>Taking the whole API down when the rate limiter's Redis is down.</strong> → Decide up front: <em>fail open</em> (allow traffic and log a warning) or <em>fail closed</em> (reject everything). Failing open keeps the product working; failing closed is safer for things like login protection.</li>
+</ul>
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<pre><code class="language-bash">cd 05-rate-limiting
+python demo.py
+</code></pre>
+<p>All five algorithms take a fake clock (<code>now</code>) as input, so the run is repeatable. Things to try:</p>
+<ol>
+<li>Change <code>TRAFFIC</code> to one request every 15 s for 2 minutes (<code>[i * 15.0 for i in range(9)]</code>). Every algorithm allows everything. Why? Now try every 10 s: who starts rejecting, and why?</li>
+<li>Raise the token bucket's <code>capacity</code> to 10. What happens to the burst?</li>
+<li>In <code>SlidingWindowCounter</code>, print <code>estimate</code> at each step and check the 60.5 s and 61 s maths above.</li>
+</ol>
+<h2 id="where-youll-see-it">🌍 Where you'll see it</h2>
+<ul>
+<li><strong>GitHub API:</strong> 5,000 requests/hour per token. Check the <code>x-ratelimit-remaining</code> header on any response.</li>
+<li><strong>OpenAI, Anthropic and other LLM APIs:</strong> separate limits for requests/min <em>and</em> tokens/min.</li>
+<li><strong>Login pages:</strong> &quot;Too many attempts, try again in 15 minutes.&quot;</li>
+<li><strong>Nginx</strong> (<code>limit_req</code>) and <strong>Cloudflare</strong> rate-limiting rules.</li>
+</ul>
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-would-you-design-a-distributed-rate-limiter-running-across-50-api-gateway-servers-without-race-conditions">Q1: &quot;How would you design a distributed rate limiter running across 50 API Gateway servers without race conditions?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>The Problem:</strong> If 50 gateway nodes each keep an in-memory counter, a client sending 100 requests can make 50 × 100 = 5,000 requests total. Conversely, if nodes coordinate using naive read-then-write steps (<code>count = GET user; if count &lt; limit: SET user (count + 1)</code>), concurrent requests produce classic <strong>race conditions</strong> allowing double the limit.</li>
+<li><strong>The Solution (Centralized Redis + Atomic Lua Script):</strong>
+<ol>
+<li>Maintain counters in a centralized <strong>Redis Cluster</strong>.</li>
+<li>Execute the sliding window or token bucket algorithm inside an <strong>atomic Redis Lua script</strong> (<code>EVALSHA</code>). Because Redis executes Lua scripts as a single atomic transaction on a single thread, no two requests can interleave between checking the count and incrementing it.</li>
+<li><strong>High-Performance Optimization:</strong> Use a local in-memory filter (e.g., Token Bucket with synchronized batches) to reject obvious denial-of-service spam at the edge before even pinging Redis.</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-what-is-the-window-boundary-spike-problem-in-fixed-window-counter-and-how-does-sliding-window-counter-solve-it">Q2: &quot;What is the 'window boundary spike' problem in Fixed Window Counter, and how does Sliding Window Counter solve it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>The Fixed Window Flaw:</strong> Suppose the limit is 100 requests per minute, resetting at 12:00:00, 12:01:00, etc.
+<ul>
+<li>A user sends 100 requests at 12:00:59.</li>
+<li>The counter resets to 0 at 12:01:00.</li>
+<li>The user immediately sends 100 requests at 12:01:01.</li>
+<li>Both windows were legally under 100, but the server just suffered <strong>200 requests in 2 seconds</strong>—a 2× traffic burst that can crash the database.</li>
+</ul>
+</li>
+<li><strong>The Sliding Window Counter Solution:</strong>
+<ul>
+<li>Instead of resetting cleanly at the boundary, it calculates an estimated count based on the overlap with the previous window:
+$$\text{Count} = \text{Current Window Count} + \text{Previous Window Count} \times (1 - \text{Time Elapsed in Current Window})$$</li>
+<li>At 12:01:15 ($25%$ into the new minute), the weight of the previous minute is $75%$. If the user sent 100 requests at 12:00:59, their estimated count is $0 + 100 \times 0.75 = 75$, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory ($O(1)$).</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-what-happens-if-your-centralized-redis-rate-limiter-cluster-crashes-do-you-fail-open-or-fail-closed">Q3: &quot;What happens if your centralized Redis rate-limiter cluster crashes? Do you fail open or fail closed?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>This is an architectural trade-off that depends strictly on the business criticality of the endpoint:</p>
+<ol>
+<li><strong>Fail Open (Recommended for General APIs &amp; E-Commerce):</strong>
+<ul>
+<li>If Redis times out or throws an error, the Gateway catches the exception, logs an alert, and <strong>allows the request through to the backend</strong>.</li>
+<li><em>Why:</em> You never want a rate-limiting infrastructure blip to prevent paying customers from buying products or reading their dashboard.</li>
+</ul>
+</li>
+<li><strong>Fail Closed (Mandatory for High-Security / Expensive Endpoints):</strong>
+<ul>
+<li>For <code>/login</code>, <code>/password-reset</code>, or <code>/ai/expensive-llm-generate</code>, the Gateway <strong>rejects incoming traffic</strong> if Redis is unreachable.</li>
+<li><em>Why:</em> Failing open on login endpoints would leave your database completely exposed to credential-stuffing and brute-force password cracking attacks.</li>
+</ul>
+</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-how-do-you-rate-limit-unauthenticated-users-sharing-a-corporate-nat-ip-or-mobile-carrier-without-blocking-an-entire-office">Q4: &quot;How do you rate-limit unauthenticated users sharing a corporate NAT IP or mobile carrier without blocking an entire office?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>If you rate-limit purely by <code>client_ip</code>, 5,000 employees working in the same corporate office or on the same mobile network share a single public NAT IP address, and one person's script could lock out the entire company.</p>
+<p><strong>Defense in Depth Strategy:</strong></p>
+<ol>
+<li><strong>Multi-Factor Fingerprinting:</strong> Combine IP address with client attributes: <code>hash(IP + User-Agent + Accept-Language + Client-Fingerprint-Cookie)</code>.</li>
+<li><strong>Dual-Tier Limits:</strong>
+<ul>
+<li>A relaxed <strong>broad limit</strong> per IP address (e.g., 5,000 requests/min to accommodate corporate NATs).</li>
+<li>A strict <strong>granular limit</strong> per anonymous browser session cookie or device ID (e.g., 60 requests/min).</li>
+</ul>
+</li>
+<li><strong>Proof-of-Work / CAPTCHA Fallback:</strong> When an IP crosses the warning threshold, instead of hard-rejecting with 429, serve a Cloudflare Turnstile challenge. Legitimate humans pass in 1 second; automated scrapers are halted.</li>
+</ol>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li>A rule says &quot;10 requests per minute&quot; and uses a fixed window. What's the most requests a client could get through in 2 seconds?</li>
+</ol>
+<details><summary>Answer</summary>
+<p><strong>20.</strong> 10 at 12:00:59 and 10 at 12:01:00. The counter resets on the minute boundary.</p>
+</details>
+<ol start="2">
+<li>Token bucket with capacity 20 and a refill of 1 token/second. A client has been idle for an hour. How many requests can it make instantly, and how many in the next 10 seconds after that?</li>
+</ol>
+<details><summary>Answer</summary>
+<p><strong>20 instantly</strong> (the bucket is capped at 20, not 3,600), then <strong>about 10 more</strong> over the next 10 s at 1 per second.</p>
+</details>
+<ol start="3">
+<li>You run 4 API servers, each with its own in-memory limit of 100/min. What's the real limit, and how do you fix it?</li>
+</ol>
+<details><summary>Answer</summary>
+<p>Up to <strong>400/min</strong>, because each server counts separately. Fix it with a shared counter (e.g. Redis) using atomic increments.</p>
+</details>
+<ol start="4">
+<li>Why might limiting only by IP address block innocent users?</li>
+</ol>
+<details><summary>Answer</summary>
+<p>Many people can share one public IP: an office network, a university or a mobile carrier (NAT). One heavy user can use up the limit for all of them.</p>
+</details>
+<ol start="5">
+<li>Which algorithm would you pick for &quot;max 5 password attempts per 15 minutes&quot;, and why?</li>
+</ol>
+<details><summary>Answer</summary>
+<p><strong>Sliding log.</strong> The limit is tiny, so storing 5 timestamps is cheap, and you want it <strong>exact</strong>. A boundary burst of 10 attempts would be a security hole.</p>
+</details>
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>SDI-1 ch 4</strong>, <em>Design a rate limiter</em>: an interview walk-through of these algorithms plus a full distributed design.</li>
+<li><strong>UDS</strong>, <em>Upstream resiliency</em> chapter: rate limiting alongside load shedding and load leveling, as ways to protect a service from its callers.</li>
+</ul>
+<h2 id="related">🔗 Related</h2>
+<ul>
+<li><a href="../04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: where rate limiters usually live.</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 · Fault tolerance &amp; resilience</a>: what <em>clients</em> should do when they get a 429.</li>
+<li><a href="../25-system-design-rate-limiter/index.html">25 · Distributed rate limiter</a>: running these algorithms across many servers with Redis.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

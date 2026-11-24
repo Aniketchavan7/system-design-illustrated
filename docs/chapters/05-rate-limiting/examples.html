@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Rate limiting">
+  <title>Rate limiting | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-rate-limiting">Real-World Production Deep Dives: Rate Limiting</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Stripe</strong>, <strong>Google</strong>, and <strong>Netflix</strong> implement distributed rate limiting, protect against cascading failures, and enforce concurrency limits.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-stripe-uses-rate-limiting-the-4-tier-distributed-architecture">💳 Deep Dive 1: How Stripe Uses Rate Limiting (The 4-Tier Distributed Architecture)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Stripe Payment Processing API.</li>
+<li><strong>Scale</strong>: Hundreds of billions of dollars processed annually across millions of businesses.</li>
+<li><strong>Availability Requirement</strong>: Five-nines (99.999%). A 1-second outage halts global commerce for thousands of merchants.</li>
+<li><strong>Attack Profile</strong>: Black Friday traffic surges, script-kiddie card testing attacks (botnets attempting thousands of stolen credit card numbers per second), and misconfigured merchant retry loops.</li>
+</ul>
+<h3 id="2-the-core-problem-at-stripe-scale">2. The Core Problem at Stripe Scale</h3>
+<ul>
+<li>A simple global rate limiter (e.g., &quot;100 requests per second per IP&quot;) fails in real-world fintech:
+<ul>
+<li>Legitimate enterprise platforms (e.g., Shopify, Amazon, Lyft) submit thousands of requests per second from single IP pools.</li>
+<li>Malicious actors rotate IP addresses across compromised IoT botnets to evade IP-based rate limiting.</li>
+<li>A flash crowd spike must never exhaust internal database connection pools.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-stripes-engineering-architecture-the-4-tier-funnel">3. Stripe's Engineering Architecture: The 4-Tier Funnel</h3>
+<pre><code>[ Inbound HTTP API Request ]
+             │
+             ▼
+[ Tier 1: Request Rate Limiter ]  &lt;-- Hard Token Bucket per API Key
+             │ (Pass)
+             ▼
+[ Tier 2: Concurrency Rate Limiter ] &lt;-- Limits concurrent in-flight calls
+             │ (Pass)
+             ▼
+[ Tier 3: Usage Rate Limiter ]      &lt;-- Throttles heavy analytical queries
+             │ (Pass)
+             ▼
+[ Tier 4: Fraud &amp; Abuse Limiter ]   &lt;-- Heuristic &amp; Card Testing Defense
+             │ (Pass)
+             ▼
+[ Stripe Core Payment Engine ]
+</code></pre>
+<h4 id="tier-1-request-rate-limiter-token-bucket-per-api-key">Tier 1: Request Rate Limiter (Token Bucket per API Key)</h4>
+<ul>
+<li>Implemented using <strong>Redis</strong> clusters.</li>
+<li>Each merchant API key is assigned a token bucket.</li>
+<li><strong>Atomic Token Consumption via Lua Scripts</strong>:
+<ul>
+<li>Running separate <code>GET</code> and <code>SET</code> commands in Redis creates race conditions. Stripe executes a single atomic <strong>Redis Lua Script</strong> that calculates elapsed time, refills tokens up to bucket capacity, decrements a token, and returns the remaining allowance in under 1 millisecond.</li>
+</ul>
+</li>
+</ul>
+<h4 id="tier-2-concurrency-rate-limiter">Tier 2: Concurrency Rate Limiter</h4>
+<ul>
+<li>While the Request Rate Limiter controls <em>requests per second</em>, the Concurrency Limiter controls <em>simultaneous in-flight requests</em>.</li>
+<li>Prevents database thread exhaustion: complex card charges take 200-500ms to verify with Visa/Mastercard. If a merchant sends 1,000 parallel requests, Tier 2 caps their simultaneous executions to 50, buffering or rejecting the excess with HTTP 429.</li>
+</ul>
+<h4 id="tier-3-usage-rate-limiter">Tier 3: Usage Rate Limiter</h4>
+<ul>
+<li>Merchants querying historical analytics or pulling thousands of PDF invoices consume orders of magnitude more database CPU than a lightweight balance check.</li>
+<li>Tier 3 applies strict resource-cost limits specifically on data-heavy endpoints.</li>
+</ul>
+<h4 id="tier-4-fraud--card-testing-rate-limiter">Tier 4: Fraud &amp; Card Testing Rate Limiter</h4>
+<ul>
+<li>Monitors failed card authorizations across merchant accounts. If an entity triggers a threshold of invalid CVV/expiry combinations, their traffic is shunted into a CAPTCHA or dropped entirely, isolating the attack before it touches payment network rails.</li>
+</ul>
+<h4 id="header-feedback-loop">Header Feedback Loop</h4>
+<p>Stripe returns explicit rate limit headers on every response:</p>
+<pre><code class="language-http">HTTP/1.1 429 Too Many Requests
+Retry-After: 2
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1716480002
+</code></pre>
+<hr />
+<h2 id="deep-dive-2-how-netflix--google-handle-rate-limiting-adaptive-concurrency-limits">🎬 Deep Dive 2: How Netflix &amp; Google Handle Rate Limiting (Adaptive Concurrency Limits)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Companies</strong>: Netflix (Edge &amp; Inter-service RPC) and Google (Site Reliability Engineering &amp; gRPC).</li>
+<li><strong>The Epiphany</strong>: <strong>Static Rate Limits are Inherently Broken in Dynamic Clouds.</strong>
+<ul>
+<li>If you set a static limit of 10,000 QPS, what happens when a database node crashes and backend capacity drops to 6,000 QPS? The rate limiter still permits 10,000 QPS, causing a catastrophic cascading collapse.</li>
+<li>What happens if you scale up the cluster to handle 25,000 QPS? The static limit blocks legitimate traffic unnecessarily.</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-netflixs-architecture-adaptive-concurrency-limits-tcp-vegas--littles-law">2. Netflix's Architecture: Adaptive Concurrency Limits (TCP Vegas &amp; Little's Law)</h3>
+<p>Netflix open-sourced the <code>concurrency-limits</code> library, replacing arbitrary static RPS limits with mathematical feedback loops inspired by TCP congestion control.</p>
+<pre><code>[ Inbound Request Stream ]
+             │
+             ▼
+[ Netflix Adaptive Concurrency Limiter ]
+   ├── Measures Current Latency (RTT)
+   ├── Compares with Baseline Latency (No-Load RTT)
+   │
+   ├── If RTT &lt;= Baseline: Increase Concurrency Limit (+1)
+   └── If RTT &gt; Threshold: Decrease Concurrency Limit (Backoff)
+             │
+             ▼
+[ Microservice Business Logic ]
+</code></pre>
+<h4 id="the-algorithm-mechanics-littles-law">The Algorithm Mechanics (Little's Law)</h4>
+<p>According to Little's Law:
+$$L = \lambda 	imes W$$
+$$	ext{Concurrency} = 	ext{Throughput} 	imes 	ext{Latency}$$</p>
+<ol>
+<li>The service continuously monitors request round-trip time (RTT).</li>
+<li>It tracks the <strong>Minimum RTT</strong> observed during low-traffic periods (the physical baseline latency of the system).</li>
+<li>If current RTT begins to climb significantly above baseline, the system has entered <strong>queueing delay</strong> (congestion).</li>
+<li>The limiter dynamically contracts the permitted concurrency limit:
+$$	ext{Limit}_{t+1} = 	ext{Limit}_t 	imes \beta \quad (	ext{Multiplicative Decrease})$$</li>
+<li>When RTT recovers, it gradually increases the limit:
+$$	ext{Limit}_{t+1} = 	ext{Limit}_t + \alpha \quad (	ext{Additive Increase})$$</li>
+</ol>
+<h4 id="traffic-prioritization">Traffic Prioritization</h4>
+<p>When throttling is active, Netflix drops low-priority background traffic first:</p>
+<ul>
+<li><strong>Priority 1 (Critical)</strong>: Video playback start, license verification (Never dropped).</li>
+<li><strong>Priority 2 (User Interactive)</strong>: Search queries, browsing UI.</li>
+<li><strong>Priority 3 (Background)</strong>: Viewing history bookmarks, analytics beacons (Dropped immediately).</li>
+</ul>
+<hr />
+<h2 id="deep-dive-3-how-google-sre-uses-client-side-throttling">🏢 Deep Dive 3: How Google SRE Uses Client-Side Throttling</h2>
+<p>Google SRE solves the problem of a struggling server being killed by client retries. Google implemented <strong>Client-Side Throttling</strong> inside the gRPC client stub.</p>
+<h3 id="the-formula">The Formula</h3>
+<p>Clients track the number of requests they sent in the last 2 minutes (<code>requests</code>) and the number of requests accepted by the server without error (<code>accepts</code>).
+Clients compute the probability of dropping their own request before sending it:</p>
+<p>$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}\right)$$</p>
+<ul>
+<li>Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).</li>
+<li><strong>How it behaves</strong>:
+<ul>
+<li>If the server accepts all requests, $	ext{requests} \approx 	ext{accepts}$, so $	ext{requests} - 2(	ext{accepts}) &lt; 0 \implies P_{	ext{drop}} = 0$ (no throttling).</li>
+<li>If the server starts failing requests due to overload, $P_{	ext{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Stripe (4-Tier Redis Token Bucket)</th>
+<th>Netflix (Adaptive Concurrency Limits)</th>
+<th>Google (Client-Side Adaptive Throttling)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Location</strong></td>
+<td>Edge Reverse Proxy &amp; Ingress Layer</td>
+<td>Ingress Gateway + Embedded Service Interceptor</td>
+<td>Client SDK / gRPC Transport Stub</td>
+</tr>
+<tr>
+<td><strong>Limiting Dimension</strong></td>
+<td>RPS per API Key + Concurrency count</td>
+<td>Dynamic In-flight Concurrency based on RTT</td>
+<td>Request vs Accept ratio over sliding window</td>
+</tr>
+<tr>
+<td><strong>Storage Dependency</strong></td>
+<td>Distributed Redis Cluster with Lua scripts</td>
+<td>In-memory atomic counters (zero external dependencies)</td>
+<td>In-memory local client metrics</td>
+</tr>
+<tr>
+<td><strong>Responsiveness</strong></td>
+<td>Static thresholds updated via configuration</td>
+<td>Autonomic, continuous adaptation to real-time load</td>
+<td>Client-side self-policing protects downstream servers</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Propose a Single Global Limiter</strong>: Always structure rate limiting as a tiered defense (Per-User Token Bucket -&gt; Concurrency Cap -&gt; Abuse / Fraud heuristic).</li>
+<li><strong>Preventing Race Conditions</strong>: Always mention that distributed token buckets in Redis must be implemented via <strong>atomic Lua scripts</strong> or Redis cell modules to prevent concurrent read-modify-write race conditions.</li>
+<li><strong>Adaptive Limits Impress Interviewers</strong>: Differentiate yourself by explaining why static RPS limits fail during cascading failures and proposing latency-based adaptive concurrency limits (Little's Law / TCP Vegas).</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

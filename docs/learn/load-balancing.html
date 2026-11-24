@@ -81,7 +81,7 @@
 <p>On a cache miss the browser asks its resolver for the public address, then connects to the load balancer. With a valid cached answer it can go straight to the connection. The balancer sends <code>GET /guide</code> to a backend, and the backend returns the HTML through the balancer. Server C's in-flight work may fail. After failure detection, the balancer sends new work to A and B. They can serve <strong>1,800 requests per second</strong>, so steady demand exceeds capacity by <strong>200 per second</strong>. Bring spare capacity online if available. In the meantime, protect the guide request by shedding enough optional work to stay within capacity.</p>
 </details>
       <details class="animation" id="routing-animation"><summary>Watch the routing animation</summary><img src="../course/load-balancer.gif" loading="lazy" width="960" height="440" alt="Requests pass from the client through the balancer to servers 1 and 2. Server 3 is unavailable."><p><a href="simulator.html">Try the capacity simulator</a></p></details>
-<p class="reference-link"><a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/03-load-balancing/README.md">Read the full technical chapter</a></p>
+<p class="reference-link"><a href="../chapters/03-load-balancing/index.html">Read the full technical chapter</a></p>
       <footer class="lesson-footer">
         <div class="lesson-navigation">
           <button class="button" type="button" data-complete data-requires-progress hidden>Mark complete</button>

@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Database Replication &amp; High Availability">
+  <title>Database Replication &amp; High Availability | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="07--database-replication--high-availability">07 · Database Replication &amp; High Availability</h1>
+<blockquote>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../07-database-replication/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>If you store all your company's data on a single database server and that server's hard drive dies, your business is gone.</p>
+<p><strong>Database replication</strong> means keeping exact, live copies of your data on multiple separate servers across the network. If the main server (the <strong>Leader</strong>) catches fire, one of the backup copies (the <strong>Followers</strong>) automatically takes over. Furthermore, because $95%$ of internet traffic is reading data rather than writing it, you can distribute millions of read queries across your followers so the main server never slows down.</p>
+<hr />
+<h2 id="everyday-analogy-the-head-chef--line-cooks">🍕 Everyday analogy: The Head Chef &amp; Line Cooks</h2>
+<p>Imagine the kitchen of a Michelin-starred restaurant:</p>
+<ul>
+<li><strong>The Executive Chef (Leader / Primary):</strong> The head chef holds the master recipe book. Only the head chef is allowed to create new dishes or change a recipe (<strong>Write Operations</strong>).</li>
+<li><strong>The Line Cooks (Followers / Read Replicas):</strong> Every time the head chef updates a recipe, she writes a copy of the change onto an order board (the <strong>Replication Log</strong>). The line cooks read the board and memorize the new steps.</li>
+<li><strong>Serving Customers (Read Scaling):</strong> When 200 diners ask <em>&quot;What are the ingredients in the soup?&quot;</em>, any line cook can answer immediately (<strong>Read Queries</strong>). The head chef doesn't have to stop cooking to answer questions.</li>
+<li><strong>Replication Lag:</strong> If the head chef changes the soup recipe at 6:00:00 PM, and Line Cook 3 hasn't looked at the board yet at 6:00:01 PM, Line Cook 3 might recite the old recipe for a few seconds (<strong>Eventual Consistency</strong>).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the restaurant kitchen</th>
+<th style="text-align:left">In database replication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Head Chef</strong></td>
+<td style="text-align:left"><strong>Primary Database (Leader)</strong> — accepts all <code>INSERT / UPDATE / DELETE</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Line Cooks</strong></td>
+<td style="text-align:left"><strong>Read Replicas (Followers)</strong> — accept <code>SELECT</code> read queries</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Recipe Change Board</strong></td>
+<td style="text-align:left"><strong>Write-Ahead Log (WAL) / Binlog Stream</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cook reading board late</strong></td>
+<td style="text-align:left"><strong>Replication Lag</strong> (milliseconds to seconds)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Head chef fainting $\to$ Sous chef takes over</strong></td>
+<td style="text-align:left"><strong>Automated Leader Failover</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<ol>
+<li><strong>Hardware Mortality:</strong> Disk drives, power supplies, and RAM sticks fail every single day in cloud datacenters. Replication guarantees that when hardware fails, zero data is lost.</li>
+<li><strong>Read Traffic Overload:</strong> Most web applications have a $10:1$ to $100:1$ read-to-write ratio (Twitter, Reddit, YouTube). A single PostgreSQL instance might choke at $2,000\text{ reads/sec}$. By spinning up 5 read replicas, you can effortlessly serve $10,000+\text{ reads/sec}$.</li>
+<li><strong>Geographical Data Locality:</strong> Placing read replicas in Frankfurt, Singapore, and Virginia allows European, Asian, and American users to read records from a local datacenter in $&lt; 5\text{ ms}$ instead of sending packets across oceans.</li>
+</ol>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/db_replication.gif" alt="Database Replication Architecture Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart TD
+    App[&quot;📱 Application Services&quot;]
+
+    subgraph Cluster[&quot;Replication Topology (Single-Leader)&quot;]
+        Leader[(&quot;👑 Primary Database (Leader)&lt;br/&gt;Accepts WRITES &amp; Reads&quot;)]
+        F1[(&quot;📖 Read Replica 1 (Follower)&lt;br/&gt;Reads Only&quot;)]
+        F2[(&quot;📖 Read Replica 2 (Follower)&lt;br/&gt;Reads Only&quot;)]
+    end
+
+    App --&gt;|&quot;1. Writes (INSERT, UPDATE)&quot;| Leader
+    Leader --&gt;|2. Asynchronous WAL / Binlog Stream| F1
+    Leader --&gt;|2. Asynchronous WAL / Binlog Stream| F2
+
+    App --&gt;|&quot;3. Reads (SELECT) - 95% of traffic&quot;| F1
+    App --&gt;|&quot;3. Reads (SELECT) - 95% of traffic&quot;| F2
+</code></pre>
+<ol>
+<li>All write transactions (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>) are processed exclusively by the Primary Leader.</li>
+<li>The Primary writes mutations to its local <strong>Write-Ahead Log (WAL)</strong> on disk and streams those log events across the network to all Followers.</li>
+<li>Followers read the stream and apply transactions in the exact same sequence to their local storage engines.</li>
+<li>Read queries are load-balanced across the follower fleet.</li>
+</ol>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<h3 id="synchronous-vs-asynchronous-replication-latency-math">Synchronous vs Asynchronous Replication Latency Math</h3>
+<p>Suppose your Primary database is in <strong>Virginia (US-East)</strong> and you configure a Read Replica in <strong>Frankfurt (EU-Central)</strong>:</p>
+<ul>
+<li>Physical fiber Round-Trip Time (RTT): <strong>$75\text{ ms}$</strong>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Replication Mode</th>
+<th style="text-align:left">How it writes</th>
+<th style="text-align:center">Write Latency</th>
+<th style="text-align:left">Risk on Primary Crash</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Synchronous</strong></td>
+<td style="text-align:left">Primary writes locally $\to$ sends to Frankfurt $\to$ waits for confirmation $\to$ returns OK to user</td>
+<td style="text-align:center"><strong>$75\text{ ms} + \text{disk I/O} \approx 80\text{ ms}$</strong> (Slow!)</td>
+<td style="text-align:left"><strong>$0\text{ data loss}$</strong> (Replica guaranteed up to date)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Asynchronous</strong></td>
+<td style="text-align:left">Primary writes locally $\to$ returns OK to user immediately ($1\text{ms}$) $\to$ streams to Frankfurt in background</td>
+<td style="text-align:center"><strong>$1.5\text{ ms}$</strong> (Lightning fast!)</td>
+<td style="text-align:left"><strong>Data loss risk:</strong> If Primary dies before log reaches Frankfurt, last 100ms of writes are lost</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Semi-Synchronous</strong></td>
+<td style="text-align:left">Primary waits for <strong>at least 1</strong> local replica in same datacenter ($0.5\text{ms}$ RTT) before returning OK</td>
+<td style="text-align:center"><strong>$2\text{ ms}$</strong> (Fast &amp; Safe)</td>
+<td style="text-align:left"><strong>Zero data loss</strong> within primary region</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="how-it-works-replication-topologies--consistency-guarantees">⚙️ How it works: Replication Topologies &amp; Consistency Guarantees</h2>
+<h3 id="1-single-leader-vs-multi-leader-vs-leaderless">1. Single-Leader vs Multi-Leader vs Leaderless</h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph SL[&quot;1. Single-Leader (Most Common)&quot;]
+        L1[(&quot;👑 Primary&quot;)] --&gt; R1[(&quot;📖 Follower&quot;)]
+        L1 --&gt; R2[(&quot;📖 Follower&quot;)]
+    end
+
+    subgraph ML[&quot;2. Multi-Leader (Multi-Region)&quot;]
+        ML1[(&quot;👑 Leader US&quot;)] &lt;--&gt;|Bi-directional Sync| ML2[(&quot;👑 Leader EU&quot;)]
+    end
+
+    subgraph LL[&quot;3. Leaderless (Dynamo-Style)&quot;]
+        C[&quot;Client&quot;] --&gt; N1[(&quot;Node 1&quot;)]
+        C --&gt; N2[(&quot;Node 2&quot;)]
+        C --&gt; N3[(&quot;Node 3&quot;)]
+    end
+</code></pre>
+<ol>
+<li><strong>Single-Leader (Postgres, MySQL, MongoDB):</strong>
+<ul>
+<li>All writes flow through one primary node. Clean, straightforward, avoids write conflicts.</li>
+</ul>
+</li>
+<li><strong>Multi-Leader (Active-Active across Datacenters):</strong>
+<ul>
+<li>Writes are accepted in both US and EU datacenters.</li>
+<li><strong>The Conflict Problem:</strong> User A in US updates row 10 to <code>&quot;Red&quot;</code>; User B in EU updates row 10 to <code>&quot;Blue&quot;</code> at the exact same millisecond. Resolving conflicting writes requires complex reconciliation (Last-Write-Wins timestamps, CRDTs, or operational transforms).</li>
+</ul>
+</li>
+<li><strong>Leaderless (Apache Cassandra, Amazon DynamoDB, ScyllaDB):</strong>
+<ul>
+<li>Any client can write directly to any node.</li>
+<li>Uses <strong>Quorums</strong> to guarantee consistency.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="2-quorum-math-in-leaderless-systems-w--r--n">2. Quorum Math in Leaderless Systems ($W + R &gt; N$)</h3>
+<p>In a cluster of $N$ replicas:</p>
+<ul>
+<li>$W$ = Number of replicas that must acknowledge a <strong>write</strong> before it is considered successful.</li>
+<li>$R$ = Number of replicas that must respond to a <strong>read</strong> query.</li>
+</ul>
+<p>$$\text{Strict Consistency Condition: } W + R &gt; N$$</p>
+<p><strong>Why this formula guarantees fresh reads:</strong></p>
+<ul>
+<li>Suppose cluster size $N = 3$.</li>
+<li>You configure $W = 2$ and $R = 2$ ($2 + 2 = 4 &gt; 3$).</li>
+<li>When you write, at least 2 nodes receive the newest version ($V_2$).</li>
+<li>When you read, you query 2 nodes. By the Pigeonhole Principle, <strong>at least one node in your read set is guaranteed to have participated in the write set!</strong></li>
+<li>The client inspects the version timestamps, sees $V_2 &gt; V_1$, returns $V_2$ to the user, and triggers a background <strong>Read Repair</strong> to update the stale replica!</li>
+</ul>
+<hr />
+<h3 id="3-the-3-classic-replication-lag-anomalies">3. The 3 Classic Replication Lag Anomalies</h3>
+<p>When using asynchronous read replicas, clients experience three notorious bugs:</p>
+<ol>
+<li><strong>Read-Your-Own-Writes Anomaly:</strong> A user submits a comment, refreshes the page, and the comment disappears because their read query hit a replica that is 500 ms behind!
+<ul>
+<li><em>Fix:</em> If a user recently wrote data, route that specific user's reads to the Primary for a 5-second window.</li>
+</ul>
+</li>
+<li><strong>Monotonic Reads Anomaly:</strong> A user refreshes repeatedly. First read hits an up-to-date replica (sees comment). Second read hits a lagging replica (comment disappears!). It looks like time is traveling backwards.
+<ul>
+<li><em>Fix:</em> Ensure a user always reads from the same replica using consistent hashing on <code>user_id</code>.</li>
+</ul>
+</li>
+<li><strong>Consistent Prefix Reads Anomaly:</strong> If Question and Answer are written in order, but the Answer arrives at a replica before the Question, readers see the answer before the question, violating causal ordering.
+<ul>
+<li><em>Fix:</em> Ensure causally related writes are partitioned to the same replication shard.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="trade-offs-sync-vs-async-replication-matrix">⚖️ Trade-offs: Sync vs Async Replication Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Feature</th>
+<th style="text-align:left">Asynchronous Replication</th>
+<th style="text-align:left">Synchronous Replication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Write Latency</strong></td>
+<td style="text-align:left">Low ($1\text{–}2\text{ ms}$) — does not wait for network transit</td>
+<td style="text-align:left">High ($10\text{–}100\text{ ms}$) — bounded by slowest replica RTT</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Primary Write Availability</strong></td>
+<td style="text-align:left">High — primary accepts writes even if all replicas disconnect</td>
+<td style="text-align:left">Low — if 1 synchronous replica hangs, <strong>all writes freeze</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Data Loss Risk (RPO)</strong></td>
+<td style="text-align:left">Non-zero — transactions in flight during primary crash can be lost</td>
+<td style="text-align:left">Zero — committed transactions guaranteed on replica disk</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read Consistency</strong></td>
+<td style="text-align:left">Eventual — reads can be stale during replication lag</td>
+<td style="text-align:left">Strong — reads on synchronous replica reflect newest state</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Recommended Use</strong></td>
+<td style="text-align:left">Standard web APIs, social media, read scaling fleets</td>
+<td style="text-align:left">Financial ledgers, banking transfers, inventory counts</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>The &quot;Split-Brain&quot; Catastrophe:</strong></p>
+<ul>
+<li><em>What happens:</em> A temporary network partition occurs between Primary and Replica. The Replica mistakenly assumes the Primary died and promotes itself to Leader. Now you have <strong>two Leaders</strong> accepting writes independently! When the network heals, their datasets have diverged irrecoverably.</li>
+<li><em>The Fix:</em> Require an <strong>odd-numbered consensus quorum</strong> (e.g. 3 or 5 nodes using Raft / Paxos). A node can only become Leader if it wins votes from a strict majority ($\lfloor N/2 \rfloor + 1$).</li>
+</ul>
+</li>
+<li>
+<p><strong>Sending heavy analytical queries to the same replica pool serving web users:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> A data scientist runs a massive report (<code>SELECT * FROM orders WHERE year=2023</code>) that consumes 100% CPU on Replica 1. Replication lag on Replica 1 spikes from 10 ms to 15 minutes, causing regular users to see stale data.</li>
+<li><em>The Fix:</em> Dedicate a <strong>separate analytical replica</strong> isolated with custom tags, keeping production read pools untouched.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 07-database-replication
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch the <strong>Read-Your-Own-Writes anomaly</strong> in action: Alice writes her bio, refreshes immediately, and reads an empty bio due to asynchronous replication lag.</li>
+<li>Observe how the <strong>Read-After-Write Consistency router</strong> catches recent user writes and routes them safely to the Primary.</li>
+<li>Watch the replication stream converge after 1.5 seconds so other users can read from the replica pool.</li>
+<li>Simulate a Primary node crash and observe <strong>automated failover</strong> promoting Replica 1 to the new Leader!</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>AWS Aurora:</strong> Decouples compute from storage, replicating log records across 6 storage nodes in 3 Availability Zones using a $4/6$ write quorum.</li>
+<li><strong>GitHub:</strong> Uses MySQL with Orchestrator for automated leader detection and sub-second failover.</li>
+<li><strong>PostgreSQL Streaming Replication:</strong> Replicates binary WAL records at the block level with sub-millisecond lag.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-do-you-guarantee-read-after-write-consistency-when-using-asynchronous-read-replicas">Q1: &quot;How do you guarantee 'Read-After-Write' consistency when using asynchronous read replicas?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>In an asynchronous replication cluster, read replicas lag behind the primary by milliseconds to seconds. If a user modifies their profile and immediately refreshes, routing the read to a lagged replica results in a jarring stale read.</p>
+<p><strong>Production Solution Techniques:</strong></p>
+<ol>
+<li><strong>Time-Based Heuristic Routing:</strong> When a user executes a mutation (<code>POST /profile</code>), the API gateway or application records a timestamp cookie: <code>last_write_timestamp = now()</code>. For the next $T$ seconds (e.g., 5 seconds, exceeding maximum replication lag), all read requests from that user are routed directly to the <strong>Primary Leader</strong>. Reads from other users continue routing to replicas.</li>
+<li><strong>Replication Log Sequence Number (LSN) Tracking:</strong> The Primary returns the transaction's commit LSN (e.g. <code>LSN = 10492</code>). When the client subsequently reads, it sends <code>LSN: 10492</code> in the request header. If the replica has only caught up to <code>LSN = 10480</code>, the application either waits until the replica catches up or redirects the read to the Primary.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-what-is-split-brain-in-a-database-cluster-and-how-do-consensus-algorithms-prevent-it">Q2: &quot;What is Split-Brain in a database cluster, and how do consensus algorithms prevent it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Split-Brain Scenario:</strong>
+<ul>
+<li>Suppose a datacenter network link is severed between Node A (Primary) and Node B (Follower).</li>
+<li>Node B stops receiving heartbeats. If Node B naively assumes Node A is dead, it promotes itself to Primary.</li>
+<li>Now, clients on the left side of the network write to Node A, and clients on the right side write to Node B.</li>
+<li>Both nodes generate conflicting auto-increment IDs, mutate the same user balances, and diverge permanently. When the network reconnects, reconciling the two databases is a nightmare.</li>
+</ul>
+</li>
+<li><strong>Prevention via Quorum Consensus:</strong>
+<ul>
+<li>Clusters must use an <strong>odd number of nodes</strong> (3, 5, or 7) managed by consensus algorithms like Raft, Paxos, or ZooKeeper/etcd.</li>
+<li>A node is only allowed to become Primary if it wins votes from a <strong>strict majority</strong>:
+$$\text{Quorum} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$</li>
+<li>In a 3-node cluster, a majority is 2. If the network splits into a 1-node partition and a 2-node partition, only the 2-node partition can reach quorum and elect a leader. The isolated 1-node side cannot reach quorum and automatically transitions to read-only or steps down, mathematically preventing Split-Brain.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-in-leaderless-systems-cassandra--dynamodb-how-does-quorum-math-w--r--n-ensure-strong-consistency">Q3: &quot;In leaderless systems (Cassandra / DynamoDB), how does Quorum Math ($W + R &gt; N$) ensure strong consistency?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>In leaderless systems, there is no master node. Replicas are symmetric.</p>
+<ul>
+<li>If $N$ is the replication factor, $W$ is the number of nodes that must ACK a write, and $R$ is the number of nodes queried on read:</li>
+<li>When $W + R &gt; N$, the read quorum and write quorum <strong>must overlap by at least one node</strong> (Pigeonhole Principle).</li>
+<li><strong>Step-by-Step Flow:</strong>
+<ol>
+<li>Suppose $N = 3, W = 2, R = 2$.</li>
+<li>Write transaction writes version 5 to Node 1 and Node 2. (Node 3 misses it).</li>
+<li>Subsequent read queries Node 2 and Node 3.</li>
+<li>Node 2 returns version 5; Node 3 returns version 4.</li>
+<li>The client compares timestamps, identifies version 5 as the newest, and returns version 5 to the application (<strong>Strong Consistency</strong>).</li>
+<li>The client asynchronously triggers <strong>Read Repair</strong>, writing version 5 back to Node 3 to heal the replica!</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-why-is-multi-leader-replication-rarely-used-for-primary-transactional-business-databases">Q4: &quot;Why is Multi-Leader replication rarely used for primary transactional business databases?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Because <strong>concurrent conflicting writes</strong> are mathematically inevitable and notoriously difficult to resolve:</p>
+<ul>
+<li>If a user in New York changes their email to <code>alice@work.com</code> on the US Leader, and simultaneously changes it to <code>alice@home.com</code> on the EU Leader while traveling, both datacenters accept the write locally with zero initial error.</li>
+<li>When the two leaders replicate to each other asynchronously, they encounter a collision.</li>
+<li><strong>Why conflict resolution hurts:</strong>
+<ol>
+<li><strong>Last-Write-Wins (LWW):</strong> Uses NTP wall clocks. Because physical clocks drift across servers, LWW frequently drops newer writes due to clock skew.</li>
+<li><strong>Conflict Resolution Plugins:</strong> Require application-level logic to merge states, which is prone to data corruption for complex relational schemas.</li>
+</ol>
+</li>
+<li>Consequently, Multi-Leader is reserved for specialized collaborative tools (Google Docs, Figma) using CRDTs or operational transforms, while transactional systems rely on Single-Leader or globally synchronized systems like Google Spanner.</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A cluster has 5 replicas. You configure asynchronous replication. The Primary crashes. What is the difference between RPO and RTO in this disaster?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<ul>
+<li><strong>RPO (Recovery Point Objective):</strong> The maximum tolerable amount of data loss measured in time. If the replication lag was 150 ms when the Primary crashed, and the last 150 ms of binlog transactions never reached any replica, your realized data loss is 150 ms of writes.</li>
+<li><strong>RTO (Recovery Time Objective):</strong> The maximum tolerable downtime to recover service. If it takes the failover system 25 seconds to detect the crash, elect a new Primary, and update DNS/load balancers, your RTO was 25 seconds.</li>
+</ul>
+</details>
+<hr />
+<ol start="2">
+<li><strong>In a 5-node Cassandra cluster with replication factor $N=5$, you configure $W=1$ and $R=1$. What happens during network partitions?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>$W + R = 1 + 1 = 2 \le 5$. Because $W + R \le N$, you have <strong>Eventual Consistency</strong> (AP system). Writes and reads will be ultra-fast and the system will remain available during partitions, but clients are not guaranteed to read the latest writes and will frequently encounter stale data.</p>
+</details>
+<hr />
+<ol start="3">
+<li><strong>What is a &quot;Read Repair&quot; in leaderless replication?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>When a client queries a quorum of replicas (e.g. $R=2$) and notices that Node A returned an older version than Node B, the client returns the newer version to the caller, and immediately fires an asynchronous background write to Node A with the newer version to &quot;repair&quot; the stale replica.</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications (DDIA)</strong> by Martin Kleppmann: Chapter 5 (<em>Replication</em> — the industry benchmark chapter on leader-based, multi-leader, and leaderless topologies).</li>
+<li><strong>MySQL High Availability (2nd Edition)</strong> by Charles Bell: Comprehensive guide on binlog formats, semi-sync replication, and automated failover.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: The underlying database engines being replicated.</li>
+<li><a href="../08-database-partitioning/index.html">08 · Database partitioning</a>: How replication pairs with sharding to scale both reads and writes.</li>
+<li><a href="../15-consensus-and-leader-election/index.html">15 · Consensus &amp; leader election</a>: The consensus algorithms (Raft) that make database failovers safe.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

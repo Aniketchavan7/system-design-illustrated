@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Payment System">
+  <title>System Design Payment System | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-40-system-design--digital-wallet--payment-system">Module 40: System Design — Digital Wallet &amp; Payment System</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of an Enterprise Payment and Digital Wallet System (Stripe, PayPal, Adyen), covering Double-Entry Bookkeeping, the Payment State Machine, Idempotency, and End-of-Day Reconciliation.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling payment systems, review these core modules:</p>
+<ul>
+<li><a href="../19-distributed-transactions/index.html">19 - Distributed Transactions</a> (2PC, Saga pattern, and compensating transactions)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Retries, dead letter queues, and exponential backoff)</li>
+<li><a href="../29-database-transactions-and-isolation/index.html">29 - Database Transactions &amp; Isolation</a> (ACID guarantees, Serializable isolation, and lost updates)</li>
+<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotency keys preventing double-charges)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine a bank where money is kept in magical locked boxes. If Alice wants to send $50 to Bob, the bank never just erases $50 from Alice's account and writes +$50 in Bob's account. Why? Because if the power cuts out mid-way, Alice loses $50 and Bob receives nothing!</p>
+<p>Instead, banks use <strong>Double-Entry Bookkeeping</strong>, an accounting law invented in the 1400s: every single transaction must have at least two entries where <strong>Total Debits = Total Credits</strong>. Money can never appear or vanish out of thin air.</p>
+<p>Even if network cables are cut, external payment gateways (Visa, MasterCard) crash, or servers reboot, a <strong>Payment System</strong> uses strict mathematical ledgers, unique idempotency keys, and automated reconciliation accountants to ensure not a single penny is ever lost or duplicated!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Physical Two-Pan Balance Scale in a Gold Vault</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Gold Vault Analogy</th>
+<th style="text-align:left">Payment System Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Gold removed from Left Pan (Debit)</strong></td>
+<td style="text-align:left">Account Debit Entry</td>
+<td style="text-align:left">Reduces asset balance or records an expense.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Gold added to Right Pan (Credit)</strong></td>
+<td style="text-align:left">Account Credit Entry</td>
+<td style="text-align:left">Increases liability or records offsetting credit.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Scale Must Balance to Zero</strong></td>
+<td style="text-align:left">Double-Entry Bookkeeping Invariant</td>
+<td style="text-align:left">$\sum \text{Debits} - \sum \text{Credits} = 0$. Absolute invariant across the ledger.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Embossed Serial Number on Gold Bar</strong></td>
+<td style="text-align:left"><code>Idempotency-Key</code> Header</td>
+<td style="text-align:left">Client-assigned token preventing double-charging across network retries.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Vault Guard Checking Balance Log Daily</strong></td>
+<td style="text-align:left">End-of-Day Reconciliation</td>
+<td style="text-align:left">Background auditing service verifying internal DB balances match bank settlement files.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Payment systems operate under the strictest regulatory and correctness requirements in software engineering:</p>
+<ol>
+<li><strong>Zero Data Loss &amp; Zero Double-Charging</strong>: Charging a customer twice or dropping funds results in severe financial fines, fraud audits, and loss of business trust.</li>
+<li><strong>Unreliable External Banking Networks</strong>: Card processing networks (Visa, Stripe, Adyen) can take 5 to 30 seconds to confirm charges, or time out entirely. Systems must handle in-flight transactions safely.</li>
+<li><strong>Auditability &amp; Traceability</strong>: Every penny entering, moving through, or exiting the platform must be cryptographically auditable for tax authorities and financial compliance (SOX, PCI-DSS).</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor User as Buyer
+    participant Client as Web / Mobile App
+    participant PayGW as Payment Gateway Service
+    participant IdemStore as Redis (Idempotency Store)
+    participant Ledger as Double-Entry Ledger DB
+    participant PSP as Payment Service Provider (Stripe/Adyen)
+    participant Recon as Reconciliation Engine
+
+    User-&gt;&gt;Client: Click &quot;Pay $50.00&quot;
+    Client-&gt;&gt;PayGW: POST /v1/payments (Header: Idempotency-Key: req_99)
+    PayGW-&gt;&gt;IdemStore: SETNX req_99 &quot;PROCESSING&quot; EX 300
+    PayGW-&gt;&gt;Ledger: INSERT Payment State = PENDING
+    PayGW-&gt;&gt;PSP: Dispatch Charge ($50.00 to Visa/Mastercard)
+    alt PSP Confirms Success
+        PSP--&gt;&gt;PayGW: Charge Succeeded (charge_id: ch_visa_123)
+        PayGW-&gt;&gt;Ledger: Atomic TX: Debit Buyer -$50, Credit Seller +$50, Status=SUCCESS
+        PayGW-&gt;&gt;IdemStore: Update req_99 &quot;COMPLETED&quot; + Response JSON
+        PayGW--&gt;&gt;Client: 200 OK (Payment Receipt)
+    else PSP Times Out
+        PSP--&gt;&gt;PayGW: Network Timeout / No Response
+        PayGW-&gt;&gt;Ledger: Mark Payment State = UNKNOWN_PENDING
+        PayGW--&gt;&gt;Client: 504 Gateway Timeout (Advising Client to Retry with same key)
+    end
+
+    Note over Recon,PSP: Nightly Settlement (02:00 AM)
+    Recon-&gt;&gt;PSP: Download Bank Settlement CSV / MT940 File
+    Recon-&gt;&gt;Ledger: Verify Internal Ledger Rows == Bank Records
+    Recon--&gt;&gt;Recon: Flag Discrepancies for Automated Dispute/Refund
+</code></pre>
+<hr />
+<h2 id="real-numbers--financial-throughput">Real Numbers &amp; Financial Throughput</h2>
+<p>Consider an e-commerce platform processing <strong>$10 Billion Annually</strong>:</p>
+<ul>
+<li><strong>Transaction Volume</strong>:
+<ul>
+<li>Average order value: $50.</li>
+<li>Total transactions/year: $10\text{B} / 50 = 200\text{ million transactions/year}$.</li>
+<li>Daily transactions: $200\text{M} / 365 \approx 550,000\text{ transactions/day}$.</li>
+<li>Average QPS: $\approx 6.5\text{ transactions/second}$.</li>
+<li>Peak holiday QPS (Black Friday $50\times$): $\approx 325\text{ transactions/second}$.</li>
+</ul>
+</li>
+<li><strong>Data Sizing &amp; High Durability</strong>:
+<ul>
+<li>Payment systems are write-heavy and append-only (no row is ever deleted or mutated in-place).</li>
+<li>Average ledger journal entry: $\approx 1\text{ KB}$ (audit timestamps, foreign keys, amount in cents, currency).</li>
+<li>Annual ledger growth: $200\text{M} \times 1\text{ KB} \approx 200\text{ GB/year}$.</li>
+<li>Stored across globally replicated relational databases (Google Cloud Spanner / CockroachDB / PostgreSQL with synchronous multi-AZ replication).</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-double-entry-bookkeeping">1. Double-Entry Bookkeeping</h3>
+<p>In financial ledgers, account balances are <strong>never</strong> stored as simple mutable integer columns (<code>UPDATE users SET balance = balance + 50</code>).
+Instead:</p>
+<ul>
+<li>The ledger consists of immutable <strong>Journal Entries</strong>.</li>
+<li>Every transaction contains at least one <strong>Debit</strong> and at least one <strong>Credit</strong>.</li>
+<li>Core Invariant:</li>
+</ul>
+<p>$$\sum \text{Debits} - \sum \text{Credits} = 0$$</p>
+<ul>
+<li>An account balance is simply the historical sum of all its journal entries: <code>SELECT SUM(amount) FROM ledger_entries WHERE account_id = 'user_alice'</code>.</li>
+</ul>
+<h3 id="2-the-payment-state-machine">2. The Payment State Machine</h3>
+<p>Payment records transition through a strict finite state machine:
+<code>INITIALIZED</code> $\rightarrow$ <code>PENDING</code> $\rightarrow$ <code>AUTHORIZED</code> $\rightarrow$ <code>CAPTURED</code> (or <code>FAILED</code> / <code>REFUNDED</code>).</p>
+<ul>
+<li>If an external PSP times out, the payment enters <code>UNKNOWN_PENDING</code>.</li>
+<li>An asynchronous worker polls the PSP's status API or waits for incoming PSP webhooks to resolve the terminal state (<code>SUCCESS</code> or <code>FAILED</code>).</li>
+</ul>
+<h3 id="3-end-of-day-reconciliation">3. End-of-Day Reconciliation</h3>
+<p>No distributed system is immune to network glitches.
+At 02:00 AM every night:</p>
+<ol>
+<li>The Payment Service Provider (e.g., Stripe, Chase Paymentech) generates a settlement file (<code>settlement_20261123.csv</code>).</li>
+<li>The internal <strong>Reconciliation Engine</strong> reads every row in the settlement file and compares it against the internal ledger database.</li>
+<li>If an entry is missing internally (e.g., PSP charged customer but webhook dropped), the reconciliation engine generates an internal adjusting journal entry.</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Mechanism</th>
+<th style="text-align:left">Single-Entry Mutable Balances</th>
+<th style="text-align:left">Double-Entry Immutable Ledger</th>
+<th style="text-align:left">Distributed Saga Orchestration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Auditability</strong></td>
+<td style="text-align:left">Zero (no historical trace of changes)</td>
+<td style="text-align:left">Perfect (immutable cryptographic trail)</td>
+<td style="text-align:left">High (event log history)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Data Correctness</strong></td>
+<td style="text-align:left">High risk of money creation/loss</td>
+<td style="text-align:left">Mathematically verified (debit = credit)</td>
+<td style="text-align:left">Requires compensating transactions</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Throughput</strong></td>
+<td style="text-align:left">High (single row update)</td>
+<td style="text-align:left">Moderate (append-only rows)</td>
+<td style="text-align:left">High (asynchronous decoupled services)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Regulatory Compliance</strong></td>
+<td style="text-align:left">Fails financial audits (SOX/PCI)</td>
+<td style="text-align:left">100% GAAP / IFRS compliant</td>
+<td style="text-align:left">Compliant with proper ledger service</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Floating-Point Currency Calculations</strong>: Using standard IEEE 754 floats (<code>float</code> or <code>double</code> in Java/Python/JS) causes precision errors (<code>0.1 + 0.2 = 0.30000000000000004</code>). <em>Always store currency as integers in the lowest fractional unit (cents: $1000 = $10.00$) or arbitrary-precision SQL types (<code>NUMERIC(18, 4)</code>).</em></li>
+<li><strong>Mutating Balances In-Place</strong>: Executing <code>UPDATE accounts SET balance = balance - 10</code> destroys audit history. Ledgers must be append-only.</li>
+<li><strong>Trusting Webhooks Blindly Without Signature Verification</strong>: Attackers can spoof PSP webhook calls (<code>POST /stripe/webhook</code> with <code>payment_succeeded</code>). Always verify the cryptographic HMAC signature (<code>Stripe-Signature</code> header) using the secret key before processing.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating a Double-Entry Bookkeeping ledger, atomic debit/credit balance verification, payment state transitions, and idempotency protection is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://stripe.com/blog/idempotency">Stripe Engineering: How Stripe Uses Idempotency to Prevent Double Charges</a></li>
+<li><a href="https://www.moderntreasury.com/learn/double-entry-bookkeeping">Modern Treasury: What is Double-Entry Bookkeeping and Why Do Developers Need It?</a></li>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 2 - Chapter 11 (Payment System)</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-why-is-double-entry-bookkeeping-mandatory-in-payment-systems-instead-of-updating-account-balances-directly">Q1: Why is Double-Entry Bookkeeping mandatory in payment systems instead of updating account balances directly?</h3>
+<p><strong>Model Answer</strong>: Directly updating balances (<code>UPDATE accounts SET balance = balance - 50</code>) creates a single point of failure with zero auditability. If an update fails mid-way, money appears or vanishes without trace.
+<strong>Double-Entry Bookkeeping</strong> enforces that every movement of money is recorded as an immutable journal entry with matching Debits and Credits ($\sum 	ext{Debits} = \sum 	ext{Credits}$).</p>
+<ol>
+<li>It guarantees that money cannot be created or destroyed out of thin air.</li>
+<li>It provides an unalterable audit trail for financial regulators (SOX, GAAP).</li>
+<li>Any balance discrepancy can be diagnosed by checking the mathematical sum of historical entries.</li>
+</ol>
+<h3 id="q2-why-should-monetary-values-never-be-stored-or-manipulated-using-floating-point-data-types">Q2: Why should monetary values never be stored or manipulated using floating-point data types?</h3>
+<p><strong>Model Answer</strong>: IEEE 754 floating-point representations (such as <code>float</code> or <code>double</code>) cannot represent fractional base-10 decimals precisely. For example, adding $0.1 + 0.2$ in floating-point arithmetic results in $0.30000000000000004$. In financial systems handling millions of transactions, rounding errors accumulate into significant financial discrepancies.
+Instead:</p>
+<ul>
+<li>Store monetary values as <strong>Integers in the smallest currency unit</strong> (e.g., store $10.50 as <code>1050</code> cents).</li>
+<li>Use arbitrary-precision decimal representations such as <code>DECIMAL(18, 4)</code> in SQL or <code>BigDecimal</code> in Java / <code>Decimal</code> in Python.</li>
+</ul>
+<h3 id="q3-how-do-you-handle-an-external-payment-service-provider-psp-network-timeout">Q3: How do you handle an external Payment Service Provider (PSP) network timeout?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li>When a timeout occurs, the payment must transition to an indeterminate state: <code>UNKNOWN_PENDING</code> (never mark it as failed immediately, because the bank may have processed the charge!).</li>
+<li>Return an advisory status to the client with the instruction that the transaction is in-flight.</li>
+<li>An asynchronous reconciliation worker queries the PSP's status API (<code>GET /v1/charges/{idempotency_key}</code>) or awaits an incoming signed PSP Webhook to learn the definitive outcome.</li>
+<li>If confirmed successful, finalize the ledger transaction; if confirmed failed, transition to <code>FAILED</code> and release any authorization holds.</li>
+</ol>
+<h3 id="q4-how-does-end-of-day-reconciliation-work-and-what-happens-when-a-discrepancy-is-detected">Q4: How does End-of-Day Reconciliation work, and what happens when a discrepancy is detected?</h3>
+<p><strong>Model Answer</strong>:
+Every night, payment processors provide settlement batch files (CSV or MT940 format) listing every settled transaction. The <strong>Reconciliation Engine</strong>:</p>
+<ol>
+<li>Parses the settlement file and matches each record against the internal ledger database by transaction ID / idempotency key.</li>
+<li><strong>Three-Way Matching</strong>: Compares (a) Client Purchase Orders, (b) Internal Ledger Records, and (c) Bank Settlement Records.</li>
+<li>If a discrepancy is found (e.g., customer was charged by Visa, but internal server crashed before recording the order), the system flags the transaction for automatic remediation (triggering order fulfillment or issuing an automatic refund).</li>
+</ol>
+<h3 id="q5-how-do-you-prevent-replay-attacks-and-fraudulent-webhooks-from-external-payment-processors">Q5: How do you prevent replay attacks and fraudulent webhooks from external payment processors?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li><strong>HMAC Cryptographic Signatures</strong>: PSPs (Stripe/PayPal) compute an HMAC-SHA256 signature of the webhook payload concatenated with a timestamp using a shared secret key, sent in the header (<code>Stripe-Signature</code>). The server computes the hash independently and rejects mismatched requests.</li>
+<li><strong>Timestamp Tolerance</strong>: Verify that the webhook timestamp is within a 5-minute tolerance window to prevent replay attacks where an attacker captures and re-sends valid historical payloads.</li>
+<li><strong>Idempotent Webhook Handlers</strong>: Process webhook IDs inside an atomic idempotency key check so duplicate deliveries are ignored safely.</li>
+</ol>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. What is the fundamental mathematical equation of Double-Entry Bookkeeping?</b></summary>
+A) Assets = Liabilities<br/>
+B) Sum of Debits - Sum of Credits = 0<br/>
+C) Revenue = Profit<br/>
+D) Cash = Debt<br/><br/>
+<b>Answer: B</b>. Every financial journal entry must balance exactly to zero: total debits must equal total credits.
+</details>
+<details>
+<summary><b>2. Why must currencies be stored as integers or fixed-point decimals?</b></summary>
+A) Because computers cannot store decimal points.<br/>
+B) Because floating-point data types suffer from rounding inaccuracies that accumulate into financial errors.<br/>
+C) Because banks only accept whole dollar amounts.<br/>
+D) Because integers encrypt the balance.<br/><br/>
+<b>Answer: B</b>. Binary floating-point cannot accurately represent decimal fractions like 0.1, creating unacceptable rounding discrepancies.
+</details>
+<details>
+<summary><b>3. What should a payment system do when an external card processor times out?</b></summary>
+A) Mark the payment as FAILED and refund immediately.<br/>
+B) Mark the state as PENDING and resolve the terminal outcome via webhooks or polling.<br/>
+C) Delete the customer's account.<br/>
+D) Retry 1,000 times in a tight while loop.<br/><br/>
+<b>Answer: B</b>. The charge may have succeeded at the bank. Moving to PENDING allows safe asynchronous verification.
+</details>
+<details>
+<summary><b>4. How does an API Idempotency Key prevent double charging?</b></summary>
+A) By hashing the customer's credit card number.<br/>
+B) By using an atomic key-value check to recognize repeated submissions and return the original cached response.<br/>
+C) By disabling the submit button.<br/>
+D) By shutting down the API gateway.<br/><br/>
+<b>Answer: B</b>. The atomic key check detects repeat submissions and safely returns the prior result without re-executing charges.
+</details>
+<details>
+<summary><b>5. What is the purpose of nightly reconciliation in payment engineering?</b></summary>
+A) To back up SQL databases to tape.<br/>
+B) To compare internal ledger transactions against bank settlement files and identify any discrepancies.<br/>
+C) To calculate employee bonuses.<br/>
+D) To wipe out transaction history.<br/><br/>
+<b>Answer: B</b>. Nightly reconciliation validates internal data against official banking records to ensure absolute accounting fidelity.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

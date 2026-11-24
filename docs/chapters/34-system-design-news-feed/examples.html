@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design News Feed">
+  <title>System Design News Feed | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-news-feed-systems">Real-World Production Implementations: News Feed Systems</h1>
+<p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Twitter/X</strong>, and <strong>Meta (Facebook/Instagram)</strong> architect, optimize, and scale real-time feed pipelines.</p>
+<hr />
+<h2 id="1-google-the-youtube-home-feed--google-discover-architecture">1. Google: The YouTube Home Feed &amp; Google Discover Architecture</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google serves personalized content feeds to billions of users daily across the <strong>YouTube Home Feed</strong> and <strong>Google Discover</strong>. Unlike simple chronological social timelines, Google's feed architecture is heavily driven by real-time neural network candidate generation and ranking.</p>
+<pre><code class="language-mermaid">flowchart LR
+    User[&quot;Google / YouTube User&quot;] --&gt; Ingress[&quot;Edge Gateway (GFE)&quot;]
+    Ingress --&gt; FeedEngine[&quot;Feed Orchestration Engine&quot;]
+    
+    subgraph CandidateGeneration[&quot;Stage 1: Candidate Generation (Retrieval)&quot;]
+        VideoCorpus[(&quot;Billions of Videos / Articles&quot;)] --&gt; TwoTower[&quot;Two-Tower Deep Neural Network&quot;]
+        TwoTower --&gt; Candidates[&quot;Top 1,000 Candidates&quot;]
+    end
+    
+    subgraph HeavyRanking[&quot;Stage 2: Heavy Neural Ranking&quot;]
+        Candidates --&gt; FeatureStore[(&quot;Bigtable Real-Time Features&quot;)]
+        FeatureStore --&gt; MultiTaskDNN[&quot;Multi-Task DNN (Watch Time &amp; Engagement)&quot;]
+        MultiTaskDNN --&gt; RankedItems[&quot;Ranked Candidate List&quot;]
+    end
+    
+    subgraph ReRanking[&quot;Stage 3: Diversity &amp; Business Logic&quot;]
+        RankedItems --&gt; Dedup[&quot;Deduplicate &amp; Apply Freshness Filter&quot;]
+    end
+    
+    FeedEngine --&gt; CandidateGeneration
+    CandidateGeneration --&gt; HeavyRanking
+    HeavyRanking --&gt; ReRanking
+    ReRanking --&gt; User
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Two-Tower Neural Candidate Generation</strong>:
+<ul>
+<li>Compresses billions of candidate videos/articles into high-dimensional vector embeddings.</li>
+<li>The &quot;User Tower&quot; encodes user history, and the &quot;Item Tower&quot; encodes content features.</li>
+<li>Using Approximate Nearest Neighbor (ANN) search via <strong>ScaNN</strong> (Scalable Nearest Neighbors), Google retrieves the top 1,000 candidates in $&lt; 10\text{ ms}$.</li>
+</ul>
+</li>
+<li><strong>Freshness &amp; Exploration vs Exploitation</strong>:
+<ul>
+<li>Google balances high-relevance recommendations with fresh breaking news and content exploration, preventing echo chambers.</li>
+</ul>
+</li>
+<li><strong>Edge Caching of Short-Term Feeds</strong>:
+<ul>
+<li>Feed candidate sets are cached in-memory in regional datacenters so reloads within 60 seconds return consistent feeds with low latency.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-netflix-the-personalized-homepage--dynamic-row-generation">2. Netflix: The Personalized Homepage &amp; Dynamic Row Generation</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>When a subscriber opens Netflix, the homepage is an intelligent feed composed of personalized horizontal rows (<em>&quot;Continue Watching&quot;</em>, <em>&quot;Top 10 in your Country&quot;</em>, <em>&quot;Trending Now&quot;</em>, <em>&quot;Because you watched Stranger Things&quot;</em>).</p>
+<pre><code class="language-mermaid">flowchart TD
+    Subscriber[&quot;Subscriber App (Smart TV / Mobile)&quot;] --&gt; Zuul[&quot;Netflix Zuul Gateway&quot;]
+    Zuul --&gt; HomeFeedSvc[&quot;Homepage Feed Orchestration Service&quot;]
+    
+    HomeFeedSvc --&gt; VideoDataSvc[&quot;Video Metadata Service&quot;]
+    HomeFeedSvc --&gt; AlgoSvc[&quot;Personalization Engine (Bandits &amp; Matrix Factorization)&quot;]
+    
+    AlgoSvc --&gt; RowGen[&quot;Row Candidate Generator&quot;]
+    RowGen --&gt; ArtworkEngine[&quot;Dynamic Box-Art Personalization Engine&quot;]
+    ArtworkEngine --&gt; EVCache[(&quot;EVCache (Pre-Computed Feed Store)&quot;)]
+    
+    EVCache --&gt; HomeFeedSvc
+    HomeFeedSvc --&gt; Subscriber
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Two-Tier Ranking (Row &amp; Title Ranking)</strong>:
+<ul>
+<li><strong>Page Generation</strong>: Selects the optimal set of rows for the subscriber based on their viewing history and time of day.</li>
+<li><strong>Row Ranking</strong>: Ranks the titles inside each row from left to right.</li>
+</ul>
+</li>
+<li><strong>Dynamic Artwork Personalization</strong>:
+<ul>
+<li>Netflix dynamically chooses which poster/thumbnail to show for each title in the feed based on the subscriber's taste (e.g., highlighting an action shot for action fans, or romance for romance lovers).</li>
+</ul>
+</li>
+<li><strong>EVCache Feed Caching</strong>:
+<ul>
+<li>Because real-time matrix factorization across tens of thousands of titles is compute-intensive, Netflix pre-computes subscriber feed rows offline during off-peak hours and stores them in <strong>EVCache</strong> (distributed Memcached). Live updates only patch dynamic rows like &quot;Continue Watching&quot;.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="3-twitter--x-timelines-at-scale--the-snowflake-id-pipeline">3. Twitter / X: Timelines at Scale &amp; The Snowflake ID Pipeline</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Twitter was the earliest pioneer of the Fan-out on Write pipeline. Handling over 500 million tweets per day with a median fanout of hundreds of followers, Twitter developed dedicated services for timeline generation (<strong>Timeline Service</strong> and <strong>Fanout Service</strong>).</p>
+<pre><code class="language-mermaid">flowchart TD
+    User[&quot;Twitter User&quot;] --&gt;|&quot;POST /tweet&quot;| Tweeter[&quot;Tweeter Ingress Service&quot;]
+    Tweeter --&gt;|&quot;Write Tweet&quot;| Manhattan[(&quot;Manhattan / MySQL Post DB&quot;)]
+    Tweeter --&gt;|&quot;Publish Event&quot;| Kafka[&quot;Kafka Event Stream&quot;]
+    
+    Kafka --&gt; FanoutWorker[&quot;Fanout Worker Daemon&quot;]
+    FanoutWorker --&gt; Graph[&quot;Social Graph Service (FlockDB)&quot;]
+    
+    Graph --&gt; IsCeleb{&quot;Follower Count &gt; 20,000?&quot;}
+    IsCeleb --&gt;|&quot;No (Normal User)&quot;| RedisClusters[(&quot;Redis Timeline Cache (Earlybird/Home)&quot;)]
+    IsCeleb --&gt;|&quot;Yes (Celebrity)&quot;| CelebStore[(&quot;Celebrity Outbox Cache&quot;)]
+    
+    Reader[&quot;User App&quot;] --&gt;|&quot;GET /timeline/home&quot;| HomeTimelineSvc[&quot;Home Timeline Service&quot;]
+    HomeTimelineSvc --&gt; RedisClusters
+    HomeTimelineSvc --&gt; CelebStore
+    HomeTimelineSvc --&gt; Mixer[&quot;Timeline Mixer (K-Way Merge &amp; Ranking)&quot;]
+    Mixer --&gt; ReturnTimeline[&quot;Hydrated Feed (IDs + Cache)&quot;]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>The Earlybird In-Memory Search &amp; Feed Cache</strong>:
+<ul>
+<li>Twitter stores home timelines in Redis clusters as sorted sets of 64-bit Snowflake tweet IDs.</li>
+<li>For regular users, writing a tweet fans out asynchronously to thousands of followers within 2-5 seconds.</li>
+</ul>
+</li>
+<li><strong>The Celebrity (Heavy Hitter) Hybrid Fanout</strong>:
+<ul>
+<li>Accounts with $&gt; 20,000$ followers bypass the fanout queue.</li>
+<li>When a user loads their timeline, the <strong>Timeline Mixer</strong> queries the user's personal timeline cache and dynamically fetches tweets from followed celebrities, performing an in-memory merge sort.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="4-meta-facebook--instagram-tao-graph--multi-stage-ml-ranking">4. Meta (Facebook / Instagram): TAO Graph &amp; Multi-Stage ML Ranking</h2>
+<ul>
+<li><strong>TAO (The Associations and Objects Store)</strong>: Meta's globally distributed graph data store built on MySQL and Memcached, serving billions of read queries per second with sub-5ms latency.</li>
+<li><strong>DLRM (Deep Learning Recommendation Model)</strong>: Evaluates hundreds of engagement signals ($P(\text{click}), P(\text{like}), P(\text{comment}), P(\text{share})$) to deliver a personalized engagement-maximizing news feed.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

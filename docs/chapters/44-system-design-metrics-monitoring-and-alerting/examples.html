@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Metrics Monitoring And Alerting">
+  <title>System Design Metrics Monitoring And Alerting | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="metrics-monitoring-in-production">Metrics monitoring in production</h1>
+<h2 id="google--monarch">Google · Monarch</h2>
+<p>Google's 2020 paper describes Monarch as a multi-tenant, in-memory time-series database. Its regional architecture keeps collection close to sources, and a global query plane integrates results. The paper reports ingesting terabytes of time-series data per second at the time of publication. <a href="https://research.google/pubs/monarch-googles-planet-scale-in-memory-time-series-database/">Google's Monarch paper</a></p>
+<p>Which parts of a query can execute near regional data? Counts can be added across regions. A percentile needs mergeable data such as histogram buckets with compatible boundaries.</p>
+<h2 id="netflix--atlas">Netflix · Atlas</h2>
+<p>Netflix introduced Atlas publicly in December 2014. The company reported sustaining more than <strong>1.2 billion distinct time series</strong> during North American regional failover exercises. That number counts series. The same post describes the separate publication rate in data points per minute. <a href="https://netflixtechblog.com/introducing-atlas-netflixs-primary-telemetry-platform-bd31f4d8ed9a">Netflix's Atlas engineering write-up</a></p>
+<p>Atlas identifies metrics with sets of key-value pairs. An operator can group requests by region or filter to a particular application. Its public project describes the storage layer as an in-memory dimensional time-series database. <a href="https://github.com/Netflix/atlas">Netflix Atlas source</a></p>
+<h2 id="worked-example--series-count-versus-sample-rate">Worked example · Series count versus sample rate</h2>
+<p>Suppose 100 services run in three regions, expose ten metrics each, and emit one sample per series every ten seconds. With one series per service, region, and metric, that is 3,000 series and 300 samples per second on average. Adding a dimension with 20 values across every combination multiplies both figures by 20. Measure actual label combinations before provisioning.</p>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

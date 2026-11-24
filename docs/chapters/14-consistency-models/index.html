@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Consistency Models: From Linearizable to Eventual">
+  <title>Consistency Models: From Linearizable to Eventual | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="14---consistency-models-from-linearizable-to-eventual">14 - Consistency Models: From Linearizable to Eventual</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> In a distributed database, &quot;consistency&quot; does not mean a binary toggle between &quot;right&quot; and &quot;wrong.&quot; Instead, it is a formal contract between the storage engine and client applications governing the order, recency, and visibility of concurrent writes across replicas. While <strong>Linearizability</strong> guarantees the illusion of a single global register at the cost of high cross-region latency, weaker models like <strong>Causal Consistency</strong>, <strong>Read-Your-Own-Writes</strong>, and <strong>Eventual Consistency</strong> unlock massive throughput and fault tolerance by permitting controlled, predictable read anomalies.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../14-consistency-models/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network latency, propagation delays, and packet reordering.</li>
+<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Asynchronous replication lag, leader-follower topology, and replication streams.</li>
+<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Why network partitions force a choice between availability and linearizability.</li>
+<li><strong>Data Structures</strong>: Directed Acyclic Graphs (DAGs), logical clocks, and vector clocks.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine you post a funny joke in a group chat with friends across the world:</p>
+<ul>
+<li><strong>Linearizable (Strict)</strong>: A magical referee freezes time globally. The instant you hit Send, everyone's phone updates simultaneously. Nobody on Earth can ever see the world in an older state.</li>
+<li><strong>Causal Consistency</strong>: Your friend replies: <em>&quot;That is hilarious!&quot;</em> Causal consistency guarantees that no one will ever see <em>&quot;That is hilarious!&quot;</em> <strong>before</strong> they see your joke. Cause always precedes effect.</li>
+<li><strong>Read-Your-Own-Writes</strong>: You hit Send, and you immediately see your joke appear on your own screen. Your friend in Australia might not see it for another 2 seconds, but you never think your post was lost.</li>
+<li><strong>Eventual Consistency (Weak)</strong>: There is no referee and no ordering guarantee. You post the joke, refresh your screen, and your joke disappears! You refresh again, and it comes back. Eventually (after a few seconds), everyone sees the same final state.</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Consistency Model</th>
+<th style="text-align:left">Real-World Communication Analogy</th>
+<th style="text-align:left">Guarantees &amp; Anomalies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Linearizable</strong></td>
+<td style="text-align:left">A single physical whiteboard in a small meeting room</td>
+<td style="text-align:left">Every person looking at the board sees every eraser mark in real-time. Zero anomalies.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Sequential</strong></td>
+<td style="text-align:left">A shared group text thread where messages have serial numbers</td>
+<td style="text-align:left">Everyone agrees on the exact order of messages, even if delivery was delayed by 10 minutes.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Causal</strong></td>
+<td style="text-align:left">Reading an email chain with nested quotes</td>
+<td style="text-align:left">You can never read a reply before the original question that provoked it. Unrelated emails may interleave.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read-Your-Own-Writes</strong></td>
+<td style="text-align:left">Writing a reminder in your personal diary</td>
+<td style="text-align:left">You can always read what you just wrote, even if other people have not received your newsletter yet.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Monotonic Reads</strong></td>
+<td style="text-align:left">Reading pages in a printed book</td>
+<td style="text-align:left">You never flip backwards to read page 10 after you have already read page 20 (<strong>no time travel</strong>).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Eventual Consistency</strong></td>
+<td style="text-align:left">Neighborhood gossip spread by word of mouth</td>
+<td style="text-align:left">Eventually everyone hears the news, but rumors spread in random order and temporary confusion is common.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="the-cost-of-strict-linearizability">The Cost of Strict Linearizability</h3>
+<p>To make a distributed system linearizable across multiple data centers (e.g., Virginia, Ireland, Tokyo):</p>
+<ul>
+<li>Every single read and write must coordinate across the globe (via Paxos, Raft, or two-phase locking).</li>
+<li>Speed-of-light fiber latency imposes a mandatory penalty of $150\text{–}250\text{ ms}$ on every operation.</li>
+<li>If an undersea fiber cable snaps (network partition), the system must reject requests to prevent split-brain.</li>
+</ul>
+<h3 id="the-chaos-of-pure-eventual-consistency">The Chaos of Pure Eventual Consistency</h3>
+<p>To avoid this latency, systems like early Cassandra adopted pure eventual consistency. However, without safeguards, applications suffer severe user-facing anomalies:</p>
+<ol>
+<li><strong>The Disappearing Comment</strong>: User submits a comment, the page refreshes, hitting a lagging replica, and the comment vanishes! The user submits it again, creating annoying duplicates.</li>
+<li><strong>Backwards Time Travel</strong>: User refreshes their social feed: they see 10 new posts. They refresh again: 8 posts disappear because the load balancer routed them to an older replica!</li>
+<li><strong>Causality Inversion</strong>: In an e-commerce review section, the seller's apology <em>&quot;We apologize for the broken widget&quot;</em> appears <strong>above</strong> the customer's complaint <em>&quot;My widget arrived broken!&quot;</em>.</li>
+</ol>
+<p>Understanding the <strong>consistency spectrum</strong> allows engineers to pick the exact right model for each use case—enforcing strict consistency only for money, while using causal or session consistency for social, chat, and feeds.</p>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-consistency-spectrum-animation">High-Resolution Consistency Spectrum Animation</h3>
+<p>Below is an animated trace comparing the four major consistency models, their latencies, and their allowed anomalies:</p>
+<p><img src="./assets/consistency_models.gif" alt="Consistency Models Spectrum" /></p>
+<hr />
+<h3 id="consistency-hierarchy--anomaly-containment">Consistency Hierarchy &amp; Anomaly Containment</h3>
+<pre><code class="language-mermaid">graph TD
+    subgraph Strong[&quot;Strong Models (High Latency, Zero Stale Reads)&quot;]
+        L[&quot;🔒 Linearizable&lt;br/&gt;(Real-Time Global Clock Order)&quot;]
+        S[&quot;📜 Sequential&lt;br/&gt;(Global Order, Not Tied to Real Time)&quot;]
+        L --&gt; S
+    end
+
+    subgraph Intermediate[&quot;Intermediate Models (Client-Centric &amp; Causal)&quot;]
+        C[&quot;⛓️ Causal Consistency&lt;br/&gt;(Preserves Cause &amp; Effect Relationships)&quot;]
+        S --&gt; C
+        
+        RYOW[&quot;👤 Read-Your-Own-Writes&lt;br/&gt;(Client always sees own updates)&quot;]
+        MR[&quot;📖 Monotonic Reads&lt;br/&gt;(No reading backwards in time)&quot;]
+        MW[&quot;✍️ Monotonic Writes&lt;br/&gt;(Client writes applied in order)&quot;]
+        
+        C -.-&gt; RYOW
+        C -.-&gt; MR
+        C -.-&gt; MW
+    end
+
+    subgraph Weak[&quot;Weak Models (Ultra-Low Latency, High Availability)&quot;]
+        E[&quot;⚡ Eventual Consistency&lt;br/&gt;(Replicas converge if writes cease)&quot;]
+        RYOW --&gt; E
+        MR --&gt; E
+        MW --&gt; E
+    end
+
+    style L fill:#161b22,stroke:#f85149,stroke-width:2px;
+    style S fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style C fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style RYOW fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style MR fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style MW fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style E fill:#161b22,stroke:#3fb950,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's quantify the trade-offs in throughput, latency, and operational cost between Linearizable and Eventual architectures:</p>
+<h3 id="benchmark-3-region-deployment-us-east-eu-west-ap-south">Benchmark: 3-Region Deployment (US-East, EU-West, AP-South)</h3>
+<ul>
+<li>Minimum physical WAN round-trip time (RTT):
+<ul>
+<li>US-East $\leftrightarrow$ EU-West: $75\text{ ms}$</li>
+<li>US-East $\leftrightarrow$ AP-South: $190\text{ ms}$</li>
+</ul>
+</li>
+</ul>
+<pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│ Model 1: Linearizable (Raft / 2-Phase Commit across Regions)          │
+├────────────────────────────────────────────────────────────────────────┤
+│ Write: Must replicate to majority quorum (US + EU = 75ms WAN delay)   │
+│ Read:  Must contact leader or execute read lease (75ms WAN delay)      │
+│ Latency: ~85 ms p50, ~220 ms p99                                       │
+│ Throughput Ceiling: ~1,500 writes/sec per partition                    │
+│ Availability during trans-Atlantic cable cut: Partitioned region HALTS │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ Model 2: Eventual Consistency with Session Tokens (RYOW + MR)          │
+├────────────────────────────────────────────────────────────────────────┤
+│ Write: Commits to local datacenter in 2 ms; async replicates to WAN    │
+│ Read:  Queries local replica with session token. Latency: 0.8 ms!      │
+│ Latency: ~1.2 ms p50, ~4 ms p99 (60x faster than Linearizable!)       │
+│ Throughput Ceiling: &gt;150,000 writes/sec per region                     │
+│ Availability during trans-Atlantic cable cut: 100% (Zero downtime)    │
+└────────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-the-core-consistency-hierarchy">1. The Core Consistency Hierarchy</h3>
+<h4 id="1-linearizability-external-consistency">1. Linearizability (External Consistency)</h4>
+<ul>
+<li><strong>Definition</strong>: If operation B begins after operation A successfully completes in real-world wall-clock time, operation B <strong>must</strong> observe the state left by operation A (or a newer state).</li>
+<li><strong>Implementation</strong>: Requires distributed consensus (Paxos or Raft) or coordinated hardware clocks (Google Spanner's TrueTime). Reads must either query the consensus leader or pass through a read-index barrier to avoid serving stale data from a partitioned former leader.</li>
+</ul>
+<h4 id="2-sequential-consistency-leslie-lamport-1979">2. Sequential Consistency (Leslie Lamport, 1979)</h4>
+<ul>
+<li><strong>Definition</strong>: All operations appear to take effect in some single, global sequential order that is visible and agreed upon by all nodes, and operations from each individual process appear in that process's program order.</li>
+<li><strong>Difference from Linearizability</strong>: Sequential consistency does not tie ordering to physical wall-clock time. If write $W_1$ happens at 12:00:00 and write $W_2$ happens at 12:00:05, sequential consistency allows the cluster to agree that $W_2$ occurred before $W_1$, provided <strong>all</strong> nodes see $W_2$ before $W_1$.</li>
+</ul>
+<h4 id="3-causal-consistency">3. Causal Consistency</h4>
+<ul>
+<li><strong>Definition</strong>: Operations that are causally related must be seen by every node in the same order. Operations that are concurrent (unrelated) can be seen in different orders by different nodes.</li>
+<li><strong>Tracking Causality</strong>: Implemented using <strong>Vector Clocks</strong> or <strong>Lamport Timestamps</strong>. Each write includes metadata: <code>[parent_event_id: hash]</code>. A replica will buffer a write until all causal parent dependencies have been received and applied.</li>
+</ul>
+<hr />
+<h3 id="2-client-centric-session-guarantees">2. Client-Centric Session Guarantees</h3>
+<p>In user-facing web applications, full linearizability is rarely required. Users only care about their own interactions:</p>
+<ol>
+<li><strong>Read-Your-Own-Writes (RYOW)</strong>:
+<ul>
+<li>A user who updates their username will always see the updated username on subsequent page loads.</li>
+<li><em>Implementation</em>: After a write, the client receives a version token (<code>X-Version: 1042</code>). Subsequent reads pass this token. If the assigned read replica has only synced up to version 1040, the load balancer either waits or reroutes the read to the primary database.</li>
+</ul>
+</li>
+<li><strong>Monotonic Reads</strong>:
+<ul>
+<li>If a client reads version $V$, they will never subsequently read any version $V' &lt; V$ (<strong>no backwards time travel</strong>).</li>
+<li><em>Implementation</em>: Sticky sessions pin a client to a specific replica, or the client tracks <code>last_seen_timestamp</code> in a cookie.</li>
+</ul>
+</li>
+<li><strong>Monotonic Writes</strong>:
+<ul>
+<li>A user's writes are applied strictly in the order they were submitted.</li>
+<li><em>Implementation</em>: Hash client requests by <code>user_id</code> to route all writes from that user to the same serialization queue or database partition.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Model</th>
+<th style="text-align:left">Read Latency</th>
+<th style="text-align:left">Write Latency</th>
+<th style="text-align:left">Tolerates Network Split?</th>
+<th style="text-align:left">Common Database Systems</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Linearizable</strong></td>
+<td style="text-align:left">High (50–200 ms)</td>
+<td style="text-align:left">High (50–200 ms)</td>
+<td style="text-align:left">❌ No (sacrifices availability)</td>
+<td style="text-align:left">Google Spanner, CockroachDB, etcd, ZooKeeper</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Sequential</strong></td>
+<td style="text-align:left">Medium (20–50 ms)</td>
+<td style="text-align:left">Medium (20–50 ms)</td>
+<td style="text-align:left">❌ No</td>
+<td style="text-align:left">Classic multi-core CPU cache coherency</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Causal</strong></td>
+<td style="text-align:left">Low (5–15 ms)</td>
+<td style="text-align:left">Low (5–15 ms)</td>
+<td style="text-align:left">✅ Yes</td>
+<td style="text-align:left">MongoDB (causal sessions), CouchDB</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Session (RYOW)</strong></td>
+<td style="text-align:left">Ultra-Low (&lt;2 ms)</td>
+<td style="text-align:left">Low (2–5 ms)</td>
+<td style="text-align:left">✅ Yes (falls back to local)</td>
+<td style="text-align:left">DynamoDB, Facebook TAO, Redis + Postgres Read Replicas</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Eventual</strong></td>
+<td style="text-align:left">Lowest (&lt;1 ms)</td>
+<td style="text-align:left">Lowest (&lt;1 ms)</td>
+<td style="text-align:left">✅ Yes</td>
+<td style="text-align:left">DNS, Cassandra, AWS S3 (pre-2020)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Assuming Read Replicas are Linearizable</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Architecting an e-commerce checkout flow where an order is written to Postgres Primary, and the next line of backend code queries <code>Postgres-Replica-1</code> to calculate order taxes.</li>
+<li><em>Reality</em>: Replication is asynchronous. With a 20 ms replication lag, <code>Postgres-Replica-1</code> throws <code>OrderNotFoundException</code>!</li>
+<li><em>Fix</em>: Route immediate read-after-write queries to the Primary database, or use session tokens (RYOW).</li>
+</ul>
+</li>
+<li>
+<p><strong>Using Wall-Clock NTP Timestamps for Causal Order</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Storing messages in a group chat sorted by <code>created_at = System.currentTimeMillis()</code>.</li>
+<li><em>Reality</em>: Server clock skew will cause a reply generated at 12:00:00.010 on a slow clock to be timestamped <em>before</em> the message it replies to at 12:00:00.050 on a fast clock.</li>
+<li><em>Fix</em>: Use Lamport Timestamps or message sequence numbers assigned by a single partition leader.</li>
+</ul>
+</li>
+<li>
+<p><strong>Over-Engineering with Distributed Locks</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Using heavy distributed locks (etcd/Consul) on every single user profile update to force strict linearizability.</li>
+<li><em>Reality</em>: Destroys system throughput and introduces catastrophic single points of lock contention. 99% of profile updates only require Read-Your-Own-Writes.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/14-consistency-models/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>A multi-replica distributed cluster demonstrating replication lag.</li>
+<li>An <strong>Eventual Consistency Time-Travel Anomaly</strong> where a user observes an updated status and then reads stale data.</li>
+<li>A <strong>Monotonic Read Session Guarantee</strong> using version tokens to eliminate backward time travel.</li>
+<li>A <strong>Causal Consistency Chat Engine</strong> where causally linked answers are buffered until their parent questions arrive.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Facebook TAO (The Associations and Objects graph)</strong>: Serves billions of social graph queries using Master-Slave MySQL with local edge memcached caching. Implements <strong>Read-Your-Own-Writes</strong> session consistency so users immediately see their own likes, comments, and posts, while allowing global viewers to converge eventually.</li>
+<li><strong>Git Version Control</strong>: Git's commit tree is a pure implementation of <strong>Causal Consistency</strong>. Every commit explicitly hashes its parent commit ID. You can never merge a child commit without having its parent history.</li>
+<li><strong>Amazon S3</strong>: Originally designed with eventual consistency (overwriting an existing object could return stale bytes for a few seconds). In December 2020, AWS upgraded S3 to <strong>Strong Read-After-Write Consistency</strong> (Linearizability) with zero performance penalty.</li>
+<li><strong>MongoDB Causal Sessions</strong>: Allows clients to initiate <code>startSession(causalConsistency: true)</code>, tracking operation cluster times to guarantee monotonic reads and causal ordering across sharded replica sets.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-the-precise-difference-between-linearizability-and-serializability">Q1: &quot;What is the precise difference between Linearizability and Serializability?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Disqualifying candidates who confuse database transaction isolation with distributed systems consistency.</p>
+<p><strong>Model Answer</strong>:
+&quot;These two terms address completely different dimensions of systems engineering:</p>
+<ul>
+<li><strong>Serializability</strong> is a <strong>transaction isolation property</strong> (multi-operation, multi-key). It guarantees that executing concurrent transactions produces the same outcome as if they ran in some serial, one-by-one order. However, it places <strong>no constraints on real-time wall-clock ordering</strong>. A serializable system can legally process a transaction according to a valid order from 2 hours ago.</li>
+<li><strong>Linearizability</strong> is a <strong>recency guarantee on a single register/key</strong> (single operation). It guarantees that operations take effect instantaneously at a discrete point in real-world time between their invocation and response. If write $W$ completes at 12:00:00, any read starting after 12:00:00 must observe $W$.</li>
+<li>When both properties are combined, the system achieves <strong>Strict Serializability</strong> (or External Consistency), which is the holy grail of distributed databases (e.g., Google Spanner).&quot;</li>
+</ul>
+<hr />
+<h3 id="q2-how-would-you-design-a-social-network-feed-so-that-users-never-experience-the-disappearing-post-anomaly">Q2: &quot;How would you design a social network feed so that users never experience the 'disappearing post' anomaly?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing practical application of client-centric session guarantees.</p>
+<p><strong>Model Answer</strong>:
+&quot;The 'disappearing post' anomaly happens in master-slave architectures when a write goes to the Primary database, but subsequent feed read requests are load-balanced to a read replica that has not yet caught up with replication lag.</p>
+<p>To solve this without crippling throughput:</p>
+<ol>
+<li><strong>Read-Your-Own-Writes Session Tracking</strong>: When the user posts, the backend returns the transaction commit timestamp or Log Sequence Number (LSN) in the response header (e.g., <code>Set-Cookie: user_last_write_lsn=948201</code>).</li>
+<li><strong>Replication Guard on Read</strong>: When the user fetches their feed, the API gateway inspects the cookie:
+<ul>
+<li>If the assigned read replica's current LSN is $\ge 948201$, serve from the replica.</li>
+<li>If the replica is lagging, wait up to a small timeout (e.g., 50 ms) for replication to catch up, or route that specific user's read directly to the Primary database.</li>
+</ul>
+</li>
+<li><strong>Optimistic Local UI Rendering</strong>: Render the post immediately in the client's mobile/web app state cache before the network round-trip completes, masking any short replication delay.&quot;</li>
+</ol>
+<hr />
+<h3 id="q3-what-is-causal-consistency-and-why-is-it-considered-the-strongest-consistency-model-achievable-under-network-partitions">Q3: &quot;What is Causal Consistency, and why is it considered the strongest consistency model achievable under network partitions?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing deep understanding of the CAP boundaries (Mahajan et al., 2011).</p>
+<p><strong>Model Answer</strong>:
+&quot;Causal Consistency ensures that any operations causally related by 'happens-before' relationships are observed in the same order by all nodes in the cluster. Concurrent operations with no causal relationship can be observed in different orders.</p>
+<p>In 2011, distributed systems researchers (Mahajan, Alvisi, Dahlin) formally proved that <strong>Causal Consistency with Convergent Conflict Handling (Causal+) is the mathematically strongest consistency model achievable in a fully available, partition-tolerant (AP) system</strong>.
+Unlike Linearizability, which requires consensus across partitioned nodes (causing deadlocks during network splits), causal dependencies can be tracked entirely via local vector clocks and propagated asynchronously. Nodes can remain 100% available for writes during partitions while guaranteeing that causes always precede effects.&quot;</p>
+<hr />
+<h3 id="q4-what-is-monotonic-reads-and-how-can-an-architecture-violate-it-even-with-a-single-master-database">Q4: &quot;What is Monotonic Reads, and how can an architecture violate it even with a single master database?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing edge cases in read-replica pooling.</p>
+<p><strong>Model Answer</strong>:
+&quot;<strong>Monotonic Reads</strong> guarantees that if a client reads a state $V_1$, they will never subsequently observe an earlier state $V_0$.</p>
+<p>Even with a single master database, an architecture easily violates monotonic reads if it uses <strong>multiple read replicas</strong>:</p>
+<ol>
+<li>User reads their notifications: request hits Replica A, which has replication lag of 2 ms (shows 5 notifications).</li>
+<li>User refreshes the page: request hits Replica B, which is suffering from network congestion and has replication lag of 800 ms (shows only 2 notifications).
+From the user's perspective, time moved backwards—3 notifications vanished!
+To enforce monotonic reads, we use <strong>sticky replica routing</strong> (hashing <code>user_id</code> to always hit the same replica) or client-side vector timestamps where replicas must reject or buffer reads until they catch up to the client's last observed version.&quot;</li>
+</ol>
+<hr />
+<h3 id="q5-how-do-vector-clocks-work-to-detect-concurrent-conflicting-writes">Q5: &quot;How do Vector Clocks work to detect concurrent conflicting writes?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking algorithmic mechanics behind distributed versioning.</p>
+<p><strong>Model Answer</strong>:
+&quot;A Vector Clock is an array of logical clock counters, one for each node in the cluster: $V = [N_1: c_1, N_2: c_2, \dots, N_k: c_k]$.</p>
+<ul>
+<li>When node $i$ processes a write, it increments its own counter: $V[i] = V[i] + 1$.</li>
+<li>When nodes synchronize, they compare vector clocks:
+<ul>
+<li>Event $A$ causally <strong>preceded</strong> Event $B$ ($A &lt; B$) if every element in $V_A \le V_B$ and at least one element is strictly smaller.</li>
+<li>If neither $V_A \le V_B$ nor $V_B \le V_A$ holds, the events are <strong>concurrent</strong>.
+When concurrency is detected, the database knows that two independent writes occurred without knowledge of each other (e.g. during a network split). It preserves both versions as 'siblings' and delegates conflict resolution to the application (or uses CRDTs) rather than silently overwriting data.&quot;</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. If a database is Linearizable, is it also Causally Consistent?</b></summary>
+<br>
+<b>Yes.</b> Linearizability is strictly stronger than Causal Consistency. In fact, Linearizability is the strongest recency guarantee possible: because it preserves real-world wall-clock order, it inherently preserves all causal relationships.
+</details>
+<details>
+<summary><b>2. What user-facing anomaly occurs when Monotonic Reads is violated?</b></summary>
+<br>
+<b>Time travel back to the past.</b> A user observes new data (e.g., a refreshed balance of $150), and on the very next refresh observes stale old data (a balance of $100) because the load balancer routed the second request to a replica lagging behind the first one.
+</details>
+<details>
+<summary><b>3. Why can Causal Consistency remain available during a network partition, while Linearizability cannot?</b></summary>
+<br>
+Because Causal Consistency does not require nodes to agree on a single global wall-clock timeline. Each partition can continue accepting writes, tracking causality locally using vector clocks. In contrast, Linearizability requires cross-partition quorum consensus to guarantee external recency, which is impossible across severed network links.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 9: Consistency and Consensus (Linearizability vs Eventual Consistency)</em>.</li>
+<li><strong>Leslie Lamport's 1978 Seminal Paper</strong>: <em>Time, Clocks, and the Ordering of Events in a Distributed System</em>.</li>
+<li><strong>Werner Vogels (Amazon CTO, 2008)</strong>: <em>Eventually Consistent - Revisited (CACM)</em>.</li>
+<li><strong>Facebook Engineering Blog</strong>: <em>TAO: How Facebook Serves the Social Graph with Session Consistency</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Replication lag and multi-leader topologies.</li>
+<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Partition trade-offs in distributed clusters.</li>
+<li><a href="../15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a>: How Raft and Paxos enforce linearizability.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

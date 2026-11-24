@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Database Partitioning &amp; Sharding">
+  <title>Database Partitioning &amp; Sharding | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-database-partitioning--sharding">Real-World Production Deep Dives: Database Partitioning &amp; Sharding</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Uber/Netflix</strong> partition databases to scale to billions of records, prevent hot shards, and handle dynamic rebalancing.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-uses-partitioning-bigtable-tablet-splitting--range-partitioning">🏢 Deep Dive 1: How Google Uses Partitioning (Bigtable Tablet Splitting &amp; Range Partitioning)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Bigtable.</li>
+<li><strong>Data Volume</strong>: Exabytes of data distributed across hundreds of thousands of commodity machines.</li>
+<li><strong>Operations</strong>: Hundreds of millions of continuous read/write operations per second.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ul>
+<li>Static hash sharding (e.g., <code>hash(key) % N</code>) fails when the volume of data grows dynamically:
+<ul>
+<li>If you double the number of servers, every single key must be rehashed and moved across the network, saturating data center switches.</li>
+<li>Hash sharding destroys range query efficiency: scanning keys from <code>user:1000</code> to <code>user:2000</code> requires querying every single shard in the cluster.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-googles-architecture-dynamic-range-based-tablet-splitting">3. Google's Architecture: Dynamic Range-Based Tablet Splitting</h3>
+<pre><code>[ Table Sorted Lexicographically by Row Key ]
+┌─────────────────────────────────────────────────────────────┐
+│  &quot;aaa&quot; ──&gt; &quot;com.google.a&quot; ──&gt; &quot;com.google.m&quot; ──&gt; &quot;zzz&quot;      │
+└─────────────────────────────────────────────────────────────┘
+                               │
+                 Split into Tablets (~100MB - 200MB)
+                               │
+       ┌───────────────────────┼───────────────────────┐
+       ▼                       ▼                       ▼
+ [ Tablet 1: &quot;a&quot; - &quot;g&quot; ] [ Tablet 2: &quot;h&quot; - &quot;p&quot; ] [ Tablet 3: &quot;q&quot; - &quot;z&quot; ]
+       │                       │                       │
+       ▼                       ▼                       ▼
+ [ Tablet Server 1 ]     [ Tablet Server 2 ]     [ Tablet Server 3 ]
+</code></pre>
+<h4 id="a-lexicographically-sorted-row-keys">A. Lexicographically Sorted Row Keys</h4>
+<ul>
+<li>Bigtable maintains all rows in sorted alphabetical order by row key.</li>
+<li><strong>Range Queries are Localized</strong>: Scanning a contiguous range of keys reads from a single or small sequence of tablets, achieving maximum sequential disk I/O performance.</li>
+</ul>
+<h4 id="b-dynamic-tablet-splitting">B. Dynamic Tablet Splitting</h4>
+<ul>
+<li>A table starts as a single tablet.</li>
+<li>As rows are inserted and a tablet grows beyond <strong>100MB to 200MB</strong>, the hosting Tablet Server automatically splits the tablet into two equal halves at a middle row key.</li>
+<li>The Tablet Server updates the root metadata in Chubby/Colossus. The <strong>Master Server</strong> detects unbalanced server loads and migrates tablet leases to underutilized servers in the cluster without copying underlying storage files (since files reside in Google's Colossus distributed filesystem).</li>
+</ul>
+<h4 id="c-the-domain-reversal-pattern-preventing-hotspotting">C. The Domain-Reversal Pattern (Preventing Hotspotting)</h4>
+<p>When storing web crawler pages, sequential URLs like:</p>
+<ul>
+<li><code>http://google.com/search</code></li>
+<li><code>http://google.com/images</code></li>
+<li><code>http://google.com/maps</code>
+would all cluster onto the same tablet server, creating a massive write hotspot.</li>
+<li><strong>Google's Inverted Row Key Pattern</strong>:
+Google stores URLs with reversed domain names:
+<code>com.google/search</code>, <code>com.google/images</code>, <code>com.google/maps</code>.
+This clusters pages from the same site together for efficient sub-domain scans while naturally dispersing traffic from millions of distinct domains across the entire cluster.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-uber-uses-sharding-schemaless-sharded-mysql-architecture">🚙 Deep Dive 2: How Uber Uses Sharding (&quot;Schemaless&quot; Sharded MySQL Architecture)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Uber &quot;Schemaless&quot; (built on top of sharded MySQL clusters).</li>
+<li><strong>Scale</strong>: Hundreds of millions of global ride trips, driver locations, and fare calculations.</li>
+<li><strong>Availability Requirement</strong>: Five-nines. Drivers and riders cannot be stranded due to database failovers.</li>
+</ul>
+<h3 id="2-the-core-problem-at-uber-scale">2. The Core Problem at Uber Scale</h3>
+<ul>
+<li>In 2014, Uber's Postgres database was crumbling under write load during peak commute hours. Secondary index updates and write amplification caused replication lag exceeding minutes.</li>
+<li>Commercial NoSQL databases lacked proven reliability and transactional tooling, while raw MySQL could not scale horizontally on a single instance.</li>
+</ul>
+<h3 id="3-ubers-architecture-schemaless-sharded-mysql">3. Uber's Architecture: Schemaless Sharded MySQL</h3>
+<pre><code>[ Inbound Ride Trip Event ]
+             │
+             ▼
+[ Uber Schemaless Routing Proxy ]
+   ├── Computes Shard ID: MurmurHash(trip_uuid) % 4096
+   ├── Locates Host for Shard in Routing Table
+   └── Dispatches Append-Only Mutation
+             │
+      ┌──────┴──────┐
+      ▼             ▼
+[ MySQL Shard 01 ] [ MySQL Shard 02 ] ... [ MySQL Shard 4096 ]
+  (Master)           (Master)
+    ├── Local Replication to 2 In-Rack Replicas
+    └── Append-Only Cell Data Model
+</code></pre>
+<h4 id="a-fixed-virtual-shards-4096-shards">A. Fixed Virtual Shards (4,096 Shards)</h4>
+<ul>
+<li>Uber established <strong>4,096 virtual shards</strong> partitioned across dozens of physical MySQL server pairs.</li>
+<li>Each trip is assigned a globally unique UUID. The routing proxy determines the shard:
+$$	ext{Shard ID} = 	ext{MurmurHash3}(	ext{trip_uuid}) \pmod{4096}$$</li>
+<li><strong>Zero Resharding Required</strong>: As data grew, Uber moved virtual shards across physical database servers without changing the hashing formula.</li>
+</ul>
+<h4 id="b-append-only-cell-model">B. Append-Only Cell Model</h4>
+<p>To completely eliminate row locks and database deadlocks:</p>
+<ul>
+<li>Schemaless never executes SQL <code>UPDATE</code> statements!</li>
+<li>Data is modeled as <strong>immutable cells</strong>:
+<ul>
+<li>Each cell has a <code>row_key</code> (e.g., <code>trip_uuid</code>), <code>column_name</code> (e.g., <code>status</code>), and <code>ref_key</code> (auto-incrementing version number: 1, 2, 3).</li>
+<li>When a ride changes status from <code>REQUESTED</code> to <code>DISPATCHED</code> to <code>COMPLETED</code>, Uber inserts a <strong>new cell version</strong> with an incremented <code>ref_key</code>.</li>
+<li>The latest state is simply the cell with the highest version number.</li>
+</ul>
+</li>
+</ul>
+<h4 id="c-secondary-indexing-via-async-triggers">C. Secondary Indexing via Async Triggers</h4>
+<ul>
+<li>Sharding by <code>trip_uuid</code> makes querying by <code>driver_uuid</code> impossible without querying all 4,096 shards (&quot;scatter-gather&quot;).</li>
+<li>Uber solves this by publishing mutation events to <strong>Kafka</strong> from MySQL binlogs. An indexing worker consumes the event and writes a secondary mapping <code>(driver_uuid -&gt; trip_uuid)</code> into a dedicated index shard.</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Bigtable</th>
+<th>Uber Schemaless</th>
+<th>Netflix Cassandra</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Partitioning Strategy</strong></td>
+<td>Range-Based (Lexicographical)</td>
+<td>Hash-Based (Virtual Shards)</td>
+<td>Hash-Based (Consistent Hash Ring)</td>
+</tr>
+<tr>
+<td><strong>Rebalancing Mechanism</strong></td>
+<td>Dynamic automated split &amp; lease move</td>
+<td>Manual/Automated virtual shard remapping</td>
+<td>Node addition distributes vnodes automatically</td>
+</tr>
+<tr>
+<td><strong>Range Query Support</strong></td>
+<td>First-class, highly efficient</td>
+<td>Poor (Requires scatter-gather)</td>
+<td>Only within single partition key</td>
+</tr>
+<tr>
+<td><strong>Hotspot Risk</strong></td>
+<td>High on monotonically increasing keys</td>
+<td>Low (Randomized uniform hashing)</td>
+<td>Low (Cryptographic hashing)</td>
+</tr>
+<tr>
+<td><strong>Underlying Engine</strong></td>
+<td>Google Colossus + SSTables</td>
+<td>Sharded MySQL InnoDB</td>
+<td>Custom Cassandra LSM Engine</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Range vs Hash Partitioning Tradeoff</strong>:
+<ul>
+<li>Recommend <strong>Range Partitioning</strong> when the application requires efficient range scans (e.g., time-series data, alphabetized directories), but address the risk of write hotspots on sequential keys.</li>
+<li>Recommend <strong>Hash Partitioning</strong> for uniform write distribution across all nodes when point lookups are the dominant query pattern.</li>
+</ul>
+</li>
+<li><strong>The &quot;Scatter-Gather&quot; Trap</strong>: If you shard by <code>userId</code>, querying by <code>orderDate</code> requires sending the query to <em>every single shard</em> and aggregating results in memory. Explain how to avoid this via <strong>Global Secondary Indexes</strong> maintained asynchronously via message queues.</li>
+<li><strong>Virtual Shards</strong>: Always propose virtual shards (e.g., 4096 fixed logical shards) to simplify future physical rebalancing without rehashing keys.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

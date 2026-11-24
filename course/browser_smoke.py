@@ -163,8 +163,12 @@ def test_library(browser, base_url):
     expect(page.get_by_role("searchbox", name="Search topics")).to_have_value("idempotency")
     expect(page.locator("[data-topic-row]:visible a")).to_have_attribute(
         "href",
-        "https://github.com/Aniketchavan7/system-design-illustrated/blob/main/32-rest-api-design-and-idempotency/README.md",
+        "chapters/32-rest-api-design-and-idempotency/index.html",
     )
+    page.locator("[data-topic-row]:visible a").click()
+    expect(page.get_by_role("heading", level=1)).to_contain_text("Idempotency")
+    page.get_by_role("link", name="Back to topic library").click()
+    expect(page.get_by_role("heading", name="Topic library")).to_be_visible()
     page.close()
 
 

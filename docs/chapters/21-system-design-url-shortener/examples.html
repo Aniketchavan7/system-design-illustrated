@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Scalable URL Shortener (TinyURL / Bitly)">
+  <title>System Design: Scalable URL Shortener (TinyURL / Bitly) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-url-shortener">Real-World Production Deep Dives: URL Shortener</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Bitly</strong> and <strong>Twitter / Google (t.co &amp; goo.gl)</strong> scale URL shorteners to billions of clicks, balance 301 vs 302 redirects, and protect against malware and phishing.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-bitly-scales-url-shortening-10-billion-clicksmonth">🔗 Deep Dive 1: How Bitly Scales URL Shortening (10 Billion+ Clicks/Month)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Bitly Enterprise Platform.</li>
+<li><strong>Traffic Volume</strong>: Handles over <strong>10 billion link clicks per month</strong>, generating hundreds of millions of new shortened URLs monthly.</li>
+<li><strong>Latency Requirement</strong>: Global redirect latency <strong>under 20 milliseconds</strong>.</li>
+<li><strong>Availability</strong>: 99.999% SLA (broken short links break marketing campaigns, SMS notifications, and e-commerce transactions worldwide).</li>
+</ul>
+<h3 id="2-the-core-problem-at-bitly-scale">2. The Core Problem at Bitly Scale</h3>
+<ul>
+<li><strong>Extreme Read/Write Ratio</strong>: 100:1 to 500:1 read-to-write ratio. Once created, a viral short URL (e.g., from an SMS alert or news broadcast) can receive 50,000 requests per second.</li>
+<li><strong>Unique Hash Collisions</strong>: Using traditional hashing (like MD5 or SHA-256) and truncating to 7 characters creates hash collisions. Resolving collisions via database queries under high concurrency causes database deadlocks and slow link generation.</li>
+<li><strong>Real-Time Click Analytics</strong>: Customers demand instant click analytics (referrer, geographic location, device type) without penalizing the 20ms redirect latency.</li>
+</ul>
+<h3 id="3-bitlys-engineering-architecture">3. Bitly's Engineering Architecture</h3>
+<pre><code>[ User Clicks Short Link: bit.ly/3xK9yZ ]
+                   │
+                   ▼
+       [ Global Anycast Edge Proxy ]
+                   │
+       ┌───────────┴───────────┐
+       ▼ (Cache Hit: 99%!)      ▼ (Cache Miss: 1%)
+ [ Distributed Cache (Redis) ]  [ Relational / NoSQL DB ]
+       │                               │
+       └──────────────┬────────────────┘
+                      │
+        HTTP 301/302 Redirect to Long URL
+                      │
+                      ▼ (Async Telemetry Beacon)
+       [ Kafka Click Analytics Stream ]
+                      │
+                      ▼
+       [ ClickHouse OLAP Column Store ] ──&gt; Real-Time Customer Dashboard
+</code></pre>
+<h4 id="a-id-generation-via-distributed-sequence-generators">A. ID Generation via Distributed Sequence Generators</h4>
+<p>To completely eliminate hash collisions without locking:</p>
+<ol>
+<li>Bitly uses a distributed unique ID generator (e.g., ZooKeeper-coordinated counter blocks or Snowflake IDs) producing 64-bit auto-incrementing integers.</li>
+<li>The integer is converted to a short alphanumeric token using <strong>Base62 Encoding</strong> (<code>[a-zA-Z0-9]</code>):
+<ul>
+<li>A 7-character Base62 string yields:
+$$62^7 \approx 3.52 	imes 10^{12} 	ext{ unique combinations (3.5 trillion URLs)}$$</li>
+<li><strong>Zero Collision Guarantee</strong>: Because each integer is mathematically unique, its Base62 encoding is guaranteed 100% collision-free without checking the database!</li>
+</ul>
+</li>
+</ol>
+<h4 id="b-multi-tier-caching-for-99-hit-ratio">B. Multi-Tier Caching for 99%+ Hit Ratio</h4>
+<ul>
+<li>The 80/20 Pareto principle applies strongly: 20% of links account for 80%+ of clicks.</li>
+<li><strong>In-Memory Cache (Redis Cluster)</strong>:
+<ul>
+<li>Key: <code>short_token</code> (e.g., <code>3xK9yZ</code>), Value: <code>long_url</code>.</li>
+<li>Stored in Redis with LRU eviction. Over 99% of clicks are served straight from RAM in <strong>&lt;2ms</strong>, completely isolating persistent databases from viral spikes.</li>
+</ul>
+</li>
+</ul>
+<h4 id="c-asynchronous-analytics-pipeline-via-kafka--clickhouse">C. Asynchronous Analytics Pipeline via Kafka &amp; ClickHouse</h4>
+<ul>
+<li>When a redirect occurs, the edge proxy does <em>not</em> write click analytics synchronously to a transactional database.</li>
+<li>Instead, the proxy asynchronously flushes a lightweight JSON telemetry packet (timestamp, IP, User-Agent, referer) to an <strong>Apache Kafka</strong> topic.</li>
+<li>A consumer fleet batches events from Kafka and streams them into <strong>ClickHouse</strong> (an ultra-fast columnar OLAP database), updating customer analytics dashboards within seconds without adding a single millisecond to the user's redirect.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-twitter--google-handle-short-urls-malware-defense--301-vs-302">🛡️ Deep Dive 2: How Twitter &amp; Google Handle Short URLs (Malware Defense &amp; 301 vs 302)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Systems</strong>: Twitter <code>t.co</code> and Google <code>goo.gl</code> / Firebase Dynamic Links.</li>
+<li><strong>The Threat</strong>: URL shorteners are the #1 tool for phishing, malware delivery, and spam. Malicious actors hide illegal payloads behind trusted short domains.</li>
+</ul>
+<h3 id="2-google-safe-browsing-integration">2. Google Safe Browsing Integration</h3>
+<ul>
+<li>Every time a user attempts to generate a short URL, Google passes the destination long URL through the <strong>Google Safe Browsing API</strong>:
+<ul>
+<li>Checks domain reputation, blacklist registries, and known malware signatures.</li>
+<li>If a destination is flagged as dangerous, link creation is blocked instantly.</li>
+</ul>
+</li>
+<li><strong>Continuous Re-Scanning</strong>: Even after a short link is created, background bots periodically re-scan destinations. If a malicious attacker initially points a short link to a harmless page and later redirects their server to malware, Google's crawler detects the mutation and deactivates the short link globally within minutes.</li>
+</ul>
+<h3 id="3-the-301-vs-302-architectural-decision">3. The 301 vs 302 Architectural Decision</h3>
+<pre><code>┌────────────────────────────────────────────────────────────┐
+│ HTTP 301: Moved Permanently                                │
+│  - Browser caches redirect aggressively on user's device.  │
+│  - Pros: Subsequent clicks bypass shortener server! (0ms)  │
+│  - Cons: Shortener loses all analytics on repeat clicks!   │
+│          Cannot revoke compromised or malicious links!     │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ HTTP 302: Found (Temporary Redirect)                       │
+│  - Browser never caches; sends every click to shortener.   │
+│  - Pros: 100% accurate click analytics &amp; malware checks.   │
+│  - Cons: Slight increase in server load.                   │
+└────────────────────────────────────────────────────────────┘
+</code></pre>
+<ul>
+<li><strong>Production Best Practice</strong>:
+<ul>
+<li>Companies like Bitly and Twitter default to <strong>HTTP 302</strong> (or <code>307 Temporary Redirect</code>) to ensure they maintain complete visibility into click analytics, referrer logs, and retain the immediate power to shut down phishing links.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Bitly Enterprise Architecture</th>
+<th>Google / Twitter (t.co)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Token Generation</strong></td>
+<td>Distributed 64-bit ID -&gt; Base62 encoding</td>
+<td>Cryptographic hashing + Internal safety validation</td>
+</tr>
+<tr>
+<td><strong>HTTP Redirect Code</strong></td>
+<td>Configurable (301 for SEO / 302 for Analytics)</td>
+<td>Strictly 302 Temporary (Mandatory inspection)</td>
+</tr>
+<tr>
+<td><strong>Security Layer</strong></td>
+<td>Machine learning spam filters + Third-party abuse APIs</td>
+<td>Native Google Safe Browsing API integration</td>
+</tr>
+<tr>
+<td><strong>Analytics Engine</strong></td>
+<td>Apache Kafka + ClickHouse OLAP</td>
+<td>Internal Pub/Sub + BigQuery / MapReduce</td>
+</tr>
+<tr>
+<td><strong>Mobile Integration</strong></td>
+<td>Universal Links / Deep-linking SDK</td>
+<td>Firebase Dynamic Links with deferred app store routing</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Explain Why Base62 via ID Generator Beats MD5/SHA</strong>: Explain that hashing algorithms (MD5/SHA256) cause collisions when truncated to 7 characters. Generating unique integers (Snowflake/ZooKeeper) and converting to Base62 guarantees <strong>zero collisions</strong> and requires no database lookups.</li>
+<li><strong>The 301 vs 302 Redirect Tradeoff</strong>: When an interviewer asks which HTTP code to return, articulate the exact tradeoff:
+<ul>
+<li><code>301 Moved Permanently</code>: Reduces server load because the browser caches the redirect, but destroys analytics and prevents malware takedowns.</li>
+<li><code>302 Found</code>: Ensures 100% analytics capture and immediate fraud revocation, making it the industry standard for commercial shorteners.</li>
+</ul>
+</li>
+<li><strong>Decouple Analytics from Redirects</strong>: Always emphasize that redirecting the user and tracking analytics must be <strong>asynchronous</strong> (via Kafka/PubSub) to preserve sub-20ms redirect latency.</li>
+</ol>
+<hr />
+<h2 id="deep-dive-3-how-netflix-uses-url-shortening-tv-activation--deep-linking">🎬 Deep Dive 3: How Netflix Uses URL Shortening (TV Activation &amp; Deep-Linking)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix Device Activation &amp; Marketing Short Link Infrastructure.</li>
+<li><strong>Scale</strong>: Hundreds of millions of short links generated for Smart TV QR-code activations (e.g., <code>netflix.com/activate</code>), SMS login links, and push notifications.</li>
+</ul>
+<h3 id="2-architecture-low-latency-edge-redirection--attribution">2. Architecture: Low-Latency Edge Redirection &amp; Attribution</h3>
+<ul>
+<li><strong>Smart TV Activation</strong>: When a user logs in on a new Smart TV, the TV displays an 8-character activation code embedded in a short URL.</li>
+<li><strong>Mobile Deep-Linking</strong>:
+<ul>
+<li>Clicking a Netflix short link on mobile uses <strong>Universal Links (iOS) / App Links (Android)</strong> to bypass the browser and launch directly into the native Netflix app at the exact episode timestamp.</li>
+<li>If the app is not installed, the shortener seamlessly falls back to the Google Play Store or Apple App Store with deferred attribution parameters.</li>
+</ul>
+</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

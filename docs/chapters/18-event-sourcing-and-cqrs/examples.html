@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)">
+  <title>Event Sourcing &amp; CQRS (Command Query Responsibility Segregation) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-event-sourcing-and-cqrs">Real-World Production Deep Dives: Event Sourcing and CQRS</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Uber</strong> and <strong>Netflix</strong> implement Event Sourcing and Command Query Responsibility Segregation (CQRS) to manage complex entity lifecycles, auditing, and high-performance queries.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-uber-uses-event-sourcing--cqrs-the-trip-lifecycle-engine">🚙 Deep Dive 1: How Uber Uses Event Sourcing &amp; CQRS (The Trip Lifecycle Engine)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Uber Trip Lifecycle Platform.</li>
+<li><strong>Scale</strong>: Hundreds of millions of completed trips per week across 10,000+ cities globally.</li>
+<li><strong>The Stakes</strong>: Fare calculations, driver payouts, regulatory compliance, and rider safety investigations.</li>
+</ul>
+<h3 id="2-the-core-problem-at-uber-scale">2. The Core Problem at Uber Scale</h3>
+<ul>
+<li>In traditional CRUD databases, a trip is represented as a mutable row in a <code>trips</code> table:<pre><code class="language-sql">UPDATE trips SET status = 'COMPLETED', fare = 34.50 WHERE trip_id = 'xyz';
+</code></pre>
+</li>
+<li><strong>Why CRUD Failed for Ridesharing</strong>:
+<ul>
+<li><strong>Loss of History</strong>: Destructive updates erase historical state transitions. If a rider claims they cancelled the ride <em>before</em> the driver arrived, but the driver claims they had already arrived, a mutable row cannot prove the timeline of events.</li>
+<li><strong>Concurrent State Collisions</strong>: Multiple actors (driver GPS, rider app, automated dispatch algorithm, payment processor) attempt to update the same trip row simultaneously, causing race conditions and database lock contention.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-ubers-architecture-immutable-trip-event-sourcing">3. Uber's Architecture: Immutable Trip Event Sourcing</h3>
+<pre><code>[ Rider App / Driver App / GPS / Payments ]
+                     │
+                     ▼
+             [ Command Handler ]
+  ├── Validates Business Invariants
+  └── Rejects Invalid Commands (e.g. Cannot complete unstarted trip)
+                     │
+                     ▼ (Appends Immutable Event)
+        [ Immutable Event Store (MySQL / Schemaless) ]
+  ├── Event 1: TripRequestedEvent   (Timestamp: 10:00:01)
+  ├── Event 2: DriverAssignedEvent  (Timestamp: 10:01:15)
+  ├── Event 3: DriverArrivedEvent   (Timestamp: 10:04:22)
+  ├── Event 4: TripStartedEvent     (Timestamp: 10:05:01)
+  └── Event 5: TripCompletedEvent   (Timestamp: 10:28:44)
+                     │
+         CDC Pipeline via Apache Kafka
+                     │
+     ┌───────────────┴───────────────┐
+     ▼                               ▼
+[ Driver Payout Projection ]    [ Real-Time Active Trips Projection ]
+(Aggregated for Accounting)     (Optimized in Redis for Map Rendering)
+</code></pre>
+<h4 id="a-the-immutable-event-stream">A. The Immutable Event Stream</h4>
+<ul>
+<li>Every state transition is modeled as an immutable, past-tense domain event:
+<ul>
+<li><code>TripRequestedEvent</code>, <code>DriverAssignedEvent</code>, <code>DriverArrivedEvent</code>, <code>TripStartedEvent</code>, <code>TripCompletedEvent</code>, <code>FareCalculatedEvent</code>.</li>
+</ul>
+</li>
+<li><strong>Append-Only Performance</strong>: Events are strictly appended to the event store. No row updates or locks occur.</li>
+<li><strong>Auditability</strong>: The exact state of any trip at 10:06 AM can be reconstructed with 100% mathematical fidelity simply by replaying events up to that timestamp.</li>
+</ul>
+<h4 id="b-cqrs-decoupling-writes-from-reads">B. CQRS: Decoupling Writes from Reads</h4>
+<p>Writing an event stream is fast, but querying &quot;Find all active rides in Manhattan where driver rating &gt; 4.8&quot; by scanning millions of event streams is impossibly slow.</p>
+<ul>
+<li><strong>Uber's CQRS Projections</strong>:
+<ul>
+<li><strong>Write Side (Command)</strong>: Appends raw events to the primary event store.</li>
+<li><strong>Kafka CDC</strong>: Event streams are published to Kafka topics.</li>
+<li><strong>Read Side (Query Projections)</strong>: Independent projection workers consume Kafka events and update specialized read-optimized databases:
+<ul>
+<li><strong>Active Trips Read Model</strong>: Kept in <strong>Redis</strong> with geospatial indexes for sub-millisecond map rendering.</li>
+<li><strong>Financial Reporting Model</strong>: Kept in <strong>PostgreSQL / Snowflake</strong> for accounting reconciliations.</li>
+<li><strong>Rider Trip History Model</strong>: Kept in <strong>ElasticSearch</strong> for full-text search by customer support agents.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-uses-event-sourcing--cqrs-studio-production--asset-pipelines">🎬 Deep Dive 2: How Netflix Uses Event Sourcing &amp; CQRS (Studio Production &amp; Asset Pipelines)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix Studio Production Pipeline (managing original TV shows, film production, video editing, subtitles, and localization).</li>
+<li><strong>Scale</strong>: Hundreds of original productions worldwide, coordinating thousands of external post-production studios, visual effects (VFX) artists, and dubbing partners.</li>
+</ul>
+<h3 id="2-the-core-problem">2. The Core Problem</h3>
+<ul>
+<li>Preparing a 4K movie title for worldwide release involves thousands of interdependent digital assets:
+<ul>
+<li>Multiple video cuts (Director's Cut, Airline Cut), 40+ language audio tracks, HDR color grading profiles, and localized subtitles.</li>
+</ul>
+</li>
+<li>If a sound engineer updates the Italian 5.1 audio mix, which downstream encoded video packages are invalidated and need re-rendering?</li>
+</ul>
+<h3 id="3-netflixs-architecture-keystone-cqrs-asset-graph">3. Netflix's Architecture: Keystone CQRS Asset Graph</h3>
+<pre><code>[ Studio Asset Mutation ]
+            │
+            ▼
+[ Asset Command Service ]
+            │ (Append Event: SubtitleUpdatedEvent)
+            ▼
+[ Keystone Event Store ]
+            │
+            ▼ (Kafka Event Stream)
+┌───────────────────────────────────────────────┐
+│ CQRS Projection Engine                        │
+│                                               │
+│  [ Title Asset Graph (Neo4j / Graph DB) ]     │
+│  └── Recomputes Dependency Invalidation Tree │
+│                                               │
+│  [ Media Catalog Read Model (ElasticSearch) ] │
+│  └── Powers Studio Search &amp; UI Dashboards     │
+└───────────────────────────────────────────────┘
+</code></pre>
+<h4 id="a-snapshotting-for-fast-state-reconstruction">A. Snapshotting for Fast State Reconstruction</h4>
+<ul>
+<li>If an asset has undergone 50,000 revisions over 6 months of production, replaying 50,000 events to compute its current state during a user read is too slow.</li>
+<li>Netflix implements <strong>Periodic Snapshotting</strong>:
+<ul>
+<li>Every 100 events, a background worker serializes the current entity state into a compact snapshot in S3.</li>
+<li>Reconstructing the entity requires loading the latest snapshot and replaying only the few events that occurred after the snapshot timestamp.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-schema-evolution--versioning">B. Schema Evolution &amp; Versioning</h4>
+<ul>
+<li>As business requirements change over years, event schemas evolve.</li>
+<li>Netflix practices <strong>Event Upcasting</strong>:
+<ul>
+<li>Events in the store are immutable and never updated on disk.</li>
+<li>When old <code>v1</code> events are loaded into memory, an Upcaster pipeline transforms them on-the-fly into <code>v2</code> objects before handing them to domain logic, guaranteeing long-term backward compatibility.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Traditional CRUD Architecture</th>
+<th>Event Sourcing + CQRS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Data Storage</strong></td>
+<td>Mutable current state (<code>UPDATE</code>/<code>DELETE</code>)</td>
+<td>Immutable append-only log of historical events</td>
+</tr>
+<tr>
+<td><strong>Write Performance</strong></td>
+<td>Slower; row-level locks &amp; index maintenance</td>
+<td>Maximum throughput; sequential disk appends</td>
+</tr>
+<tr>
+<td><strong>Auditability</strong></td>
+<td>Zero audit trail unless custom tables added</td>
+<td>100% native audit log and temporal replay</td>
+</tr>
+<tr>
+<td><strong>Query Complexity</strong></td>
+<td>Simple SQL joins on tables</td>
+<td>Requires dedicated materialized read projections</td>
+</tr>
+<tr>
+<td><strong>Consistency</strong></td>
+<td>Strong ACID consistency across reads/writes</td>
+<td>Eventual consistency between Command and Query sides</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>When to Propose Event Sourcing</strong>: Propose Event Sourcing for systems where historical audit trails and state transitions are legally or operationally critical (Fintech ledgers, E-commerce order tracking, Ridesharing trips, Collaborative document editing).</li>
+<li><strong>Always Pair Event Sourcing with CQRS</strong>: Explain to interviewers that Event Sourcing <em>requires</em> CQRS because querying an event stream directly for complex reports is prohibitively expensive. Materialized read views solve the query problem.</li>
+<li><strong>Mention Snapshotting &amp; Upcasting</strong>: Address the two real-world operational challenges of Event Sourcing: use <strong>Snapshots</strong> to prevent long replay times, and use <strong>Upcasters</strong> to handle event schema evolution over time.</li>
+</ol>
+<hr />
+<h2 id="deep-dive-3-how-google-uses-event-sourcing-google-docs-real-time-collaboration">🏢 Deep Dive 3: How Google Uses Event Sourcing (Google Docs Real-Time Collaboration)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Docs &amp; Google Sheets Real-Time Collaboration Engine.</li>
+<li><strong>Scale</strong>: Hundreds of millions of documents edited concurrently by millions of simultaneous users worldwide.</li>
+</ul>
+<h3 id="2-architecture-immutable-mutation-logs--operational-transformation-ot">2. Architecture: Immutable Mutation Logs &amp; Operational Transformation (OT)</h3>
+<ul>
+<li>Google Docs does <strong>not</strong> store mutable paragraph snapshots during an active editing session.</li>
+<li><strong>The Event Stream</strong>:
+<ul>
+<li>Every keystroke, deletion, and formatting change is modeled as an immutable operation event:
+<code>Insert(offset=42, text='hello')</code>, <code>Delete(offset=10, len=2)</code>.</li>
+<li>Operations are appended to a central document change log.</li>
+<li><strong>Operational Transformation (OT) &amp; CQRS</strong>:
+<ul>
+<li>The server sequences incoming events and broadcasts transformed operations to all collaborating browser clients.</li>
+<li>Specialized read projections render the DOM canvas locally in the browser while background workers periodically snapshot document state to Colossus storage.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

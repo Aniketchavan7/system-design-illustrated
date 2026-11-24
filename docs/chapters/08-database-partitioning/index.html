@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Database Partitioning &amp; Sharding">
+  <title>Database Partitioning &amp; Sharding | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="08--database-partitioning--sharding">08 · Database Partitioning &amp; Sharding</h1>
+<blockquote>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>, <a href="../07-database-replication/index.html">07 · Database replication</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../08-database-partitioning/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Replication makes copies of the <strong>same</strong> data across multiple servers to handle read traffic. But what happens when you have so much data (e.g. 50 Terabytes) that it physically cannot fit on one computer's hard drive? Or when you have so many writes (e.g. 100,000 writes/second) that one Primary server catches fire?</p>
+<p><strong>Partitioning (also called Sharding)</strong> splits your massive database table into smaller, independent pieces called <strong>shards</strong>, and stores each shard on a completely different computer.</p>
+<hr />
+<h2 id="everyday-analogy-the-26-volume-encyclopedia--supermarket-aisles">🍕 Everyday analogy: The 26-Volume Encyclopedia &amp; Supermarket Aisles</h2>
+<p>Imagine a massive 50,000-page encyclopedia containing all human knowledge:</p>
+<ul>
+<li><strong>Without Partitioning (The 50,000-Page Book):</strong> It weighs 800 kilograms. You need a forklift to move it, only one person can read it at a time, and no standard desk can hold it.</li>
+<li><strong>With Partitioning (The 26-Volume Set):</strong> You chop the encyclopedia into 26 separate, manageable books labeled <strong>A through Z</strong>:
+<ul>
+<li>If you want to look up <em>&quot;Quantum Physics&quot;</em>, you walk straight to Shelf Q, pull down Volume Q, and read it (<strong>Targeted Point Query</strong>). You never touch the other 25 volumes.</li>
+<li>If 26 students are studying simultaneously, each student holds one volume without blocking anyone else (<strong>Horizontal Write Scaling</strong>).</li>
+</ul>
+</li>
+<li><strong>The Cross-Shard Problem:</strong> If a student asks <em>&quot;List every person in history who died in the year 1812&quot;</em>, they must open all 26 volumes simultaneously and scan every single page (<strong>Scatter-Gather Query</strong>).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the library analogy</th>
+<th style="text-align:left">In database sharding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>The massive 50,000-page book</strong></td>
+<td style="text-align:left"><strong>Single Monolithic Database Table</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Splitting by letter (A–Z)</strong></td>
+<td style="text-align:left"><strong>Sharding by Shard Key</strong> (<code>user_id</code>, <code>tenant_id</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Volume Q on Shelf 17</strong></td>
+<td style="text-align:left"><strong>Physical Database Shard Node</strong> (Server <code>db-shard-2</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>First letter of the word</strong></td>
+<td style="text-align:left"><strong>Partition Function / Shard Key</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Scanning all 26 volumes</strong></td>
+<td style="text-align:left"><strong>Scatter-Gather Broadcast Query</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Letter 'S' volume being 10x thicker</strong></td>
+<td style="text-align:left"><strong>Hotspotting / Data Skew</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<ol>
+<li><strong>Storage Limits:</strong> Even the largest cloud server instances max out around 16 to 32 Terabytes of attached NVMe storage. When your dataset hits 100 Terabytes (e.g. Instagram photos metadata or Discord chat logs), a single server is physically impossible.</li>
+<li><strong>Write Bottlenecks:</strong> Replication scales <em>reads</em>, but all writes must still bottleneck on the single Primary Leader. Sharding allows 50 independent Primary databases to process writes simultaneously in parallel, scaling write throughput to millions of operations per second.</li>
+<li><strong>Blast Radius Reduction:</strong> If Shard 3 experiences a hardware kernel panic, only $5%$ of your users are temporarily affected. The remaining $95%$ of users on the other shards continue operating with zero disruption.</li>
+</ol>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/db_sharding.gif" alt="Database Sharding Architecture Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart TD
+    Client[&quot;📱 Application Request&lt;br/&gt;user_id = 4920&quot;] --&gt; Router[&quot;🧭 Shard Router (Proxy / Vitess / App)&lt;br/&gt;hash(user_id) % 3&quot;]
+
+    subgraph Shards[&quot;Distributed Shard Fleet&quot;]
+        S0[(&quot;💾 Shard 0 (db-0.vpc)&lt;br/&gt;Keys: 0 to 333&lt;br/&gt;Rows: 33M&quot;)]
+        S1[(&quot;💾 Shard 1 (db-1.vpc)&lt;br/&gt;Keys: 334 to 666&lt;br/&gt;Rows: 33M (TARGET)&quot;)]
+        S2[(&quot;💾 Shard 2 (db-2.vpc)&lt;br/&gt;Keys: 667 to 999&lt;br/&gt;Rows: 34M&quot;)]
+    end
+
+    Router --&gt;|Bucket 0| S0
+    Router --&gt;|&quot;Bucket 1 (4920 matches here)&quot;| S1
+    Router --&gt;|Bucket 2| S2
+</code></pre>
+<ol>
+<li>Application sends a database query specifying the <strong>Shard Key</strong> (<code>user_id = 4920</code>).</li>
+<li>The Shard Router applies a uniform hash function: <code>crc32(&quot;4920&quot;) % 3 = 1</code>.</li>
+<li>The query is routed directly to <strong>Shard 1</strong> in $O(1)$ time. Shards 0 and 2 do zero work.</li>
+</ol>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<h3 id="calculating-cluster-size-sizing-a-500-million-user-database">Calculating Cluster Size: Sizing a 500 Million User Database</h3>
+<p>Suppose you are designing the user profile storage for a global social network:</p>
+<ul>
+<li><strong>Total Registered Users:</strong> $500\text{ Million users}$.</li>
+<li><strong>Average Data Size per User:</strong> $2\text{ KB}$ (profile, settings, metadata).</li>
+<li><strong>Total Dataset Size:</strong>
+$$500\text{M} \times 2\text{ KB} = 1,000\text{ GB} = 1\text{ Terabyte (clean data)}$$</li>
+<li><strong>Index Overhead + 3x Replication Factor:</strong>
+$$1\text{ TB} \times 2\text{ (indexes)} \times 3\text{ (replicas)} = 6\text{ Terabytes}$$</li>
+<li><strong>Safety Rule of Thumb:</strong> Never fill database disks beyond $60%$ capacity (leaving room for compaction, index rebuilds, and growth).</li>
+<li><strong>Target Shard Size:</strong> Keep individual shards under <strong>$250\text{ GB}$</strong> so backups, restores, and point-in-time recoveries finish in $&lt; 30\text{ minutes}$.</li>
+</ul>
+<p>$$\text{Number of Shards Needed} = \frac{1,000\text{ GB}}{250\text{ GB/shard}} = 4\text{ Shards}$$</p>
+<hr />
+<h2 id="how-it-works-partitioning-strategies--engineering-trade-offs">⚙️ How it works: Partitioning Strategies &amp; Engineering Trade-offs</h2>
+<h3 id="1-vertical-vs-horizontal-partitioning">1. Vertical vs Horizontal Partitioning</h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph VP[&quot;Vertical Partitioning (Split by Columns)&quot;]
+        Table[&quot;User Table&quot;] --&gt; ColA[&quot;DB 1: id, username, email (Fast RAM)&quot;]
+        Table --&gt; ColB[&quot;DB 2: bio, avatar_blob, profile_json (Slow Disk)&quot;]
+    end
+
+    subgraph HP[&quot;Horizontal Partitioning / Sharding (Split by Rows)&quot;]
+        Rows[&quot;Users Table&quot;] --&gt; Row1[&quot;Shard 1: Users 1 to 1,000,000&quot;]
+        Rows --&gt; Row2[&quot;Shard 2: Users 1,000,001 to 2,000,000&quot;]
+    end
+</code></pre>
+<ul>
+<li><strong>Vertical Partitioning:</strong> Splits tables by <strong>columns</strong>. Frequently accessed columns (like username, password hash) reside on high-speed NVMe servers; heavy binary blobs (photos, PDF resumes) are moved to cheap cold storage.</li>
+<li><strong>Horizontal Sharding:</strong> Splits tables by <strong>rows</strong>. Every shard has the exact same column schema, but each shard holds a mutually exclusive subset of rows.</li>
+</ul>
+<hr />
+<h3 id="2-sharding-strategies">2. Sharding Strategies</h3>
+<h4 id="a-range-based-sharding">A. Range-Based Sharding</h4>
+<ul>
+<li>Partitions data based on ranges of values (e.g., User IDs 1–1,000 on Shard 1; 1,001–2,000 on Shard 2; or timestamp ranges by month).</li>
+<li><strong>Advantage:</strong> Range queries (<code>SELECT * WHERE date BETWEEN '2023-01-01' AND '2023-01-31'</code>) hit a single shard.</li>
+<li><strong>The Fatal Flaw (Hotspotting):</strong> If you shard by date, all today's writes flood the single shard holding the current month, while past months sit completely idle!</li>
+</ul>
+<h4 id="b-hash-based-sharding-recommended">B. Hash-Based Sharding (Recommended)</h4>
+<ul>
+<li>Computes <code>hash(shard_key) % num_shards</code>.</li>
+<li><strong>Advantage:</strong> Spreads rows statistically uniformly across all physical servers, eliminating write hotspots.</li>
+<li><strong>Flaw:</strong> Range queries must be executed as a scatter-gather across all shards.</li>
+</ul>
+<h4 id="c-directory-based--lookup-service">C. Directory-Based / Lookup Service</h4>
+<ul>
+<li>A centralized lookup table maps Shard Keys to physical database endpoints.</li>
+<li><strong>Advantage:</strong> Extremely flexible; individual shards can be moved or rebalanced without changing shard keys.</li>
+<li><strong>Flaw:</strong> The lookup service itself becomes a single point of failure and adds an extra network round-trip to every query.</li>
+</ul>
+<hr />
+<h3 id="3-the-3-great-nightmares-of-sharding">3. The 3 Great Nightmares of Sharding</h3>
+<h4 id="nightmare-1-cross-shard-joins">Nightmare 1: Cross-Shard Joins</h4>
+<p>In a monolithic database, you write: <code>SELECT * FROM users JOIN orders ON users.id = orders.user_id</code>.<br />
+In a sharded database, Alice is on <strong>Shard 1</strong> in Virginia, and her order is on <strong>Shard 4</strong> in Oregon. The database engine cannot perform a local index join. Your application must query Shard 1 over the network, query Shard 4 over the network, and stitch the rows together in memory!</p>
+<ul>
+<li><em>The Fix:</em> <strong>Co-locate related data</strong>. Shard orders by <code>user_id</code> so that a user's profile and all their orders always live on the exact same physical shard.</li>
+</ul>
+<h4 id="nightmare-2-the-scatter-gather-query">Nightmare 2: The Scatter-Gather Query</h4>
+<p>If a query does not include the shard key (e.g. <code>SELECT * FROM users WHERE email = 'alice@gmail.com'</code> when the table is sharded by <code>user_id</code>), the router must fan out the query to <strong>all 50 shards simultaneously</strong>, wait for 50 responses, and merge them. The query latency is bounded by the <strong>single slowest shard in the entire fleet</strong>!</p>
+<h4 id="nightmare-3-the-celebrity--hotspot-problem">Nightmare 3: The Celebrity / Hotspot Problem</h4>
+<p>If you shard by <code>creator_id</code>, a normal user generates 2 writes/week. But a celebrity with 80 million followers generates 100,000 writes/second. The single shard hosting that celebrity catches fire, while other shards are 99% idle.</p>
+<hr />
+<h2 id="sharding-strategies-comparison-matrix">⚖️ Sharding Strategies Comparison Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Strategy</th>
+<th style="text-align:center">Write Distribution</th>
+<th style="text-align:center">Range Queries</th>
+<th style="text-align:center">Complexity</th>
+<th style="text-align:left">Best Used For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Hash-Based</strong> (<code>hash(k) % N</code>)</td>
+<td style="text-align:center">✅ <strong>Uniform &amp; Fair</strong></td>
+<td style="text-align:center">❌ Scatter-Gather required</td>
+<td style="text-align:center">Low</td>
+<td style="text-align:left">High-scale user accounts, order systems</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Range-Based</strong> (IDs / Dates)</td>
+<td style="text-align:center">❌ <strong>Prone to hot spots</strong></td>
+<td style="text-align:center">✅ <strong>Very Fast</strong></td>
+<td style="text-align:center">Low</td>
+<td style="text-align:left">Internal audit logs, archive databases</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Directory-Based</strong> (Lookup Table)</td>
+<td style="text-align:center">✅ <strong>Custom control</strong></td>
+<td style="text-align:center">⚠️ Average</td>
+<td style="text-align:center">High</td>
+<td style="text-align:left">Multi-tenant SaaS with giant enterprise accounts</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Sharding before you actually need it:</strong></p>
+<ul>
+<li><em>The Trap:</em> Sharding introduces immense complexity (distributed transactions, cross-shard joins, schema migration pains, monitoring dozens of nodes).</li>
+<li><em>Rule of Thumb:</em> <strong>Never shard on Day 1</strong>. Maximize vertical scaling first (a 64-core, 512 GB RAM cloud instance), optimize indexes, add read replicas (<a href="../07-database-replication/index.html">module 07</a>), and implement caching (<a href="../10-caching-patterns/index.html">module 10</a>). Only shard when dataset size exceeds physical disk limits or write IOPS saturate the primary.</li>
+</ul>
+</li>
+<li>
+<p><strong>Picking a Shard Key with Low Cardinality:</strong></p>
+<ul>
+<li><em>The Disaster:</em> Sharding users by <code>country_code</code> or <code>gender</code>. If $80%$ of your users are from the US, Shard <code>US</code> melts while Shard <code>IS</code> (Iceland) sits empty. Shard keys <strong>must have high cardinality</strong> (millions of unique values, like UUIDs or auto-increment IDs).</li>
+</ul>
+</li>
+<li>
+<p><strong>Using Modulo Hashing without Consistent Hashing:</strong></p>
+<ul>
+<li><em>The Disaster:</em> You shard with <code>hash(user_id) % 4</code>. When you add a 5th machine and change the formula to <code>% 5</code>, almost <strong>$80%$ of all records</strong> suddenly map to a different server, forcing a massive, dangerous multi-day database data migration.</li>
+<li><em>The Fix:</em> Use <strong>Consistent Hashing</strong> (<a href="../16-consistent-hashing/index.html">module 16</a>) or pre-split into 1,024 logical shards distributed across a few physical servers.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 08-database-partitioning
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Observe <strong>Hash-Based routing</strong> distribute users uniformly across physical shards.</li>
+<li>See the speed of a <strong>Targeted Point Lookup</strong> ($O(1)$) that touches only Shard 2 while leaving Shard 0 and 1 untouched.</li>
+<li>Watch the performance penalty of a <strong>Scatter-Gather query</strong> that is forced to fan out to every single shard in the cluster.</li>
+<li>Watch a simulated <strong>Celebrity Hotspot</strong> dump 100 writes onto a single shard, starving its resources.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Instagram:</strong> Sharded PostgreSQL using a custom 64-bit ID generator (incorporating timestamp + shard ID) to scale to hundreds of millions of photos.</li>
+<li><strong>YouTube (Vitess):</strong> Built Vitess as an open-source database clustering system on top of MySQL to shard YouTube's massive video and user comments database.</li>
+<li><strong>Slack:</strong> Sharded their MySQL architecture by <strong>Team / Workspace ID</strong>. All channels, messages, and users for a single company reside on the same shard, guaranteeing that almost all queries are local and never cross shards!</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-do-you-pick-a-good-shard-key-and-what-are-the-catastrophic-consequences-of-picking-a-bad-one">Q1: &quot;How do you pick a good shard key, and what are the catastrophic consequences of picking a bad one?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Picking a shard key is the single most critical decision in distributed storage because <strong>changing a shard key in a live production database with terabytes of data is virtually impossible without extensive downtime.</strong></p>
+<ul>
+<li><strong>Three Criteria for a Perfect Shard Key:</strong>
+<ol>
+<li><strong>High Cardinality:</strong> The key must have millions of distinct values (e.g. <code>user_id</code> or <code>order_id</code>). A key like <code>country</code> or <code>gender</code> has low cardinality and causes massive data skew.</li>
+<li><strong>Uniform Write Distribution:</strong> Writes must hash evenly across shards. Using <code>created_at</code> timestamp causes 100% of current writes to hammer the latest shard, creating a severe write hotspot.</li>
+<li><strong>High Query Isolation (Locality):</strong> The key must match your application's most frequent read query filter so that $99%$ of queries are single-shard lookups rather than broadcast scatter-gather queries.</li>
+</ol>
+</li>
+<li><strong>Catastrophic Failure Example:</strong>
+<ul>
+<li>In a ride-sharing app (Uber), if you shard by <code>driver_id</code>, finding all available drivers near a customer's <code>lat/long</code> requires a scatter-gather query across all shards worldwide.</li>
+<li>Instead, sharding by <strong>S2 Cell / Geohash</strong> co-locates all nearby drivers and riders on the exact same regional shard.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-what-is-a-scatter-gather-query-and-why-does-it-destroy-database-performance-at-scale">Q2: &quot;What is a Scatter-Gather query, and why does it destroy database performance at scale?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Definition:</strong> A scatter-gather query occurs when a read query cannot specify the shard key (e.g. <code>SELECT * FROM users WHERE phone_number = '+1234567890'</code> when the table is sharded by <code>user_id</code>).</li>
+<li><strong>Why it kills performance:</strong>
+<ol>
+<li><strong>Latency Bounded by Slowest Node:</strong> The router must broadcast the query over the network to all $N$ physical shards, wait for every single response, and merge them in memory. In a 50-shard cluster, the query latency is dictated by the <strong>99.9th percentile slowest server</strong> in the fleet.</li>
+<li><strong>Cluster-Wide Resource Consumption:</strong> A single query forces 50 separate servers to wake up, allocate worker threads, and perform disk/index scans. A few dozen concurrent scatter-gather queries can saturate CPU across the entire datacenter.</li>
+</ol>
+</li>
+<li><strong>Production Solution:</strong> Build a <strong>Global Secondary Index (GSI)</strong> or lookup table (e.g. in Redis or DynamoDB GSI) mapping <code>phone_number</code> $\to$ <code>user_id</code>. The application looks up <code>user_id</code> first, and then executes a fast $O(1)$ single-shard query.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-how-do-you-perform-a-transaction-or-join-across-multiple-shards-when-data-resides-on-different-physical-servers">Q3: &quot;How do you perform a transaction or join across multiple shards when data resides on different physical servers?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Cross-shard transactions cannot rely on local database ACID locks. We use one of three architectural patterns:</p>
+<ol>
+<li><strong>Two-Phase Commit (2PC):</strong>
+<ul>
+<li>A coordinator node asks all participating shards to prepare, then commits.</li>
+<li><strong>The Problem:</strong> 2PC is a blocking protocol. If the coordinator or network fails mid-transaction, locks are held indefinitely, slashing system throughput.</li>
+</ul>
+</li>
+<li><strong>The Saga Pattern (Recommended for Microservices):</strong>
+<ul>
+<li>Breaks the distributed transaction into a sequence of local transactions across shards.</li>
+<li>Each shard commits locally. If a subsequent step fails, <strong>compensating transactions</strong> are executed backwards to undo changes. (Covered deeply in <a href="../19-distributed-transactions/index.html">module 19</a>).</li>
+</ul>
+</li>
+<li><strong>Avoidance by Schema Co-Location:</strong>
+<ul>
+<li>Design the schema so cross-shard joins are mathematically unnecessary. For example, in Slack, all channels, messages, and files for a company are sharded by <code>workspace_id</code>. Since 99.9% of user activity is within their own workspace, joins are always $100%$ local to a single physical shard.</li>
+</ul>
+</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-how-do-you-mitigate-the-celebrity--influencer-hotspot-problem-in-a-sharded-database">Q4: &quot;How do you mitigate the Celebrity / Influencer Hotspot problem in a sharded database?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>When a user like Taylor Swift has 100 million followers, every post generates millions of likes and comments. If sharded by <code>influencer_id</code>, that single shard suffers catastrophic CPU saturation.</p>
+<p><strong>The Salting Technique:</strong></p>
+<ol>
+<li>When storing records for ultra-popular keys, append a random <strong>salt integer</strong> (e.g. from 0 to 9) to the shard key:
+<code>shard_key = influencer_id + &quot;_&quot; + random_int(0, 9)</code></li>
+<li>Instead of all likes hashing to Shard 1, writes are distributed uniformly across 10 different shards (<code>influencer_99_0</code> through <code>influencer_99_9</code>).</li>
+<li><strong>The Read Trade-off:</strong> To calculate the total like count, the application queries those 10 salted keys in parallel and sums them up in memory. You trade a fast 10-shard scatter query to prevent a fatal write bottleneck.</li>
+</ol>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A database has 100 shards. A query is submitted WITHOUT the shard key. If each individual shard has a 99% probability of answering within 10 ms, what is the probability that the overall query will suffer a latency delay?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>The overall query must wait for <strong>all 100 shards</strong> to answer. The probability that all 100 shards answer without delay is:
+$$0.99^{100} \approx 36.6%$$
+That means <strong>$63.4%$ of all scatter-gather queries will suffer latency delays</strong>! This proves mathematically why scatter-gather queries degrade rapidly as cluster size grows.</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>Why is sharding by auto-incrementing <code>id</code> with Modulo (<code>id % num_shards</code>) superior to sharding by <code>created_at</code> timestamp?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Sharding by <code>created_at</code> timestamp sends $100%$ of current writes to the single shard holding the current hour/day, leaving older shards completely idle (write hotspotting).<br />
+Auto-incrementing IDs with modulo (<code>id % 4</code>) cycle sequentially: ID 1 $\to$ Shard 1, ID 2 $\to$ Shard 2, ID 3 $\to$ Shard 3, ID 4 $\to$ Shard 4, ID 5 $\to$ Shard 1, spreading write load perfectly uniformly across all machines.</p>
+</details>
+<hr />
+<ol start="3">
+<li><strong>What is the difference between Partitioning and Sharding?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<ul>
+<li><strong>Partitioning</strong> is the general term for dividing a database table into smaller subsets. This can happen on a single physical machine (e.g. PostgreSQL table partitioning by date range to speed up index lookups).</li>
+<li><strong>Sharding</strong> specifically refers to <strong>horizontal partitioning across multiple physically independent database servers</strong> connected over a network.</li>
+</ul>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications (DDIA)</strong> by Martin Kleppmann: Chapter 6 (<em>Partitioning</em> — the definitive industry guide on sharding by key range, key hash, rebalancing, and request routing).</li>
+<li><strong>Vitess Documentation:</strong> How YouTube scales MySQL to billions of users via transparent horizontal sharding (vitess.io).</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: The database engines being partitioned.</li>
+<li><a href="../07-database-replication/index.html">07 · Database replication</a>: How each individual shard uses primary-follower replication for local high availability.</li>
+<li><a href="../16-consistent-hashing/index.html">16 · Consistent hashing</a>: The algorithm that minimizes key movement when adding or removing shards.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

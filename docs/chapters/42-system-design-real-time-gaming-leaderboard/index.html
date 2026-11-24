@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Real Time Gaming Leaderboard">
+  <title>System Design Real Time Gaming Leaderboard | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-42-system-design--real-time-gaming-leaderboard">Module 42: System Design — Real-Time Gaming Leaderboard</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a large-scale Real-Time Gaming Leaderboard System (serving 25M+ Daily Active Users), covering Redis Sorted Sets (Skip Lists), logarithmic rank lookups, tie-breaking algorithms, and distributed leaderboard sharding.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling real-time gaming leaderboards, review these core modules:</p>
+<ul>
+<li><a href="../09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (B-Trees vs In-Memory Skip Lists)</li>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a> (Write-through vs write-behind caching)</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Sharding user rankings across memory partitions)</li>
+<li><a href="../27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Sizing memory and update QPS)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine a marathon with <strong>10 million runners</strong>. Every time a runner crosses a checkpoint, their score changes. When a runner looks at their smartwatch, they want to see: <em>&quot;You are currently ranked #14,291 in the world&quot;</em>, and they want to see the Top 10 champions right above them.</p>
+<p>If the referee had to look through 10 million paper sheets and re-sort the entire list every time someone scores a point, the referee would collapse. In a relational database, running <code>COUNT(*) WHERE score &gt; my_score</code> takes several seconds and locks the database.</p>
+<p>A <strong>Real-Time Leaderboard</strong> uses an in-memory <strong>Skip List (Redis Sorted Set)</strong>. It arranges runners like an express subway train with express tracks that skip over thousands of runners at once. Finding your exact global rank or grabbing the Top 10 list takes less than <strong>1 millisecond</strong>!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of an <strong>Amusement Park Arcade High-Score Board with Multi-Tier Express Escalators</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Arcade Analogy</th>
+<th style="text-align:left">Leaderboard System Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Flashing Top 10 Screen</strong></td>
+<td style="text-align:left">Top-K Leaderboard Query (<code>ZREVRANGE 0 9</code>)</td>
+<td style="text-align:left">$O(\log N + K)$ instant retrieval of the highest-scoring players.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Your Position on the Board</strong></td>
+<td style="text-align:left">Exact Rank Lookup (<code>ZREVRANK user_id</code>)</td>
+<td style="text-align:left">$O(\log N)$ logarithmic rank computation in memory.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Express Escalator (Skips 10 Floors)</strong></td>
+<td style="text-align:left">Skip List Multi-Level Index Pointers</td>
+<td style="text-align:left">Underlying probabilistic data structure powering Redis <code>ZSET</code>.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Winning by Split-Second Timestamp</strong></td>
+<td style="text-align:left">Monotonic Tie-Breaking Score</td>
+<td style="text-align:left">Packs score and inverse timestamp into a floating-point integer.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Arcade Manager Writing to Book at Night</strong></td>
+<td style="text-align:left">Write-Behind Persistence (Kafka $\rightarrow$ PostgreSQL)</td>
+<td style="text-align:left">Asynchronously flushes in-memory scores to durable disk storage.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Multiplayer gaming platforms (Fortnite, League of Legends, Clash Royale, Wordle) must satisfy demanding real-time requirements:</p>
+<ol>
+<li><strong>High Write Throughput</strong>: Millions of match conclusions generate <strong>50,000 to 100,000 score updates/second</strong> at peak.</li>
+<li><strong>Sub-Millisecond Read Latency</strong>: Players expect their updated global rank and surrounding competitors within milliseconds of finishing a game.</li>
+<li><strong>The Relational SQL Trap</strong>: Executing <code>SELECT COUNT(*) FROM scores WHERE points &gt; 2500</code> across 25 million rows requires an expensive index scan that melts database CPUs under concurrent load.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Clients[&quot;Gaming Clients (Mobile / PC / Console)&quot;]
+        PlayerA[&quot;Player finishes Match (+150 pts)&quot;] --&gt;|&quot;POST /v1/scores&quot;| Gateway[&quot;API Gateway / LB&quot;]
+        PlayerB[&quot;Player views Leaderboard&quot;] --&gt;|&quot;GET /v1/leaderboard/top10&quot;| Gateway
+    end
+
+    subgraph RealTimePath[&quot;1. Ultra-Low Latency In-Memory Path (&lt; 2ms)&quot;]
+        Gateway --&gt; LeaderboardSvc[&quot;Leaderboard Microservice&quot;]
+        LeaderboardSvc --&gt; RedisCluster[(&quot;Redis Cluster (Sorted Sets - ZSET)&quot;)]
+        RedisCluster --&gt;|&quot;ZADD player score&quot;| ScoreUpdate[&quot;Atomic Score Update in O(log N)&quot;]
+        RedisCluster --&gt;|&quot;ZREVRANK player&quot;| RankResult[&quot;Player Rank in O(log N)&quot;]
+        RedisCluster --&gt;|&quot;ZREVRANGE 0 9 WITHSCORES&quot;| Top10[&quot;Top 10 Global Leaders&quot;]
+    end
+
+    subgraph PersistencePath[&quot;2. Asynchronous Durability &amp; Archival Path&quot;]
+        LeaderboardSvc --&gt; Kafka[&quot;Kafka Score Event Topic&quot;]
+        Kafka --&gt; PersistenceWorker[&quot;Archival Worker Pool&quot;]
+        PersistenceWorker --&gt; RelationalDB[(&quot;Historical Database (PostgreSQL / Bigtable)&quot;)]
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
+<p>Consider a mobile game with <strong>25 Million Daily Active Users (DAU)</strong>:</p>
+<ul>
+<li><strong>Score Update QPS</strong>:
+<ul>
+<li>Average matches played per user: 10 matches/day.</li>
+<li>Total matches: $25\text{M} \times 10 = 250\text{ million matches/day}$.</li>
+<li>Average write QPS: $250\text{M} / 86,400 \approx 2,900\text{ updates/second}$.</li>
+<li>Peak write QPS ($5\times$ evening peak): <strong>$\approx 15,000\text{ score updates/second}$</strong>.</li>
+</ul>
+</li>
+<li><strong>Leaderboard View QPS</strong>:
+<ul>
+<li>Players view leaderboard after every match: $\approx 15,000\text{ read QPS}$.</li>
+</ul>
+</li>
+<li><strong>Redis Memory Footprint</strong>:
+<ul>
+<li>25 million active player entries.</li>
+<li>Each entry in Redis <code>ZSET</code>: Member string (<code>user_uuid</code> $\approx 36$ bytes) + 8-byte double-precision score + Skip List node pointer overhead (32 bytes) $\approx 80\text{ bytes}$ per player.</li>
+<li>Total memory: $25\text{M} \times 80\text{ bytes} \approx 2.0\text{ Gigabytes}$!</li>
+<li>2.0 GB of RAM easily fits on a single standard Redis node. Replicating across a 3-node Redis cluster provides both high-availability and read scale.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-redis-sorted-sets-zset-and-skip-lists">1. Redis Sorted Sets (<code>ZSET</code>) and Skip Lists</h3>
+<p>A Redis Sorted Set is backed by two data structures simultaneously:</p>
+<ol>
+<li><strong>Hash Table</strong>: Maps <code>member -&gt; score</code> for instantaneous $O(1)$ score lookups (<code>ZSCORE</code>).</li>
+<li><strong>Skip List</strong>: A probabilistic multi-level linked list that sorts members by score:
+<ul>
+<li>Level 1 links every single node.</li>
+<li>Level 2 links every 2nd node.</li>
+<li>Level $k$ links every $2^k$-th node.</li>
+</ul>
+</li>
+</ol>
+<ul>
+<li>Inserting or updating a player's score (<code>ZADD</code>) is $O(\log N)$.</li>
+<li>Finding a player's rank (<code>ZREVRANK</code>) traverses the express pointers from top level down, computing rank in $O(\log N)$.</li>
+<li>Fetching the Top-10 players (<code>ZREVRANGE 0 9</code>) takes $O(\log N + 10)$ time ($&lt; 0.5\text{ ms}$).</li>
+</ul>
+<h3 id="2-tie-breaking-strategies-first-come-first-served">2. Tie-Breaking Strategies (First-Come, First-Served)</h3>
+<p>In gaming tournaments, if Alice and Bob both reach 1,500 points, the player who reached 1,500 points <em>first</em> must be ranked higher.
+<strong>The Timestamp Packing Formula</strong>:
+Instead of storing just points, we store a compound fractional score:</p>
+<p>$$\text{Combined Score} = \text{Points} + \left(1 - \frac{\text{Current Timestamp}}{\text{Max Future Timestamp}}\right)$$</p>
+<p>Because earlier timestamps produce larger fractional values, Alice (who scored earlier) will mathematically have a slightly higher composite float score than Bob, breaking ties deterministically in $O(1)$ without secondary database queries!</p>
+<h3 id="3-sharding-strategies-for-massive-scale">3. Sharding Strategies for Massive Scale</h3>
+<p>When player count reaches 100M+ or update volume exceeds 100,000 QPS:</p>
+<ul>
+<li><strong>Fixed Partitioning by Score Range</strong>: Shard 1 holds Bronze ($0-1000$), Shard 2 holds Silver ($1001-2000$), Shard 3 holds Masters ($&gt; 2000$).</li>
+<li><strong>Geographic / Region Sharding</strong>: Separate leaderboards for North America (<code>na-east</code>), Europe (<code>eu-west</code>), and Asia (<code>asia-east</code>).</li>
+<li><strong>Game Mode Sharding</strong>: Solos, Duos, Squads, and Ranked Seasons each have independent Redis keys.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Relational Database (<code>ORDER BY</code>)</th>
+<th style="text-align:left">Elasticsearch Inverted Index</th>
+<th style="text-align:left">Redis Sorted Set (<code>ZSET</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Write Latency</strong></td>
+<td style="text-align:left">Slow ($10 - 50\text{ ms}$)</td>
+<td style="text-align:left">Moderate ($20 - 40\text{ ms}$)</td>
+<td style="text-align:left">Ultra-fast ($&lt; 1\text{ ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Rank Calculation Complexity</strong></td>
+<td style="text-align:left">$O(N)$ index scan</td>
+<td style="text-align:left">$O(N)$ bucket aggregation</td>
+<td style="text-align:left">$O(\log N)$ Skip List traversal</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Memory Footprint</strong></td>
+<td style="text-align:left">Low (disk-backed)</td>
+<td style="text-align:left">High (JVM heap)</td>
+<td style="text-align:left">Moderate (all in RAM)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Durability Guarantee</strong></td>
+<td style="text-align:left">Immediate ACID write</td>
+<td style="text-align:left">Near-real-time (refresh interval)</td>
+<td style="text-align:left">In-memory with append-only file (AOF)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Recalculating Ranks on Every Read with SQL</strong>: Running <code>SELECT COUNT(*) WHERE score &gt; my_score</code> across millions of rows causes table locks and CPU spikes under high concurrency. Always use in-memory Skip Lists.</li>
+<li><strong>Neglecting Tie-Breaking</strong>: When thousands of players tie at the same score, arbitrary ordering causes players' ranks to fluctuate randomly on page refresh, triggering complaints.</li>
+<li><strong>Synchronous Database Writes in the Game Loop</strong>: Writing directly to SQL on every point change introduces database bottlenecks into the game server loop. Decouple writes through Redis and an asynchronous Kafka event topic.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating Skip List-style logarithmic ranking, fractional tie-breaking, real-time score updates, and Top-K retrieval is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 2 - Chapter 10 (Real-Time Gaming Leaderboard)</a></li>
+<li><a href="https://redis.io/docs/data-types/sorted-sets/">Redis Documentation: Sorted Sets and Skip List Implementation Details</a></li>
+<li><a href="https://15721.courses.cs.cmu.edu/spring2018/papers/07-oltpindexes1/pugh-skiplists-cacm1990.pdf">William Pugh: Skip Lists - A Probabilistic Alternative to Balanced Trees (Communications of the ACM, 1990)</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-what-is-the-underlying-data-structure-of-redis-sorted-sets-zset-and-why-is-it-ideal-for-leaderboards">Q1: What is the underlying data structure of Redis Sorted Sets (<code>ZSET</code>) and why is it ideal for leaderboards?</h3>
+<p><strong>Model Answer</strong>: A Redis Sorted Set is implemented using a dual data structure:</p>
+<ol>
+<li>A <strong>Hash Table</strong> mapping member strings to double-precision float scores, providing $O(1)$ score lookups.</li>
+<li>A <strong>Skip List (SkipList)</strong> that maintains members sorted in ascending/descending order. The Skip List uses probabilistic multi-level express pointers that bypass large subsets of elements.
+This allows:</li>
+</ol>
+<ul>
+<li>Inserting or updating scores (<code>ZADD</code>) in $O(\log N)$ time.</li>
+<li>Computing a player's exact rank (<code>ZREVRANK</code>) in $O(\log N)$ time.</li>
+<li>Retrieving the Top-K players (<code>ZREVRANGE 0 K-1</code>) in $O(\log N + K)$ time, serving requests in under 1 millisecond.</li>
+</ul>
+<h3 id="q2-how-do-you-handle-tie-breaking-when-two-players-achieve-the-exact-same-score">Q2: How do you handle tie-breaking when two players achieve the exact same score?</h3>
+<p><strong>Model Answer</strong>: In competitive gaming, ties are typically resolved on a <strong>First-Come, First-Served</strong> basis (the player who reached the score first is ranked higher).
+We encode tie-breaking directly into the 64-bit IEEE 754 float score:
+$$\text{Stored Score} = \text{Base Score} + \left(1 - \frac{\text{Timestamp}}{\text{Max Timestamp}}\right)$$
+Because an earlier timestamp yields a larger fraction, the earlier player automatically has a strictly higher numerical score. Redis sorts the entries with zero additional application code or secondary database lookups.</p>
+<h3 id="q3-how-do-you-design-the-system-if-the-leaderboard-exceeds-the-memory-capacity-of-a-single-redis-instance">Q3: How do you design the system if the leaderboard exceeds the memory capacity of a single Redis instance?</h3>
+<p><strong>Model Answer</strong>: We partition (shard) the leaderboard using <strong>Score-Tier Partitioning</strong>:</p>
+<ol>
+<li>Partition the global score space into discrete tiers (e.g., Bronze: 0-999, Silver: 1000-1999, Gold: 2000-2999, Masters: $\ge 3000$).</li>
+<li>Each tier is stored on an independent Redis cluster node.</li>
+<li>We maintain an in-memory metadata service tracking total player counts in each tier (<code>count_gold = 100,000</code>, <code>count_masters = 5,000</code>).</li>
+<li>To find the global rank of a Gold player ranked #12,000 in the Gold shard:
+$$\text{Global Rank} = \text{count_masters} + \text{Local Gold Rank} = 5,000 + 12,000 = 17,000$$</li>
+</ol>
+<h3 id="q4-how-do-you-show-surrounding-competitors-eg-5-players-above-and-5-players-below-me">Q4: How do you show &quot;Surrounding Competitors&quot; (e.g., 5 players above and 5 players below me)?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li>Query the player's exact rank using <code>ZREVRANK leaderboard user_id</code> $\rightarrow$ returns index $R$.</li>
+<li>Compute the window bounds: $\text{start} = \max(0, R - 5)$, $\text{stop} = R + 5$.</li>
+<li>Execute <code>ZREVRANGE leaderboard start stop WITHSCORES</code>.
+This retrieves the player, their 5 closest superiors, and their 5 closest challengers in a single $O(\log N + M)$ Redis command ($&lt; 1\text{ ms}$).</li>
+</ol>
+<h3 id="q5-how-do-you-handle-end-of-season-monthly-leaderboard-resets-without-downtime">Q5: How do you handle end-of-season monthly leaderboard resets without downtime?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li><strong>Dynamic Key Versioning</strong>: Leaderboard keys include the season identifier: <code>leaderboard:season_2026_11</code>.</li>
+<li>When Season 11 ends at midnight:
+<ul>
+<li>A background worker takes an atomic snapshot of <code>leaderboard:season_2026_11</code> and archives final standings to Bigtable / Amazon S3.</li>
+<li>The game client configuration updates the active key to <code>leaderboard:season_2026_12</code>.</li>
+<li>Reads and writes seamlessly shift to the fresh Season 12 Redis key without locking or flushing the existing cluster.</li>
+<li>Historical keys are safely archived to cold storage and deleted after 30 days.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. What is the time complexity of looking up a player's rank in a Redis Sorted Set?</b></summary>
+A) O(1)<br/>
+B) O(log N)<br/>
+C) O(N)<br/>
+D) O(N^2)<br/><br/>
+<b>Answer: B</b>. The Skip List structure enables logarithmic traversal down multi-level express pointers.
+</details>
+<details>
+<summary><b>2. Why is using fractional timestamp subtraction useful in leaderboard scores?</b></summary>
+A) It encrypts the score.<br/>
+B) It breaks ties deterministically: earlier scores receive a slightly larger fractional bonus, ensuring first-come first-served ranking.<br/>
+C) It compresses the score into 8 bits.<br/>
+D) It prevents cheaters from hacking the game.<br/><br/>
+<b>Answer: B</b>. Fractional tie-breaking guarantees deterministic sorting without secondary database queries.
+</details>
+<details>
+<summary><b>3. Which Redis command retrieves the Top 10 players along with their scores in descending order?</b></summary>
+A) `GET top_10`<br/>
+B) `ZREVRANGE leaderboard 0 9 WITHSCORES`<br/>
+C) `HGETALL leaderboard`<br/>
+D) `LRANGE leaderboard 0 9`<br/><br/>
+<b>Answer: B</b>. `ZREVRANGE` returns members sorted from highest to lowest score.
+</details>
+<details>
+<summary><b>4. How can a leaderboard with 100M+ players be sharded across multiple Redis nodes?</b></summary>
+A) By random sampling.<br/>
+B) By Score-Tier Partitioning (e.g. Bronze, Silver, Gold shards) combined with tier population count offsets.<br/>
+C) By deleting inactive players.<br/>
+D) By rebooting the servers every hour.<br/><br/>
+<b>Answer: B</b>. Partitioning by score tiers isolates clusters while simple count summation yields global rank.
+</details>
+<details>
+<summary><b>5. Why should score updates be written to Kafka before the permanent SQL database?</b></summary>
+A) Because SQL databases cannot store scores.<br/>
+B) To buffer and decouple the high-frequency game loop writes (thousands/sec) from slow disk-backed databases.<br/>
+C) Because Kafka is an anti-cheat system.<br/>
+D) To avoid using Redis.<br/><br/>
+<b>Answer: B</b>. Message queues protect relational databases from write saturation during peak gaming hours.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="API Gateways &amp; Reverse Proxies">
+  <title>API Gateways &amp; Reverse Proxies | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="04--api-gateways--reverse-proxies">04 · API Gateways &amp; Reverse Proxies</h1>
+<blockquote>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../03-load-balancing/index.html">03 · Load balancing</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../04-api-gateways-and-proxies/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>When your backend grows from one server into 50 different microservices (User Service, Payment Service, Recommendation Service), you should <strong>never</strong> let external mobile apps call those 50 services directly.</p>
+<p>An <strong>API Gateway</strong> acts as the single front door to your entire system. External clients talk only to the gateway. The gateway checks their security badge (authentication), protects the building from mobs (rate limiting), decrypts their encryption (SSL termination), and guides their request to the exact microservice inside.</p>
+<hr />
+<h2 id="everyday-analogy-the-airport-customs--security-terminal">🍕 Everyday analogy: The Airport Customs &amp; Security Terminal</h2>
+<p>Imagine arriving on an international flight at a major global airport:</p>
+<ul>
+<li><strong>Without a Gateway (Total Chaos):</strong> Passengers step off the plane onto the runway and wander freely into baggage rooms, air traffic control towers, and pilot lounges looking for their luggage. Every single room has to hire its own armed guard to check passports, inspect baggage, and verify tickets.</li>
+<li><strong>With an API Gateway (Order &amp; Security):</strong> All passengers must pass through a single unified International Terminal:
+<ol>
+<li><strong>Border Patrol (Authentication):</strong> Officers verify your passport and visa once at the perimeter.</li>
+<li><strong>Security Screening (Rate Limiting &amp; WAF):</strong> Luggage is X-rayed for contraband and dangerous traffic.</li>
+<li><strong>Terminal Directory (Routing):</strong> Flight display boards tell you: <em>&quot;Passengers for Flight B go to Gate 14; passengers for Flight C go to Gate 22.&quot;</em></li>
+<li>Once cleared, you enter the secure concourse where internal staff can operate safely.</li>
+</ol>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the airport analogy</th>
+<th style="text-align:left">In microservices architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Arriving International Passenger</strong></td>
+<td style="text-align:left"><strong>External Client Request</strong> (Browser / iOS / Android)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Main Airport Security Entrance</strong></td>
+<td style="text-align:left"><strong>API Gateway / Reverse Proxy</strong> (Envoy, Kong, Nginx)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Passport &amp; Visa Inspection</strong></td>
+<td style="text-align:left"><strong>JWT Authentication &amp; API Key Validation</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Customs Screening for Contraband</strong></td>
+<td style="text-align:left"><strong>Web Application Firewall (WAF)</strong> (SQLi / XSS filtering)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Terminal Signs to Flight Gates</strong></td>
+<td style="text-align:left"><strong>Path-Based Request Routing</strong> (<code>/orders</code> $\to$ Order Service)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Airport Concierge Booking Hotel+Cab</strong></td>
+<td style="text-align:left"><strong>Backend-For-Frontend (BFF) Aggregation</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Secure Internal Concourse</strong></td>
+<td style="text-align:left"><strong>Private Cloud Network (VPC / Kubernetes Service Mesh)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<p>In a modern microservices architecture with 30 backend services:</p>
+<ol>
+<li><strong>Security Vulnerability:</strong> If 30 services are exposed directly to the public internet, each one must manage public IP addresses, configure SSL certificates, and protect against brute-force DDoS attacks. One vulnerable service compromises the entire enterprise.</li>
+<li><strong>Chatty Mobile Clients:</strong> To render a home screen, an iPhone app would have to make 5 separate HTTP calls over a slow cellular network:
+<ul>
+<li><code>GET /users/me</code> (Profile)</li>
+<li><code>GET /orders/recent</code> (Orders)</li>
+<li><code>GET /cart</code> (Shopping cart)</li>
+<li><code>GET /recommendations</code> (Feed items)</li>
+<li><code>GET /notifications</code> (Unread count)
+On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$500\text{ ms}$</strong>, draining battery and creating a sluggish UI.</li>
+</ul>
+</li>
+<li><strong>Cross-Cutting Concerns Duplication:</strong> Every engineering team has to reimplement rate limiting, auth token parsing, CORS headers, and request logging in Python, Go, Java, and Node.js.</li>
+</ol>
+<p>The API Gateway solves this by centralizing all cross-cutting perimeter duties in one battle-tested edge layer.</p>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/api_gateway.gif" alt="API Gateway Architecture Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart LR
+    Client[&quot;📱 Mobile App (Public Internet)&quot;] --&gt;|&quot;1. HTTPS Request&lt;br/&gt;Bearer JWT Token&quot;| GW[&quot;🚪 API Gateway&lt;br/&gt;(Kong / Envoy / Traefik)&quot;]
+
+    subgraph CrossCutting[&quot;Edge Perimeter Responsibilities&quot;]
+        direction TB
+        SSL[&quot;🔒 SSL/TLS Termination&quot;]
+        Auth[&quot;🔑 JWT Signature Verification&quot;]
+        Rate[&quot;⏱️ Rate Limit Check (Redis)&quot;]
+        WAF[&quot;🛡️ WAF Sanitization&quot;]
+    end
+
+    GW --- CrossCutting
+
+    subgraph PrivateNetwork[&quot;Private Virtual Cloud (VPC)&quot;]
+        direction TB
+        S1[&quot;👤 User Service (:8081 - gRPC)&quot;]
+        S2[&quot;📦 Order Service (:8082 - gRPC)&quot;]
+        S3[&quot;💳 Payment Service (:8083 - gRPC)&quot;]
+        S4[&quot;🎯 Recommendation Service (:8084 - gRPC)&quot;]
+    end
+
+    GW --&gt;|/api/v1/users| S1
+    GW --&gt;|/api/v1/orders| S2
+    GW --&gt;|/api/v1/payments| S3
+    GW --&gt;|BFF Composite Call| S4
+</code></pre>
+<ol>
+<li>External client sends a single HTTPS request with an Authorization header to <code>api.example.com</code>.</li>
+<li>The Gateway offloads TLS decryption and verifies the cryptographic signature of the JWT token.</li>
+<li>The Gateway queries Redis to confirm the user has remaining rate limiting quota.</li>
+<li>The Gateway routes the sanitized request over the high-speed private network (VPC) to the target microservice using fast internal gRPC.</li>
+<li>In a BFF route, the Gateway queries multiple microservices in parallel and stitches the results into one compact JSON response.</li>
+</ol>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<h3 id="mobile-latency-direct-calls-vs-bff-gateway-aggregation">Mobile Latency: Direct Calls vs BFF Gateway Aggregation</h3>
+<p>Suppose a mobile client on a cellular network ($70\text{ ms RTT}$) needs to assemble its home dashboard from 4 backend services. Each backend service takes $15\text{ ms}$ of internal computing time.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Approach</th>
+<th style="text-align:center">Network Round-Trips over Cellular</th>
+<th style="text-align:center">Internal Datacenter Transit</th>
+<th style="text-align:center">Total Elapsed Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Direct Microservice Calls</strong> (No Gateway)</td>
+<td style="text-align:center">4 cellular RTTs ($4 \times 70\text{ms} = 280\text{ms}$)</td>
+<td style="text-align:center">$0\text{ ms}$</td>
+<td style="text-align:center"><strong>$340\text{ ms}$</strong> (Sluggish)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>API Gateway BFF Aggregation</strong></td>
+<td style="text-align:center"><strong>1 cellular RTT</strong> ($1 \times 70\text{ms} = 70\text{ms}$)</td>
+<td style="text-align:center">Parallel internal RPCs ($1\text{ms} \times 4$)</td>
+<td style="text-align:center"><strong>$86\text{ ms}$</strong> (Instant!)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>Impact:</strong> By aggregating 4 calls into 1 at the gateway, you eliminate 3 round trips over the cellular airwaves, achieving a <strong>$4\times$ speedup</strong> and saving mobile battery!</p>
+</blockquote>
+<hr />
+<h2 id="how-it-works-reverse-proxies--gateway-architecture">⚙️ How it works: Reverse Proxies &amp; Gateway Architecture</h2>
+<h3 id="1-forward-proxy-vs-reverse-proxy">1. Forward Proxy vs Reverse Proxy</h3>
+<p>Understanding the direction of representation is essential:</p>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph FP[&quot;Forward Proxy (Protects Clients)&quot;]
+        C1[&quot;Client A&quot;] --&gt; FProxy[&quot;🛡️ Forward Proxy&quot;]
+        C2[&quot;Client B&quot;] --&gt; FProxy
+        FProxy --&gt; Internet1[&quot;🌐 Public Internet / Web Servers&quot;]
+    end
+
+    subgraph RP[&quot;Reverse Proxy (Protects Servers)&quot;]
+        Internet2[&quot;🌐 Public Internet / Clients&quot;] --&gt; RProxy[&quot;🚪 Reverse Proxy&quot;]
+        RProxy --&gt; Srv1[&quot;🖥️ Backend 1&quot;]
+        RProxy --&gt; Srv2[&quot;🖥️ Backend 2&quot;]
+    end
+</code></pre>
+<ul>
+<li><strong>Forward Proxy (Client-Facing):</strong> Sits in front of a group of <strong>clients</strong> (e.g., inside a corporate office or school). It hides the real client IPs, filters outbound illicit websites, and caches shared intranet downloads. The outside world only sees the proxy's IP.</li>
+<li><strong>Reverse Proxy (Server-Facing):</strong> Sits in front of a group of <strong>servers</strong>. External clients believe they are talking directly to the destination website. It terminates TLS, shields internal IP addresses, caches static assets, and balances traffic.</li>
+</ul>
+<hr />
+<h3 id="2-core-responsibilities-of-an-api-gateway">2. Core Responsibilities of an API Gateway</h3>
+<p>An API Gateway is a specialized reverse proxy enriched with application-level microservices intelligence:</p>
+<ol>
+<li><strong>Authentication &amp; Identity Offloading:</strong>
+<ul>
+<li>Instead of every microservice validating passwords or verifying OAuth tokens with Auth0, the gateway validates the incoming JWT at the door.</li>
+<li>The gateway decodes the claims and injects trusted internal headers: <code>X-User-Id: 4102</code>, <code>X-User-Role: admin</code>.</li>
+<li>Internal microservices can trust these headers implicitly because external users cannot bypass the gateway.</li>
+</ul>
+</li>
+<li><strong>Protocol Translation:</strong>
+<ul>
+<li>Clients communicate via standard HTTP/1.1 or HTTP/2 JSON REST.</li>
+<li>The gateway translates the JSON payload into compact binary <strong>gRPC / Protocol Buffers</strong> to communicate with internal backend services with maximum speed.</li>
+</ul>
+</li>
+<li><strong>Backend-For-Frontend (BFF) Pattern:</strong>
+<ul>
+<li>Provides tailored endpoints for different client form factors:
+<ul>
+<li><code>/api/mobile/v1/*</code>: Strips out heavy description strings to save mobile data.</li>
+<li><code>/api/desktop/v1/*</code>: Returns full rich analytical datasets for wide screens.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Traffic Canary Splits:</strong>
+<ul>
+<li>Routes $95%$ of traffic to <code>v1</code> of a service and $5%$ of traffic to a newly deployed <code>v2</code> canary instance to test stability.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="trade-offs-centralized-gateway-vs-service-mesh">⚖️ Trade-offs: Centralized Gateway vs Service Mesh</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Architecture</th>
+<th style="text-align:left">Description</th>
+<th style="text-align:left">Pros</th>
+<th style="text-align:left">Cons</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Centralized API Gateway</strong> (Kong, Apigee, AWS API Gateway)</td>
+<td style="text-align:left">Single shared cluster at the network edge</td>
+<td style="text-align:left">One place for all security policies, billing, and rate limits</td>
+<td style="text-align:left">Can become an organizational bottleneck if teams fight over configs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Backend-For-Frontend (BFF)</strong></td>
+<td style="text-align:left">Each client platform (iOS, Web, Smart TV) owns a small dedicated gateway</td>
+<td style="text-align:left">Teams deploy changes independently without coordinating</td>
+<td style="text-align:left">Slight duplication of common auth logic across gateways</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Service Mesh Sidecars</strong> (Envoy / Istio)</td>
+<td style="text-align:left">Sidecar proxy deployed alongside every single container</td>
+<td style="text-align:left">Service-to-service mTLS encryption and deep telemetry</td>
+<td style="text-align:left">High operational complexity and increased cluster RAM overhead</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Leaking Business Logic into the Gateway:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> Engineers start writing pricing algorithms, order validation logic, or tax calculations inside the gateway router scripts. The gateway becomes a bloated, monolithic mess that requires multi-team approval for every release.</li>
+<li><em>The Fix:</em> Keep the gateway strictly focused on <strong>cross-cutting perimeter concerns</strong> (Auth, Routing, Rate Limiting, SSL). Business logic belongs exclusively inside domain microservices!</li>
+</ul>
+</li>
+<li>
+<p><strong>Database Queries in the Gateway:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> If the gateway connects directly to PostgreSQL to look up user permissions on every request, the gateway becomes a database connection bottleneck.</li>
+<li><em>The Fix:</em> Validate identity statelessly using <strong>cryptographically signed JWTs</strong> (verifying the signature with a public key in memory in $&lt; 0.1\text{ ms}$ without querying any database).</li>
+</ul>
+</li>
+<li>
+<p><strong>No Timeout Configuration for Downstream Services:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> If the Recommendation Service hangs for 30 seconds due to a database deadlock, gateway worker threads remain blocked waiting for a response. Incoming traffic backs up, exhausting gateway file descriptors and crashing the entire site.</li>
+<li><em>The Fix:</em> Configure strict <strong>request timeouts</strong> (e.g. 500 ms) and deploy <strong>Circuit Breakers</strong> (<a href="../20-fault-tolerance-and-resilience/index.html">module 20</a>) at the gateway.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 04-api-gateways-and-proxies
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch unauthenticated requests get rejected at the perimeter with <strong>401 Unauthorized</strong> without touching any internal service.</li>
+<li>Observe how the <strong>BFF Aggregation route</strong> (<code>/api/v1/mobile/home-dashboard</code>) queries User, Order, and Recommendation services concurrently and packages them into 1 unified response.</li>
+<li>Test rate limiting in action: watch the gateway throttle the 4th request from the same user with <strong>HTTP 429</strong>.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Netflix Zuul / Spring Cloud Gateway:</strong> Manages all edge traffic for Netflix's streaming apps, executing dynamic routing, canary tests, and cryptographic verification.</li>
+<li><strong>Envoy Proxy:</strong> High-performance C++ edge and service proxy created by Lyft, now the industry standard underlying Istio, Google Cloud Traffic Director, and AWS App Mesh.</li>
+<li><strong>Kong Gateway:</strong> Popular open-source API gateway built on top of Nginx and Lua, offering a vast ecosystem of plugins for OAuth, rate limiting, and analytics.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-the-architectural-distinction-between-a-load-balancer-a-reverse-proxy-and-an-api-gateway">Q1: &quot;What is the architectural distinction between a Load Balancer, a Reverse Proxy, and an API Gateway?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>While their responsibilities often overlap in modern software (e.g. Nginx can act as all three), their architectural focus is distinct:</p>
+<ol>
+<li><strong>Reverse Proxy:</strong> The base concept. Any server that sits in front of backend servers and forwards requests to them, hiding their identity, terminating TLS, and providing caching.</li>
+<li><strong>Load Balancer:</strong> A specialized reverse proxy focused primarily on <strong>traffic distribution</strong> across a pool of identical server instances using algorithms (Round Robin, Least Connections) to prevent overloading and ensure high availability.</li>
+<li><strong>API Gateway:</strong> An application-layer (Layer 7) edge controller built specifically for <strong>microservices</strong>. Beyond load balancing, it acts as the API perimeter controller: validating JWTs, offloading authentication, managing API keys and developer quotas, performing path routing to diverse services, translating protocols (HTTP $\to$ gRPC), and aggregating responses (BFF pattern).</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-how-does-an-api-gateway-validate-user-authentication-at-high-scale-100000-rps-without-crashing-the-user-database">Q2: &quot;How does an API Gateway validate user authentication at high scale (100,000 RPS) without crashing the user database?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>By using <strong>Stateless Cryptographic Tokens (JSON Web Tokens - JWT)</strong>:</p>
+<ol>
+<li><strong>Asymmetric Key Verification:</strong> When a user logs in, the Auth Service signs a JWT containing claims (<code>user_id</code>, <code>role</code>, <code>expires_at</code>) using a private RSA/ECDSA key.</li>
+<li><strong>In-Memory Signature Check:</strong> The API Gateway downloads the Auth Service's <strong>Public Key</strong> once on startup (via JWKS endpoint).</li>
+<li>When requests arrive at 100,000 RPS, the Gateway cryptographically verifies the signature in memory using CPU math in $&lt; 0.1\text{ ms}$. <strong>Zero database queries are performed.</strong></li>
+<li>If the signature matches and <code>now &lt; expires_at</code>, the token is valid. The Gateway unpacks the claims, injects <code>X-User-Id: 4120</code> into the request header, and forwards it to internal services.</li>
+<li><strong>Revocation Strategy:</strong> For emergency logouts, the Gateway maintains an in-memory Redis blocklist of revoked token IDs (<code>jti</code>), checking it with an ultra-fast $O(1)$ key lookup.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-what-is-the-backend-for-frontend-bff-pattern-and-why-would-you-create-multiple-api-gateways">Q3: &quot;What is the Backend-For-Frontend (BFF) pattern, and why would you create multiple API Gateways?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>The Problem with a Single Generic Gateway:</strong> A smart watch, a mobile phone, a desktop web browser, and a 3rd-party public API developer have vastly different network constraints and data needs:
+<ul>
+<li>Mobile phones want minimal byte payloads over cellular to save battery.</li>
+<li>Desktop browsers want rich, nested tables.</li>
+<li>3rd-party developers need strict semantic versioning.</li>
+</ul>
+</li>
+<li><strong>The BFF Solution:</strong> Instead of forcing all clients through one bloated, generic gateway with complex <code>if/else</code> formatting switches, you create <strong>dedicated micro-gateways</strong>:
+<ul>
+<li><code>Mobile-BFF Gateway</code>: Managed by the mobile team. Aggregates data and trims JSON fields.</li>
+<li><code>Web-BFF Gateway</code>: Managed by the web frontend team.</li>
+<li><code>Public-API Gateway</code>: Managed by the platform team with OAuth scopes and monetized rate limits.</li>
+</ul>
+</li>
+<li><strong>Benefits:</strong> Decouples team release cycles. The mobile team can deploy changes to their BFF gateway daily without risking web or public API stability.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-how-do-you-prevent-the-api-gateway-itself-from-becoming-a-catastrophic-single-point-of-failure-and-bottleneck">Q4: &quot;How do you prevent the API Gateway itself from becoming a catastrophic single point of failure and bottleneck?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>We scale and protect the gateway across four defensive layers:</p>
+<ol>
+<li><strong>Stateless Clustering:</strong> The gateway nodes store zero session state in local memory. Gateways run in an <strong>Auto-Scaling Group</strong> behind a Layer 4 Network Load Balancer (AWS NLB) or BGP Anycast IP. As traffic doubles, the cluster automatically scales from 10 to 20 nodes.</li>
+<li><strong>Asynchronous Non-Blocking I/O:</strong> High-performance gateways (Envoy, Nginx) use event-driven, non-blocking I/O (<code>epoll</code> on Linux). A single gateway instance can maintain 50,000+ concurrent open connections using minimal threads without thread-context-switching bottlenecks.</li>
+<li><strong>Strict Timeouts &amp; Circuit Breakers:</strong> The gateway wraps every internal microservice call in a strict timeout (e.g. 200 ms). If a downstream service stalls, the circuit breaker opens instantly, returning a cached or graceful fallback response rather than allowing blocked threads to saturate the gateway.</li>
+<li><strong>Fast-Path Rate Limiting:</strong> Abusive clients and scrapers are rejected at the very first step in memory before allocating internal memory buffers or opening upstream sockets.</li>
+</ol>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A company moves from a monolith to 20 microservices. They deploy an API Gateway. Why should internal microservices still NOT be publicly reachable over the internet?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Because the API Gateway performs all perimeter security (JWT validation, rate limiting, and WAF sanitization). If microservices have public IPs, an attacker can bypass the API Gateway entirely and call the internal microservice directly with forged headers or abusive floods. Microservices must sit in a <strong>Private Virtual Cloud (VPC)</strong> with zero public IP addresses, accepting traffic only from the Gateway's security group.</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>What is the difference between an API Gateway and a Service Mesh (like Istio)?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<ul>
+<li><strong>API Gateway:</strong> Manages <strong>North-South traffic</strong> (traffic flowing from external internet clients into the datacenter). Focuses on public auth, billing, developer API keys, and SSL termination.</li>
+<li><strong>Service Mesh:</strong> Manages <strong>East-West traffic</strong> (traffic flowing internally between microservice A and microservice B inside the datacenter). Focuses on mutual TLS (mTLS) encryption between pods, service discovery, and distributed tracing.</li>
+</ul>
+</details>
+<hr />
+<ol start="3">
+<li><strong>Why is terminating SSL at the API Gateway called &quot;SSL Offloading&quot;?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Because cryptographic handshakes and public-key decryption require significant CPU mathematical computation. By decrypting the TLS connection once at the gateway perimeter, internal microservices are &quot;offloaded&quot; from having to do crypto math, freeing up their CPU to focus purely on business logic.</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Web Scalability for Startup Engineers</strong> by Artur Ejsmont: Chapter 4 (<em>Application Services &amp; Reverse Proxies</em>).</li>
+<li><strong>Building Microservices (2nd Edition)</strong> by Sam Newman: Chapter on <em>API Gateways and the Backends-for-Frontends (BFF) Pattern</em>.</li>
+<li><strong>Envoy Proxy Architecture Guide:</strong> The official documentation on thread models, listeners, and filter chains (envoyproxy.io).</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: The HTTP and WebSocket protocols terminated by the gateway.</li>
+<li><a href="../03-load-balancing/index.html">03 · Load balancing</a>: How Layer 4 balancers distribute traffic across a fleet of API gateways.</li>
+<li><a href="../05-rate-limiting/index.html">05 · Rate limiting</a>: The algorithms implemented inside the gateway to protect backends from floods.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

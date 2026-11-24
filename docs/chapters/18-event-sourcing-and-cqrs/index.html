@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)">
+  <title>Event Sourcing &amp; CQRS (Command Query Responsibility Segregation) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="18---event-sourcing--cqrs-command-query-responsibility-segregation">18 - Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> Traditional CRUD systems mutate state in place (<code>UPDATE users SET email = '...'</code>), destroying historical intent, temporal context, and audit trails. <strong>Event Sourcing</strong> persists every state mutation as an immutable, append-only domain event (<code>EmailUpdated</code>, <code>MoneyDeposited</code>). <strong>CQRS</strong> (Command Query Responsibility Segregation) structurally splits the architecture into two independent models: a write-optimized <strong>Command Side</strong> enforcing business invariants, and a read-optimized <strong>Query Side</strong> maintaining denormalized materialized projections. Together, they provide complete auditability, time-travel debugging, and unconstrained read scalability.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../18-event-sourcing-and-cqrs/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: CRUD operations, write-ahead logs (WAL), and read-heavy vs write-heavy workloads.</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous projections.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Append-only logs, consumer groups, and event streaming.</li>
+<li><strong>Domain-Driven Design (DDD)</strong>: Aggregates, Domain Events, and Commands.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine your bank account:</p>
+<ul>
+<li><strong>Traditional CRUD</strong>: The bank keeps a single sticky note with your balance written in pencil: <code>&quot;$140&quot;</code>. When you deposit $50, the teller erases $140 and writes <code>&quot;$190&quot;</code>. If someone asks: <em>&quot;Why is the balance $190? Did you deposit money or did an employer pay you?&quot;</em>, the sticky note has zero answers.</li>
+<li><strong>Event Sourcing</strong>: The bank gives you a printed transaction passbook. Every deposit, withdrawal, and fee is permanently stamped in ink line-by-line. Your balance isn't a static number; it is simply the sum of every line in your passbook!</li>
+<li><strong>CQRS</strong>: The bank keeps the master ink passbook in a locked vault (Write Model), while displaying your current balance on a high-speed digital ATM screen (Read Model).</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Concept</th>
+<th style="text-align:left">Accounting Passbook Analogy</th>
+<th style="text-align:left">Technical Reality in Event Sourcing &amp; CQRS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Command</strong></td>
+<td style="text-align:left">Handing a check to the teller: <em>&quot;Deposit $100&quot;</em></td>
+<td style="text-align:left"><code>DepositMoneyCommand(accountId, 100)</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Domain Event</strong></td>
+<td style="text-align:left">The line stamped in indelible ink in your passbook</td>
+<td style="text-align:left">Immutable event: <code>MoneyDeposited(id, amount, timestamp)</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Event Store</strong></td>
+<td style="text-align:left">The official bound leather accounting ledger</td>
+<td style="text-align:left">Append-only database (EventStoreDB, Kafka, PostgreSQL)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Aggregate Root</strong></td>
+<td style="text-align:left">The teller enforcing rules: <em>&quot;You cannot withdraw more than you have&quot;</em></td>
+<td style="text-align:left">Domain entity verifying business logic against current state</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Materialized View</strong></td>
+<td style="text-align:left">The ATM screen showing your latest balance in 1 second</td>
+<td style="text-align:left">Denormalized projection in Redis, Elastic, or PostgreSQL</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>CQRS</strong></td>
+<td style="text-align:left">Segregating the teller vault (deposits) from the ATM (queries)</td>
+<td style="text-align:left">Splitting Write models (normalized) from Read models (flat)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Snapshot</strong></td>
+<td style="text-align:left">The bank issuing a &quot;Monthly Statement Balance&quot; every 30 days</td>
+<td style="text-align:left">Pre-computed state checkpoint preventing replay of 100k events</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Replay</strong></td>
+<td style="text-align:left">Reading the passbook from day one to recount every dollar</td>
+<td style="text-align:left">Re-projecting historical events to rebuild a corrupted database</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="the-flaws-of-destructive-crud-updates">The Flaws of Destructive CRUD Updates</h3>
+<p>In standard CRUD architectures (<code>UPDATE accounts SET balance = 50 WHERE id = 1</code>):</p>
+<ol>
+<li><strong>Loss of Intent &amp; History</strong>: Who changed the balance? Was it a refund, a fraudulent withdrawal, or a correction? The previous value is permanently destroyed.</li>
+<li><strong>Read/Write Impedance Mismatch</strong>: The relational schema required to safely process high-concurrency writes (highly normalized with foreign keys and locks) is the exact opposite of what high-speed read queries need (denormalized, flat, aggregated tables).</li>
+<li><strong>Locking Bottlenecks</strong>: Complex dashboard queries execute heavy SQL JOINs across 10 tables, locking rows and starving transactional write operations.</li>
+</ol>
+<h3 id="how-event-sourcing--cqrs-solves-this">How Event Sourcing &amp; CQRS Solves This</h3>
+<ol>
+<li><strong>100% Complete Audit Trail</strong>: Because events are append-only and never deleted, you have an unalterable forensic record of every single business transaction that ever occurred.</li>
+<li><strong>Infinite Read Scalability</strong>: The Command side only does fast $O(1)$ appends to the event store. The Query side maintains multiple specialized read models—e.g., Elasticsearch for full-text search, Redis for real-time balances, and Neo4j for social graphs—all populated asynchronously from the same event stream.</li>
+<li><strong>Time-Travel Debugging</strong>: You can run an aggregate's state backwards or replay events up to any specific millisecond in the past to reproduce production bugs with exact precision.</li>
+</ol>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-event-sourcing--cqrs-animation">High-Resolution Event Sourcing &amp; CQRS Animation</h3>
+<p>Below is an animated trace of a command generating an immutable domain event, persisting to the Event Store, and asynchronously projecting into a high-speed Read Model:</p>
+<p><img src="./assets/event_sourcing_cqrs.gif" alt="Event Sourcing and CQRS" /></p>
+<hr />
+<h3 id="end-to-end-cqrs-flowchart">End-to-End CQRS Flowchart</h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph CommandSide[&quot;1. Command Side (Write Model)&quot;]
+        ClientWrite[&quot;👤 Client&quot;] --&gt;|1. Submit Command| CmdHandler[&quot;Command Handler&lt;br/&gt;(Validates Invariants)&quot;]
+        CmdHandler --&gt;|2. Append Event| Store[(&quot;📜 Event Store&lt;br/&gt;(Append-Only Log)&quot;)]
+    end
+
+    subgraph EventBus[&quot;2. Event Distribution&quot;]
+        Store --&gt;|3. Publish Stream| Bus[&quot;⚡ Event Bus / Kafka&quot;]
+    end
+
+    subgraph QuerySide[&quot;3. Query Side (Read Model)&quot;]
+        Bus --&gt;|4. Consume| Projector[&quot;Background Projector&quot;]
+        Projector --&gt;|5. Update View| ReadDB[(&quot;📖 Read DB (Redis/SQL)&lt;br/&gt;Denormalized Projections&quot;)]
+        ClientRead[&quot;👤 Client&quot;] --&gt;|&quot;6. Query Balance (0.5ms)&quot;| ReadDB
+    end
+
+    style CommandSide fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style EventBus fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style QuerySide fill:#161b22,stroke:#3fb950,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's look at the performance math of Event Sourcing write throughput vs. Snapshotting intervals:</p>
+<h3 id="1-write-throughput-sequential-append-vs-relational-update">1. Write Throughput: Sequential Append vs Relational UPDATE</h3>
+<ul>
+<li><strong>Traditional Relational Update</strong>:
+<code>UPDATE orders SET status = 'SHIPPED', updated_at = NOW() WHERE id = 99824;</code>
+<ul>
+<li>Requires B-tree index lookup, acquiring row-level locks, updating table blocks, updating secondary index pages, and writing to WAL.</li>
+<li><strong>Cost</strong>: $\approx 5\text{–}15\text{ ms}$ per write.</li>
+</ul>
+</li>
+<li><strong>Event Sourcing Append</strong>:
+<code>INSERT INTO event_store (stream_id, version, type, payload) VALUES ('order-99824', 4, 'OrderShipped', '...');</code>
+<ul>
+<li>Pure sequential append to disk. No locks on read tables.</li>
+<li><strong>Cost</strong>: $\approx 0.5\text{–}1.0\text{ ms}$ per write (<strong>10x faster!</strong>).</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-snapshotting-frequency-math">2. Snapshotting Frequency Math</h3>
+<p>Suppose a popular e-commerce inventory item undergoes $1,000,000$ stock adjustments per year:</p>
+<ul>
+<li><strong>Without Snapshots</strong>: To load the item aggregate into memory, the server must fetch and fold all $1,000,000$ events from the event store. At $1\ \mu\text{s}$ per event, replay takes <strong>$1.0\text{ second}$</strong>, causing massive API latency.</li>
+<li><strong>With Snapshots every 1,000 events</strong>:
+<ul>
+<li>The aggregate loads the latest pre-computed snapshot (e.g., at version $999,000$).</li>
+<li>It only needs to replay the remaining $1,000$ events since the snapshot.</li>
+<li>Replay time drops from $1,000\text{ ms}$ to <strong>$1.0\text{ ms}$ (99.9% faster recovery!)</strong>.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-the-anatomy-of-an-event-store">1. The Anatomy of an Event Store</h3>
+<p>An Event Store is typically built using specialized engines (like <strong>EventStoreDB</strong>) or modeled inside PostgreSQL/DynamoDB with strict table constraints:</p>
+<p><code>*(The event store schema is defined in [schema.sql](./schema.sql); run [demo.py](./demo.py) for the executable simulation with Optimistic Concurrency Control.)*</code></p>
+<h4 id="optimistic-concurrency-control-occ">Optimistic Concurrency Control (OCC)</h4>
+<p>When two users concurrently attempt to modify the same account:</p>
+<ol>
+<li>Both read the current stream version ($V = 4$).</li>
+<li>User A appends <code>MoneyWithdrawn</code> with <code>version = 5</code>. The write succeeds.</li>
+<li>User B attempts to append <code>MoneyWithdrawn</code> with <code>version = 5</code>.</li>
+<li>The database primary key constraint <code>(stream_id, version)</code> rejects User B's insert with a unique constraint violation!</li>
+<li>User B's command handler catches the error, reloads the aggregate with fresh events, and re-evaluates whether sufficient balance remains.</li>
+</ol>
+<hr />
+<h3 id="2-materialized-views--multiple-projections">2. Materialized Views &amp; Multiple Projections</h3>
+<p>The real power of CQRS is that a single event stream can populate dozens of completely different, purpose-built read projections:</p>
+<pre><code>                                  ┌──&gt; [Redis] ─────────────&gt; Balance View (Key-Value)
+                                  │
+[Event Store] ──&gt; [Projectors] ───┼──&gt; [Elasticsearch] ─────&gt; Full-text Audit Search
+                                  │
+                                  └──&gt; [PostgreSQL / Redshift] -&gt; Monthly Analytics &amp; Tax Reports
+</code></pre>
+<ul>
+<li>If the business wants to add a new recommendation feature, they don't migrate historical database tables.</li>
+<li>They simply write a new projector and replay the entire historical event stream from day 1! The new view is fully populated in hours.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Traditional CRUD Architecture</th>
+<th style="text-align:left">Event Sourcing + CQRS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Auditability &amp; History</strong></td>
+<td style="text-align:left">None (overwritten in place)</td>
+<td style="text-align:left"><strong>100% Complete &amp; Immutable</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Performance</strong></td>
+<td style="text-align:left">Slower (locking, normalized updates)</td>
+<td style="text-align:left"><strong>Fastest ($O(1)$ sequential appends)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read Complexity</strong></td>
+<td style="text-align:left">Complex SQL JOINs across tables</td>
+<td style="text-align:left"><strong>Trivial $O(1)$ flat denormalized queries</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Consistency</strong></td>
+<td style="text-align:left">Strong / Immediate consistency</td>
+<td style="text-align:left"><strong>Eventual Consistency</strong> (read projections lag by 10–50ms)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>System Complexity</strong></td>
+<td style="text-align:left">Low (familiar to all engineers)</td>
+<td style="text-align:left">High (requires DDD, event stores, idempotency, projections)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Schema Evolution</strong></td>
+<td style="text-align:left"><code>ALTER TABLE</code> migrations</td>
+<td style="text-align:left">Event upcasting and versioned schemas</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Using Event Sourcing for Simple CRUD Applications</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Building a simple blog or admin settings page using Event Sourcing and CQRS.</li>
+<li><em>Result</em>: Extreme over-engineering. Writing commands, aggregates, events, projectors, and read views for a system with 10 writes a day adds massive architectural drag with zero benefit. Use CRUD where historical intent doesn't matter.</li>
+</ul>
+</li>
+<li>
+<p><strong>Treating Events as Ephemeral Messages Instead of State</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Deleting events from the event store after 7 days like a standard message queue.</li>
+<li><em>Result</em>: Total disaster. In Event Sourcing, the Event Store <strong>is the primary database of record</strong>. If you delete past events, you destroy your source of truth!</li>
+</ul>
+</li>
+<li>
+<p><strong>Breaking Event Schema Backward Compatibility</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Renaming a field in a payload from <code>user_name</code> to <code>username</code> without migration logic.</li>
+<li><em>Result</em>: When historical events from 2 years ago are replayed, deserialization crashes on missing fields!</li>
+<li><em>Fix</em>: Use <strong>Event Upcasting</strong> (transforming old event JSON into current version schema in memory during deserialization) or enforce strict Protobuf/Avro backward-compatibility rules.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/18-event-sourcing-and-cqrs/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>A complete Bank Account Aggregate with command validation (<code>OpenAccount</code>, <code>Deposit</code>, <code>Withdraw</code>).</li>
+<li>An append-only Event Store enforcing optimistic concurrency control.</li>
+<li>A denormalized Read Model Projector maintaining instant balance summaries.</li>
+<li>Live disaster recovery: Deleting the read database and rebuilding it from historical events with 100% accuracy.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Financial &amp; Banking Ledgers</strong>: Wall Street trading platforms, Stripe, and modern fintechs (e.g. Nubank) use event sourcing exclusively for double-entry bookkeeping ledgers. Balances are derived; transactions are indelible.</li>
+<li><strong>Git Version Control</strong>: Every Git repository is a pure event-sourced system. The commit history is an immutable append-only DAG of diffs; your working directory checkout is simply the materialized projection!</li>
+<li><strong>Uber</strong>: Tracks ride lifecycles (<code>DriverDispatched</code>, <code>RiderPickedUp</code>, <code>RouteDiverged</code>, <code>RideCompleted</code>) as an event stream, driving real-time fare calculation, driver payouts, and dispute arbitration.</li>
+<li><strong>E-Commerce Order Fulfillment</strong>: Amazon and Shopify model shopping carts and order fulfillment states through discrete domain events, decoupling warehouse shipping from customer email updates.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-the-core-difference-between-event-sourcing-and-event-driven-architecture-eda">Q1: &quot;What is the core difference between Event Sourcing and Event-Driven Architecture (EDA)?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Disqualifying candidates who confuse architectural patterns.</p>
+<p><strong>Model Answer</strong>:
+&quot;While both patterns utilize events, they solve completely different architectural concerns:</p>
+<ol>
+<li><strong>Event-Driven Architecture (EDA)</strong> is an <strong>inter-service communication pattern</strong>. Services publish events (e.g., via Kafka or SNS) to notify other services that something occurred. The publishing service may still use traditional relational CRUD tables internally to store its own state.</li>
+<li><strong>Event Sourcing</strong> is an <strong>internal data persistence pattern</strong>. Instead of storing current state in a database row, the service persists every mutation as an append-only sequence of domain events. The event log <strong>is the definitive source of truth</strong>.
+In summary: EDA is about how separate systems communicate; Event Sourcing is about how a single system persists its own state. They are often combined, but one does not imply the other.&quot;</li>
+</ol>
+<hr />
+<h3 id="q2-how-does-cqrs-handle-eventual-consistency-when-a-user-performs-a-write-and-immediately-reads-the-result">Q2: &quot;How does CQRS handle eventual consistency when a user performs a write and immediately reads the result?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing practical user-experience engineering under eventual consistency.</p>
+<p><strong>Model Answer</strong>:
+&quot;In CQRS, writing to the Command side and projecting to the Read side is asynchronous, typically introducing 10–50 ms of replication lag. If a user deposits $100 and the browser immediately redirects to the dashboard, the read database might not have applied the projection yet, showing the old balance.</p>
+<p>To solve this in production:</p>
+<ol>
+<li><strong>Command Returns Version Token</strong>: The command handler returns the newly committed version or event ID (e.g., <code>version = 5</code>).</li>
+<li><strong>Read-With-Version Polling</strong>: The frontend requests the read model passing <code>expected_version=5</code>. If the projection is still at version 4, the read API either holds the connection briefly (long polling for up to 100 ms) or queries the primary aggregate.</li>
+<li><strong>Optimistic Client UI</strong>: The web/mobile frontend updates the local UI state optimistically upon receiving the command 200 OK, completely hiding the projection delay from the user.&quot;</li>
+</ol>
+<hr />
+<h3 id="q3-what-is-an-aggregate-root-in-event-sourcing-and-why-is-it-the-only-entity-that-can-validate-business-invariants">Q3: &quot;What is an Aggregate Root in Event Sourcing, and why is it the only entity that can validate business invariants?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing Domain-Driven Design (DDD) rigor and transactional boundary modeling.</p>
+<p><strong>Model Answer</strong>:
+&quot;An <strong>Aggregate Root</strong> is a cluster of associated domain objects treated as a single unit for data changes. It defines the consistency boundary for transactions:</p>
+<ul>
+<li>It maintains current state in memory by folding historical events.</li>
+<li>When a command arrives, the Aggregate Root inspects its internal state to determine if business invariants are satisfied (e.g., <em>'Does account balance exceed the withdrawal amount?'</em>).</li>
+<li>If valid, it emits a new Domain Event and appends it to the Event Store using optimistic locking on its version number.</li>
+<li>Other entities or services are strictly forbidden from modifying the aggregate directly. This guarantees that invalid states can never be written to the event log.&quot;</li>
+</ul>
+<hr />
+<h3 id="q4-how-do-you-handle-schema-evolution-and-changing-requirements-in-an-immutable-event-store-over-5-years">Q4: &quot;How do you handle schema evolution and changing requirements in an immutable Event Store over 5 years?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Evaluating long-term operational viability and backward-compatibility maintenance.</p>
+<p><strong>Model Answer</strong>:
+&quot;Because events in the Event Store are immutable, historical records written 5 years ago cannot be modified with an <code>ALTER TABLE</code> migration.
+We handle schema evolution using three production patterns:</p>
+<ol>
+<li><strong>Weak Schema / Additive Changes</strong>: New fields are always made optional with safe defaults. Old fields are never deleted.</li>
+<li><strong>Upcasting (In-Memory Transformation)</strong>: When reading an old event from the database (e.g., <code>UserRegistered_v1</code>), an upcaster intercepts the raw JSON and transforms it into <code>UserRegistered_v2</code> in memory before handing it to the application. The on-disk storage remains untouched, but the application code only deals with the latest schema.</li>
+<li><strong>Event Migration Streams</strong>: For major structural overhauls, a migration script reads Stream A and writes a brand new Stream B, pointing future consumers to the new stream.&quot;</li>
+</ol>
+<hr />
+<h3 id="q5-what-are-snapshots-in-event-sourcing-and-how-do-they-prevent-performance-degradation-as-logs-grow">Q5: &quot;What are Snapshots in Event Sourcing, and how do they prevent performance degradation as logs grow?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking performance optimization and memory bounding skills.</p>
+<p><strong>Model Answer</strong>:
+&quot;In Event Sourcing, loading an entity requires replaying all historical events from version 1 to version $N$. For long-lived aggregates (like an active bank account with 50,000 transactions), replaying 50,000 events on every single command takes hundreds of milliseconds, crippling write throughput.</p>
+<p><strong>Snapshots solve this</strong>:</p>
+<ul>
+<li>Every $K$ events (e.g., every 500 events), a background worker takes a serialized snapshot of the aggregate's internal state and stores it alongside <code>snapshot_version = 500</code>.</li>
+<li>When the aggregate needs to load, it directly loads the snapshot at version 500 in $O(1)$ time, and then only replays the subsequent events (e.g. from version 501 to 523).</li>
+<li>This caps aggregate load time to at most $K$ events, keeping command latency constant and bounded regardless of the aggregate's age.&quot;</li>
+</ul>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. True or False: In Event Sourcing, can you issue an <code>UPDATE</code> or <code>DELETE</code> SQL statement to alter a past event in the Event Store?</b></summary>
+<br>
+<b>False.</b> Event Stores are strictly <b>append-only and immutable</b>. If a mistake was made (e.g. accidentally depositing $1,000 instead of $100), you never alter the original <code>MoneyDeposited</code> event. Instead, you append a new <b>Compensating Event</b> (e.g. <code>DepositReversed</code> or <code>CorrectionApplied</code>), exactly as accountants do in a ledger.
+</details>
+<details>
+<summary><b>2. In CQRS, what is the primary role of a "Projector"?</b></summary>
+<br>
+A Projector is a consumer that listens to the stream of Domain Events emitted by the Write side, transforms them, and updates <b>denormalized Materialized Views (Read Models)</b> so queries can be served instantly without complex SQL joins.
+</details>
+<details>
+<summary><b>3. How does Optimistic Concurrency Control (OCC) prevent two concurrent users from overwriting each other in an Event Store?</b></summary>
+<br>
+By checking the <code>expected_version</code>. The database enforces a unique composite primary key on <code>(stream_id, version)</code>. If both users read version 5 and try to append an event at version 6, the first writer succeeds, and the second writer's query fails with a unique constraint violation, prompting a retry.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 12: The Future of Data Systems (Event Sourcing &amp; Stream Processing)</em>.</li>
+<li><strong>Domain-Driven Design: Tackling Complexity in the Heart of Software</strong> by Eric Evans.</li>
+<li><strong>Greg Young's CQRS Documents</strong>: <em>CQRS and Event Sourcing Principles (<code>https://cqrs.files.wordpress.com/2010/11/cqrs_documents.pdf</code>)</em>.</li>
+<li><strong>Martin Fowler's Architectural Guides</strong>: <em>Event Sourcing &amp; CQRS (<code>martinfowler.com</code>)</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Transaction logs and storage engines.</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across CQRS projections.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: The underlying streaming infrastructure for event stores.</li>
+<li><a href="../19-distributed-transactions/index.html">19 - Distributed Transactions</a>: Sagas and transactional outbox patterns.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Distributed Consensus &amp; Leader Election: Raft and Paxos">
+  <title>Distributed Consensus &amp; Leader Election: Raft and Paxos | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="15---distributed-consensus--leader-election-raft-and-paxos">15 - Distributed Consensus &amp; Leader Election: Raft and Paxos</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> Distributed consensus is the fundamental problem of getting a set of independent, unreliable computers to agree on a single state or sequence of events—even when networks drop packets and servers crash at any time. While Leslie Lamport's <strong>Paxos</strong> (1998) was notoriously difficult to understand and implement in industry, Diego Ongaro and John Ousterhout introduced <strong>Raft</strong> (2014), decomposing consensus into three understandable, independent sub-problems: <strong>Leader Election</strong>, <strong>Log Replication</strong>, and <strong>Safety</strong>. Raft now underpins Kubernetes (<code>etcd</code>), Kafka (<code>KRaft</code>), CockroachDB, and Consul.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../15-consensus-and-leader-election/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network latency, timeouts, and dropped packets.</li>
+<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Leader-follower replication and replication logs.</li>
+<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Why consensus systems are strictly CP (sacrificing availability in minority partitions).</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Linearizability and external consistency.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine a committee of 5 judges making decisions:</p>
+<ul>
+<li>To keep things orderly, they elect one judge to be the <strong>Chairperson (Leader)</strong>. All official documents go to the Chairperson, who reads them out loud.</li>
+<li>If the Chairperson suddenly falls asleep (<strong>crashes</strong>), the remaining 4 judges notice the silence.</li>
+<li>A judge who waits 3 minutes stands up and announces: <em>&quot;I want to be the new Chairperson!&quot;</em> (<strong>Candidate</strong>).</li>
+<li>If at least 3 of the 5 judges (a <strong>Majority Quorum</strong>) raise their hand and vote &quot;Yes&quot;, that judge becomes the new Chairperson.</li>
+<li>Even if the old Chairperson wakes up later and tries to shout orders, the judges ignore them because the committee is already operating in a newer session term (<strong>Term 2</strong>). There is <strong>never more than one active leader</strong> at a time.</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Concept</th>
+<th style="text-align:left">Parliamentary Committee Analogy</th>
+<th style="text-align:left">Technical Reality in Raft / Paxos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Node</strong></td>
+<td style="text-align:left">A committee member sitting at the table</td>
+<td style="text-align:left">An independent server / process in the cluster</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Leader</strong></td>
+<td style="text-align:left">The elected Chairperson who writes the meeting minutes</td>
+<td style="text-align:left">The single node that accepts client writes and manages the log</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Follower</strong></td>
+<td style="text-align:left">Passive committee members listening to the Chairperson</td>
+<td style="text-align:left">Passive nodes that append log entries sent by the leader</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Candidate</strong></td>
+<td style="text-align:left">A member standing up to run for Chairperson</td>
+<td style="text-align:left">A follower whose election timer expired, seeking votes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Term</strong></td>
+<td style="text-align:left">Election term (e.g. 2024–2028 term)</td>
+<td style="text-align:left">Monotonically increasing logical epoch number ($1, 2, 3 \dots$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Heartbeat</strong></td>
+<td style="text-align:left">Chairperson tapping the microphone every 10 seconds: <em>&quot;I'm here&quot;</em></td>
+<td style="text-align:left">Empty <code>AppendEntries</code> RPC sent every 50 ms to prevent elections</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Election Timeout</strong></td>
+<td style="text-align:left">Member's internal timer: <em>&quot;If no speech in 3 mins, I'll run&quot;</em></td>
+<td style="text-align:left">Randomized timer (150–300 ms) preventing split-vote deadlocks</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Quorum</strong></td>
+<td style="text-align:left">$\text{Floor}(N/2) + 1$ votes needed to pass a law</td>
+<td style="text-align:left">Strict majority required to elect a leader or commit a log entry</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Split-Brain</strong></td>
+<td style="text-align:left">Two people both declaring they are Chairperson and giving conflicting orders</td>
+<td style="text-align:left">Catastrophic failure where two nodes accept conflicting writes</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="the-nightmare-of-split-brain">The Nightmare of Split-Brain</h3>
+<p>In a distributed database, if multiple servers believe they are the active Leader simultaneously:</p>
+<ul>
+<li>Clients connected to Server A write <code>balance = $500</code>.</li>
+<li>Clients connected to Server B write <code>balance = $200</code>.</li>
+<li>Database logs diverge irrevocably. Financial ledgers are corrupted, inventory is double-sold, and reconciliation requires manual database surgery.</li>
+</ul>
+<h3 id="what-consensus-guarantees">What Consensus Guarantees</h3>
+<p>Consensus algorithms like Raft and Paxos provide mathematical proof of <strong>Safety</strong> and <strong>Liveness</strong>:</p>
+<ol>
+<li><strong>Election Safety</strong>: At most one leader can be elected in any given term.</li>
+<li><strong>Leader Append-Only</strong>: A leader never overwrites or truncates its own log entries; it only appends new entries.</li>
+<li><strong>Log Matching Property</strong>: If two logs contain an entry with the same index and term, then the logs are identical in all entries up through the given index.</li>
+<li><strong>Leader Completeness</strong>: If a log entry is committed in a given term, that entry will be present in the logs of the leaders for all higher-numbered terms.</li>
+<li><strong>State Machine Safety</strong>: If a server has applied a log entry at a given index to its state machine, no other server will ever apply a different log entry for the same index.</li>
+</ol>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-raft-consensus-animation">High-Resolution Raft Consensus Animation</h3>
+<p>Below is an animated trace of a Raft 3-node cluster handling a leader crash, randomized timer timeout, quorum vote, and clean recovery without split-brain:</p>
+<p><img src="./assets/raft_consensus.gif" alt="Raft Distributed Consensus" /></p>
+<hr />
+<h3 id="raft-state-machine-lifecycle">Raft State Machine Lifecycle</h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Follower: Server starts up
+
+    Follower --&gt; Candidate: Times out (No heartbeat received)&lt;br/&gt;Increments Term, votes for self
+    
+    Candidate --&gt; Candidate: Election times out (Split vote)&lt;br/&gt;Starts new election with Term + 1
+    Candidate --&gt; Follower: Discovers Leader or newer Term
+    Candidate --&gt; Leader: Receives votes from majority of servers
+
+    Leader --&gt; Follower: Discovers server with higher Term
+    Leader --&gt; [*]: Shutdown / Crash
+    Follower --&gt; [*]: Shutdown / Crash
+    Candidate --&gt; [*]: Shutdown / Crash
+
+    note right of Leader
+        Broadcasts AppendEntries heartbeats
+        every 50ms to suppress elections.
+    end note
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's calculate the cluster sizing, fault tolerance, and failover latency for an <code>etcd</code> Kubernetes control plane:</p>
+<h3 id="1-quorum-sizing-formula-surviving-f-node-failures">1. Quorum Sizing Formula: Surviving $F$ Node Failures</h3>
+<p>To survive $F$ node crashes, a consensus cluster requires a total of:
+$$\mathbf{N = 2F + 1} \text{ nodes}$$
+And the majority quorum size required to proceed is:
+$$\mathbf{Q = \lfloor N/2 \rfloor + 1} \text{ nodes}$$</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Total Nodes ($N$)</th>
+<th style="text-align:center">Crashes Tolerated ($F$)</th>
+<th style="text-align:center">Quorum Needed ($Q$)</th>
+<th style="text-align:left">Why Even Numbers ($N=4, N=6$) are Bad</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>1</strong></td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">1</td>
+<td style="text-align:left">Single point of failure.</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>3</strong></td>
+<td style="text-align:center"><strong>1</strong></td>
+<td style="text-align:center"><strong>2</strong></td>
+<td style="text-align:left">Standard minimal production cluster.</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>4</strong></td>
+<td style="text-align:center"><strong>1</strong></td>
+<td style="text-align:center"><strong>3</strong></td>
+<td style="text-align:left"><em>Antipattern</em>: Requires 3 votes, tolerates only 1 failure (same as 3 nodes!), but adds 33% more network overhead!</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>5</strong></td>
+<td style="text-align:center"><strong>2</strong></td>
+<td style="text-align:center"><strong>3</strong></td>
+<td style="text-align:left"><strong>Industry Gold Standard</strong>: Survives 2 simultaneous node crashes across 3 Availability Zones.</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>7</strong></td>
+<td style="text-align:center"><strong>3</strong></td>
+<td style="text-align:center"><strong>4</strong></td>
+<td style="text-align:left">Used in high-resilience global control planes.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-failover-latency-calculation">2. Failover Latency Calculation</h3>
+<ul>
+<li><strong>Heartbeat Interval ($T_{\text{heartbeat}}$)</strong>: $50\text{ ms}$</li>
+<li><strong>Election Timeout ($T_{\text{election}}$)</strong>: Uniformly randomized between $150\text{ ms}$ and $300\text{ ms}$</li>
+<li><strong>Maximum Detection &amp; Failover Time</strong>:
+<ul>
+<li>Leader crashes at $t = 0\text{ ms}$.</li>
+<li>Follower with shortest timeout ($160\text{ ms}$) detects absence of heartbeat at $t = 160\text{ ms}$.</li>
+<li>Follower broadcasts <code>RequestVote</code> RPC across local datacenter ($1\text{ ms}$ RTT).</li>
+<li>Peers respond ($1\text{ ms}$). Majority secured at $t = 162\text{ ms}$.</li>
+<li>New leader broadcasts first heartbeat at $t = 163\text{ ms}$.</li>
+<li><strong>Total Cluster Failover Latency</strong>: <strong>$\approx 163\text{ ms}$!</strong> Zero human intervention.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-the-three-roles-of-a-raft-node">1. The Three Roles of a Raft Node</h3>
+<ol>
+<li><strong>Follower</strong>:
+<ul>
+<li>Completely passive. Responds to incoming RPCs from leaders and candidates.</li>
+<li>Maintains an internal countdown timer (<code>election_timeout</code>). Every time it receives an <code>AppendEntries</code> heartbeat from a valid leader, it resets this timer to a fresh random value.</li>
+</ul>
+</li>
+<li><strong>Candidate</strong>:
+<ul>
+<li>Triggered when <code>election_timeout</code> reaches zero.</li>
+<li>Increments its <code>current_term</code>, votes for itself, and broadcasts <code>RequestVote</code> RPCs to all peers.</li>
+</ul>
+</li>
+<li><strong>Leader</strong>:
+<ul>
+<li>Handles all client read and write requests.</li>
+<li>Converts client writes into log entries, appends them locally, and broadcasts <code>AppendEntries</code> RPCs to replicate them to all followers.</li>
+<li>Once an entry is confirmed written on a majority of nodes, the leader <strong>commits</strong> the entry and applies it to its local state machine.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="2-why-randomized-election-timeouts-prevent-split-votes">2. Why Randomized Election Timeouts Prevent Split-Votes</h3>
+<p>If all followers shared the exact same election timeout (e.g. exactly $150\text{ ms}$):</p>
+<ul>
+<li>When the leader crashes, all followers would timeout at the exact same millisecond.</li>
+<li>Every follower would vote for itself and request votes from peers.</li>
+<li>In a 3-node cluster, each node would receive 1 vote (its own). No node would achieve a 2-vote majority!</li>
+<li>All nodes would timeout again, triggering an endless split-vote livelock.</li>
+</ul>
+<p><strong>The Raft Solution</strong>:
+Randomize timeouts over a spread (e.g., $150\text{ ms}\dots 300\text{ ms}$). Almost certainly, one single follower (say Node B at $162\text{ ms}$) will time out before anyone else, transition to Candidate, and collect votes from the other followers before their timers expire.</p>
+<hr />
+<h3 id="3-log-replication--the-leader-completeness-invariant">3. Log Replication &amp; The &quot;Leader Completeness&quot; Invariant</h3>
+<p>How does Raft guarantee that a newly elected leader has all committed data?</p>
+<ul>
+<li>When a candidate asks for votes, its <code>RequestVote</code> RPC includes:
+<ul>
+<li><code>candidate_id</code></li>
+<li><code>term</code></li>
+<li><code>last_log_index</code></li>
+<li><code>last_log_term</code></li>
+</ul>
+</li>
+<li><strong>Follower Voting Rule</strong>: A follower will <strong>refuse</strong> to vote for a candidate if the candidate's log is less up-to-date than the follower's own log!</li>
+<li>Because any committed entry must reside on a majority of nodes, and any winning candidate must receive votes from a majority of nodes, the two majorities <strong>must overlap in at least one node</strong>.</li>
+<li>That overlapping node will refuse to vote for any candidate missing the latest committed entry. Therefore, <strong>a candidate missing committed entries can never win an election!</strong></li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Raft / Multi-Paxos (Leader-Based)</th>
+<th style="text-align:left">Leaderless Dynamo / Gossip</th>
+<th style="text-align:left">Two-Phase Commit (2PC)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Consistency</strong></td>
+<td style="text-align:left">Strict Linearizability ($CP$)</td>
+<td style="text-align:left">Eventual Consistency ($AP$)</td>
+<td style="text-align:left">Strict Atomic Commit ($CP$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Fault Tolerance</strong></td>
+<td style="text-align:left">Survives $F$ crashes out of $2F+1$</td>
+<td style="text-align:left">Survives any node loss</td>
+<td style="text-align:left"><strong>Zero crash tolerance</strong> (coordinator crash blocks all)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Bottleneck</strong></td>
+<td style="text-align:left">Single Leader node</td>
+<td style="text-align:left">Distributed across all nodes</td>
+<td style="text-align:left">Coordinator is single point of failure</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Throughput</strong></td>
+<td style="text-align:left">Moderate (~10k–50k writes/sec)</td>
+<td style="text-align:left">Massive (&gt;500k writes/sec)</td>
+<td style="text-align:left">Low (heavy synchronous locking)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Best Used For</strong></td>
+<td style="text-align:left">Cluster metadata, locks, master elections</td>
+<td style="text-align:left">Large-scale metrics, social feeds</td>
+<td style="text-align:left">Cross-shard atomic transactions</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Deploying Clusters with Even Numbers of Nodes ($N=4$ or $N=6$)</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: A team deploys 4 <code>etcd</code> nodes across 2 data centers (2 in DC-1, 2 in DC-2), thinking 4 nodes is safer than 3.</li>
+<li><em>Result</em>: A network partition splits the DCs. DC-1 has 2 nodes; DC-2 has 2 nodes. Neither DC has a majority ($&gt; 4/2 = 3$ votes). The entire cluster locks up and refuses all writes! Always deploy odd numbers: 3, 5, or 7.</li>
+</ul>
+</li>
+<li>
+<p><strong>Storing Bulk Application Data in etcd/ZooKeeper</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Using <code>etcd</code> to store user avatars or large JSON blobs.</li>
+<li><em>Result</em>: Every byte written to <code>etcd</code> must be replicated sequentially via Raft consensus across the cluster and stored in memory. Raft log sizes explode, disk fsync times spike, heartbeats miss their deadlines, and the cluster falls into continuous leader-election thrashing. Consensus stores should only hold tiny metadata (flags, configs, leases).</li>
+</ul>
+</li>
+<li>
+<p><strong>Disk I/O Starvation Causing Leader Drops</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Running <code>etcd</code> on shared magnetic disks or low-IOPS cloud volumes alongside heavy background database writes.</li>
+<li><em>Result</em>: When disk <code>fsync()</code> takes $&gt;50\text{ ms}$, the leader cannot flush its log in time to send heartbeats, triggering false election timeouts. Always use dedicated NVMe SSDs for consensus stores.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/15-consensus-and-leader-election/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>A multi-node Raft state machine with Follower, Candidate, and Leader roles.</li>
+<li>Heartbeat tick cycles resetting follower randomized timers.</li>
+<li>Live Leader crash simulation triggering election timeouts.</li>
+<li>Candidate vote gathering with majority quorum checks ($2/3$ votes).</li>
+<li>Old leader reboot and safe demotion to Follower upon discovering newer terms.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Kubernetes (<code>etcd</code>)</strong>: The entire state of a Kubernetes cluster—every pod, service, secret, and configmap—is stored in <code>etcd</code>, which uses Raft to guarantee linearizability and zero split-brain during master node failures.</li>
+<li><strong>Apache Kafka (KRaft Mode)</strong>: Kafka replaced its legacy ZooKeeper dependency with an internal Raft implementation called KRaft (Kafka Raft Metadata mode), allowing Kafka clusters to scale to millions of partitions.</li>
+<li><strong>CockroachDB</strong>: Shards its relational data into 64 MB ranges. Each individual range is a separate Raft consensus group across 3 or 5 nodes, ensuring ACID transaction linearizability globally.</li>
+<li><strong>HashiCorp Consul &amp; Vault</strong>: Uses Raft for service discovery, dynamic configuration, and cryptographic secret management.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-why-do-consensus-systems-like-raft-and-paxos-require-an-odd-number-of-nodes-3-5-7">Q1: &quot;Why do consensus systems like Raft and Paxos require an odd number of nodes (3, 5, 7)?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing mathematical understanding of majority quorums and hardware economics.</p>
+<p><strong>Model Answer</strong>:
+&quot;Consensus algorithms require a strict majority quorum:
+$$Q = \lfloor N/2 \rfloor + 1$$
+Adding an even node never increases fault tolerance, but it increases the number of votes required:</p>
+<ul>
+<li>In a <strong>3-node cluster</strong>, quorum is 2. The cluster can tolerate <strong>1 failure</strong> ($3 - 2 = 1$).</li>
+<li>In a <strong>4-node cluster</strong>, quorum is 3. The cluster can still only tolerate <strong>1 failure</strong> ($4 - 3 = 1$)! If 2 nodes fail, the remaining 2 nodes cannot form a majority of 3.</li>
+<li>Furthermore, an even number of nodes makes a 50/50 split vote possible during network partitions (e.g., 2 nodes vs 2 nodes), rendering neither side capable of making progress. Therefore, systems always use odd numbers (typically 3 or 5) to maximize fault tolerance per hardware dollar.&quot;</li>
+</ul>
+<hr />
+<h3 id="q2-what-is-the-role-of-terms-in-raft-and-how-do-they-resolve-conflicting-leadership-claims">Q2: &quot;What is the role of 'Terms' in Raft, and how do they resolve conflicting leadership claims?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking deep knowledge of Raft's logical clock mechanics.</p>
+<p><strong>Model Answer</strong>:
+&quot;In Raft, time is divided into arbitrary numbered epochs called <strong>Terms</strong> (Term 1, Term 2, etc.), which act as a logical clock:</p>
+<ol>
+<li>Each term begins with an election where one or more candidates attempt to become leader.</li>
+<li>Nodes exchange their <code>current_term</code> on every single RPC. If a node discovers that another node's term is strictly greater than its own, it immediately updates its term and steps down to Follower.</li>
+<li>If an old leader experiences a network partition and continues trying to send heartbeats with Term 1, when it reconnects to the cluster, followers will see Term 1, reject the RPC, and reply with Term 2. The old leader sees Term 2 &gt; Term 1 and immediately relinquishes leadership.
+Terms guarantee that stale leaders from previous epochs are cleanly and instantaneously neutralized.&quot;</li>
+</ol>
+<hr />
+<h3 id="q3-what-is-the-difference-between-paxos-and-raft">Q3: &quot;What is the difference between Paxos and Raft?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing historical perspective and theoretical grasp of distributed algorithms.</p>
+<p><strong>Model Answer</strong>:
+&quot;Both Paxos and Raft are mathematically equivalent in their safety guarantees and fault tolerance ($2F+1$ nodes to survive $F$ crashes under an asynchronous network model with crash-recovery).</p>
+<p>The primary differences are architectural and pedagogical:</p>
+<ol>
+<li><strong>Understandability &amp; Decomposition</strong>: Basic Paxos only achieves consensus on a single value. Multi-Paxos extends this to a log, but leaves leadership mechanisms, log compaction, and membership changes unspecified. Raft was explicitly designed by Ongaro &amp; Ousterhout to be understandable, cleanly decomposing consensus into three rigid sub-problems: Leader Election, Log Replication, and Safety.</li>
+<li><strong>Strong Leadership</strong>: In Multi-Paxos, multiple nodes can propose values concurrently, leading to dueling proposer conflicts unless complex leases are added. In Raft, log entries only ever flow in one direction: strictly from the Leader to Followers.</li>
+<li><strong>Log Gaps</strong>: Multi-Paxos allows out-of-order log commits, leaving temporary 'holes' in the log that must be filled. Raft enforces the Log Matching Property: logs never have holes, simplifying snapshotting and recovery.&quot;</li>
+</ol>
+<hr />
+<h3 id="q4-how-does-a-raft-leader-handle-read-requests-without-serving-stale-data-linearizable-reads">Q4: &quot;How does a Raft leader handle read requests without serving stale data (linearizable reads)?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing advanced edge-case handling in consensus protocols.</p>
+<p><strong>Model Answer</strong>:
+&quot;A naive Raft implementation would simply read from the leader's local state machine. However, this violates linearizability if the leader was partitioned off from the cluster and a new leader was elected in a higher term (a 'zombie leader'). The zombie leader might serve stale data before discovering it was deposed.</p>
+<p>To guarantee linearizable reads without serving stale data:</p>
+<ol>
+<li><strong>Read-Index Protocol</strong>: Before returning a read, the leader records its current commit index (<code>ReadIndex</code>) and sends a round of heartbeat RPCs to a majority of nodes. If the majority confirms it is still the leader, it knows no new term has started, and it can safely serve the read once its state machine applies up to <code>ReadIndex</code>.</li>
+<li><strong>Lease Reads</strong>: The leader relies on a bounded time lease. As long as the leader received heartbeats from a majority within the last $T_{\text{lease}}$ milliseconds, it assumes no new election could have occurred (assuming bounded clock drift). This avoids the network round-trip for reads, drastically lowering read latency.&quot;</li>
+</ol>
+<hr />
+<h3 id="q5-what-is-log-compaction--snapshotting-in-raft-and-why-is-it-necessary">Q5: &quot;What is Log Compaction / Snapshotting in Raft, and why is it necessary?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing operational longevity and memory management of consensus systems.</p>
+<p><strong>Model Answer</strong>:
+&quot;In a long-running system, the write-ahead log grows indefinitely. Without compaction, servers would run out of disk space, and a rebooting node would take hours or days to replay millions of log entries from the beginning of time.</p>
+<p><strong>Log Compaction (Snapshotting)</strong>:</p>
+<ul>
+<li>Periodically, a node takes a snapshot of its current state machine data and discards all log entries up to that index.</li>
+<li>The snapshot only stores the latest consolidated state (e.g., <code>balance = $500</code>) rather than the historical stream of deltas (<code>+10, -5, +20...</code>).</li>
+<li>Metadata preserved in the snapshot includes the <code>last_included_index</code> and <code>last_included_term</code> to maintain log continuity.</li>
+<li>If a follower lags so far behind that the leader has already discarded the log entries needed to bring it up to date, the leader sends an <code>InstallSnapshot</code> RPC instead of regular <code>AppendEntries</code>.&quot;</li>
+</ul>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. In a 5-node Raft cluster, how many nodes can crash simultaneously while allowing the cluster to continue processing writes?</b></summary>
+<br>
+<b>2 nodes.</b> The formula is $N = 2F + 1$. For $N = 5$, $F = 2$. The quorum size is $\lfloor 5/2 \rfloor + 1 = 3$ nodes. If 2 nodes crash, 3 remain, which satisfies the quorum. If a 3rd node crashes, only 2 remain, and the cluster halts writes to preserve safety.
+</details>
+<details>
+<summary><b>2. Why does Raft use randomized election timeouts instead of a fixed duration?</b></summary>
+<br>
+To prevent <b>split-vote deadlocks</b>. If all followers had the same timeout, they would all become candidates at the exact same millisecond upon a leader crash, vote for themselves, split the vote equally, and repeat indefinitely. Randomization ensures one candidate times out first and wins.
+</details>
+<details>
+<summary><b>3. Can a candidate missing committed entries ever be elected Leader in Raft?</b></summary>
+<br>
+<b>No.</b> Followers strictly reject vote requests if the candidate's log is less up-to-date than their own. Because committed entries reside on a majority of nodes, any winning candidate must receive a vote from at least one node holding the latest committed entry.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>In Search of an Understandable Consensus Algorithm (The Raft Paper, 2014)</strong> by Diego Ongaro and John Ousterhout (Stanford University).</li>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 9: Consistency and Consensus (Distributed Transactions and Consensus)</em>.</li>
+<li><strong>The Secret Lives of Data</strong>: <em>Raft Visualization Guide (<code>http://thesecretlivesofdata.com/raft/</code>)</em>.</li>
+<li><strong>Paxos Made Simple (2001)</strong> by Leslie Lamport.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Leader-follower replication mechanisms.</li>
+<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: CP systems trade availability for linearizability.</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: How consensus enforces linearizable external consistency.</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Distributing partition ranges across consensus groups.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Distributed Unique ID Generator">
+  <title>Distributed Unique ID Generator | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="28--distributed-unique-id-generator">28 · Distributed Unique ID Generator</h1>
+<blockquote>
+<p><strong>Part 0 · Foundations</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Twitter</strong> (Snowflake), <strong>Discord</strong>, and <strong>Instagram</strong> generate billions of unique IDs per day are documented in <a href="../28-distributed-unique-id-generator/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<hr />
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>In a traditional single SQL database, generating unique IDs is easy: you use an <code>AUTO_INCREMENT</code> primary key ($1, 2, 3, \dots$).</p>
+<p>In a distributed system with <strong>50 database shards and 100 API gateways across 3 continents</strong>, <code>AUTO_INCREMENT</code> fails:</p>
+<ul>
+<li>Two servers would generate the exact same ID (<code>1001</code>) simultaneously, corrupting orders and accounts.</li>
+<li>UUIDv4 generates random 128-bit strings, but they are <strong>not sortable by time</strong> and cause massive performance degradation in B-Tree database indexes.</li>
+</ul>
+<p>The industry standard solution is <strong>Twitter Snowflake</strong>: a <strong>64-bit integer</strong> composed of:</p>
+<ol>
+<li><strong>1 bit</strong>: Unused sign bit (always <code>0</code>).</li>
+<li><strong>41 bits</strong>: Millisecond timestamp (gives ~69 years of life).</li>
+<li><strong>10 bits</strong>: Machine / Worker ID (supports up to 1,024 servers).</li>
+<li><strong>12 bits</strong>: Sequence counter (allows each server to generate <strong>4,096 IDs per millisecond</strong>).</li>
+</ol>
+<hr />
+<h2 id="everyday-analogy-flight-ticket-confirmation-codes">🍕 Everyday analogy: Flight Ticket Confirmation Codes</h2>
+<p>Imagine airport ticket counters across London, Tokyo, and New York:</p>
+<ul>
+<li>If every counter simply handed out ticket <code>#1</code>, <code>#2</code>, <code>#3</code>, passengers would show up with duplicate seat assignments.</li>
+<li>Instead, airlines issue encoded confirmation codes:
+<code>[Date: 2026-11-23] - [Airport: HND] - [Terminal: 03] - [Sequence: 0042]</code></li>
+<li>Counter 3 in Tokyo can print tickets at maximum speed without making a phone call to London to ask <em>&quot;What ticket number are you on?&quot;</em>.</li>
+</ul>
+<p>The ticket is <strong>globally unique</strong>, <strong>generated independently with zero coordination</strong>, and <strong>chronologically sortable</strong>.</p>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="why-alternative-approaches-fail">Why Alternative Approaches Fail:</h3>
+<ol>
+<li><strong>Multi-Master Auto-Increment (Step $K$)</strong>:
+<ul>
+<li>Server 1 generates $1, 3, 5, 7$; Server 2 generates $2, 4, 6, 8$.</li>
+<li><em>Failure</em>: Cannot scale dynamically when adding a 3rd server without reconfiguring all existing database sequences. IDs are not sortable by time across servers.</li>
+</ul>
+</li>
+<li><strong>UUIDv4 (128-bit Random Strings)</strong>:
+<ul>
+<li>Example: <code>f47ac10b-58cc-4372-a567-0e02b2c3d479</code>.</li>
+<li><em>Failure</em>: 128 bits is twice as large as a 64-bit integer. Random UUIDs cause <strong>B-tree index fragmentation</strong> (random disk page splits), degrading database write performance by up to $80%$.</li>
+</ul>
+</li>
+<li><strong>Ticket Server (Centralized Counter)</strong>:
+<ul>
+<li>A single dedicated Redis or MySQL server issuing <code>INCR</code> IDs.</li>
+<li><em>Failure</em>: Single Point of Failure (SPOF). If the ticket server reboots or network partitions, all order creation worldwide halts.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="picture-it-the-64-bit-snowflake-bit-layout">🖼️ Picture It: The 64-Bit Snowflake Bit-Layout</h2>
+<pre><code class="language-mermaid">flowchart LR
+    Sign[&quot;1 Bit&lt;br/&gt;Sign (0)&quot;]
+    Time[&quot;41 Bits&lt;br/&gt;Timestamp (ms)&lt;br/&gt;~69 Years&quot;]
+    Machine[&quot;10 Bits&lt;br/&gt;Datacenter / Worker ID&lt;br/&gt;1,024 Machines&quot;]
+    Seq[&quot;12 Bits&lt;br/&gt;Sequence Number&lt;br/&gt;4,096 IDs / ms / node&quot;]
+    
+    Sign --- Time --- Machine --- Seq
+    
+    style Sign fill:#161b22,stroke:#f85149,stroke-width:2px;
+    style Time fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style Machine fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style Seq fill:#161b22,stroke:#3fb950,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="the-mathematics-of-snowflake-bit-allocation">🔢 The Mathematics of Snowflake Bit-Allocation</h2>
+<p>$$	ext{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64	ext{ Bits (Standard 8-byte Integer)}}$$</p>
+<h3 id="1-timestamp-component-41-bits">1. Timestamp Component (41 Bits)</h3>
+<ul>
+<li>Maximum value: $2^{41} - 1 = 2,199,023,255,551	ext{ ms}$.</li>
+<li>Years of life:
+$$	ext{Years} = \frac{2,199,023,255,551	ext{ ms}}{1000	ext{ms} 	imes 60 	imes 60 	imes 24 	imes 365} \approx \mathbf{69.73	ext{ Years}}$$</li>
+<li>A custom epoch (e.g., <code>2026-01-01</code>) gives 69 years of runway before overflow.</li>
+</ul>
+<h3 id="2-machine-id-component-10-bits">2. Machine ID Component (10 Bits)</h3>
+<ul>
+<li>Supports $2^{10} = \mathbf{1,024	ext{ distinct worker machines}}$ (or 5 bits Datacenter ID = 32 datacenters $	imes$ 5 bits Worker ID = 32 workers per datacenter).</li>
+</ul>
+<h3 id="3-sequence-number-component-12-bits">3. Sequence Number Component (12 Bits)</h3>
+<ul>
+<li>Maximum value: $2^{12} = \mathbf{4,096	ext{ IDs per millisecond per node}}$.</li>
+<li>Total theoretical cluster generation capacity:
+$$	ext{Max Throughput} = 1,024	ext{ nodes} 	imes 4,096	ext{ IDs/ms} 	imes 1,000	ext{ms/s} \approx \mathbf{4.19	ext{ Billion IDs / second!}}$$</li>
+</ul>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<p>When a client thread requests an ID from Worker $W$:</p>
+<ol>
+<li>Read the current system millisecond clock: $T_{	ext{now}}$.</li>
+<li><strong>If $T_{	ext{now}} == T_{	ext{last}}$</strong>:
+<ul>
+<li>Increment sequence counter: $	ext{seq} = (	ext{seq} + 1) \ &amp; \ 4095$.</li>
+<li>If sequence overflows ($4096 	o 0$ in the same millisecond), wait until the next millisecond.</li>
+</ul>
+</li>
+<li><strong>If $T_{	ext{now}} &gt; T_{	ext{last}}$</strong>:
+<ul>
+<li>Reset sequence counter to $0$. Update $T_{	ext{last}} = T_{	ext{now}}$.</li>
+</ul>
+</li>
+<li>Assemble 64-bit integer using bitwise left-shift operators:
+$$	ext{ID} = ((T_{	ext{now}} - 	ext{Epoch}) \ll 22) \ | \ (	ext{WorkerID} \ll 12) \ | \ 	ext{seq}$$</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Strategy</th>
+<th style="text-align:left">ID Size</th>
+<th style="text-align:left">Time Sortable</th>
+<th style="text-align:left">Scaling Coordination</th>
+<th style="text-align:left">Vulnerability</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>UUIDv4</strong></td>
+<td style="text-align:left">128 Bits</td>
+<td style="text-align:left">❌ No (Random)</td>
+<td style="text-align:left">Zero Coordination</td>
+<td style="text-align:left">B-Tree index fragmentation</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>UUIDv7</strong></td>
+<td style="text-align:left">128 Bits</td>
+<td style="text-align:left">✅ Yes (Timestamp prefix)</td>
+<td style="text-align:left">Zero Coordination</td>
+<td style="text-align:left">128-bit storage footprint</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Ticket Server</strong></td>
+<td style="text-align:left">64 Bits</td>
+<td style="text-align:left">✅ Yes</td>
+<td style="text-align:left">Centralized Redis / DB</td>
+<td style="text-align:left">Single Point of Failure (SPOF)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Twitter Snowflake</strong></td>
+<td style="text-align:left"><strong>64 Bits</strong></td>
+<td style="text-align:left"><strong>✅ Yes</strong></td>
+<td style="text-align:left"><strong>Zero Runtime Coordination</strong></td>
+<td style="text-align:left"><strong>System clock rollback</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li><strong>System Clock Drift &amp; Rollback</strong>:
+<ul>
+<li><em>Pitfall</em>: NTP synchronizes server clocks backwards by 50ms.</li>
+<li><em>Result</em>: The worker generates duplicate IDs that were already issued in the past!</li>
+<li><em>Fix</em>: Detect clock skew: <code>if (now &lt; last_timestamp): wait or raise error</code>.</li>
+</ul>
+</li>
+<li><strong>JavaScript 53-Bit Precision Bug</strong>:
+<ul>
+<li><em>Pitfall</em>: JavaScript's <code>Number.MAX_SAFE_INTEGER</code> is $2^{53} - 1$.</li>
+<li><em>Result</em>: Returning 64-bit Snowflake IDs as raw JSON integers causes web browsers to truncate the last few digits, corrupting IDs. Always serialize 64-bit Snowflake IDs as <strong>strings</strong> (<code>&quot;179421839218201&quot;</code>) in API responses.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try It Yourself</h2>
+<p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/28-distributed-unique-id-generator/demo.py"><code>demo.py</code></a> implements a production-grade 64-bit Snowflake generator running concurrently across multiple threads, verifying zero duplicates and monotonic time ordering.</p>
+<p>Run it directly in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Twitter / X</strong>: Every tweet, direct message, and user ID is an explicit 64-bit Snowflake integer.</li>
+<li><strong>Discord</strong>: Uses Snowflake IDs for all messages, channels, and guild entities. Right-clicking any Discord message and clicking &quot;Copy ID&quot; gives you its Snowflake timestamp!</li>
+<li><strong>Instagram</strong>: Uses an adapted 64-bit Snowflake variation partitioned across PostgreSQL tables using Postgres PL/pgSQL stored procedures.</li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions--deep-answers">🎯 Top 5 Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-why-does-twitter-snowflake-use-a-41-bit-timestamp-instead-of-standard-64-bit-timestamps">Q1: &quot;Why does Twitter Snowflake use a 41-bit timestamp instead of standard 64-bit timestamps?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>A 64-bit integer must fit the <em>entire</em> ID (Timestamp + Machine ID + Sequence). Allocating 41 bits to the timestamp relative to a custom epoch provides:
+$$\frac{2^{41} - 1}{1000 	imes 3600 	imes 24 	imes 365} \approx 69.7	ext{ Years}$$
+This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) and sequence number (12 bits), ensuring high-concurrency generation with zero cross-network coordination.</p>
+</details>
+<hr />
+<h3 id="q2-how-does-a-snowflake-generator-handle-ntp-clock-rollback">Q2: &quot;How does a Snowflake generator handle NTP clock rollback?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>If the system clock rolls backwards (e.g., NTP slew):</p>
+<ol>
+<li><strong>Short skew (&lt;5ms)</strong>: The generator thread simply sleeps for the delta until $T_{	ext{now}} \ge T_{	ext{last}}$.</li>
+<li><strong>Large skew (&gt;5ms)</strong>: The generator refuses to mint IDs and throws an error or fails over to a backup worker node to preserve the strict uniqueness invariant.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-what-is-b-tree-index-fragmentation-and-why-does-uuidv4-cause-it">Q3: &quot;What is B-tree index fragmentation, and why does UUIDv4 cause it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Relational database primary keys are organized as B+ Trees stored in fixed-size disk pages (e.g. 16KB). Because UUIDv4 is completely random:</p>
+<ul>
+<li>Inserts land randomly in any leaf page on disk.</li>
+<li>When an insert hits an already full page, the database must execute an expensive <strong>Page Split</strong> (allocating a new page and moving 50% of keys), causing random disk I/O, low page fill factor ($50%$), and memory cache thrashing.</li>
+<li>Time-sortable IDs (Snowflake, UUIDv7) append sequentially to the rightmost leaf page, achieving maximum sequential I/O and zero page fragmentation.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-how-does-instagrams-unique-id-generation-differ-from-twitter-snowflake">Q4: &quot;How does Instagram's unique ID generation differ from Twitter Snowflake?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Instagram adopted Snowflake principles directly inside <strong>PostgreSQL</strong>:</p>
+<ul>
+<li>41 bits: Millisecond timestamp relative to custom Instagram epoch.</li>
+<li>13 bits: Logical Shard ID (supports 8,192 logical database shards).</li>
+<li>10 bits: Auto-increment sequence per table mod 1,024.
+Instagram implemented this inside PL/pgSQL stored procedures, so database row inserts generate their own unique ID automatically.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q5-when-would-you-pick-uuidv7-over-twitter-snowflake">Q5: &quot;When would you pick UUIDv7 over Twitter Snowflake?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li>Pick <strong>Twitter Snowflake</strong> when 64-bit integer performance, compact memory footprint, and high generation throughput ($&gt;4	ext{M IDs/sec}$) are critical.</li>
+<li>Pick <strong>UUIDv7</strong> when you need a standardized 128-bit time-ordered UUID without managing centralized worker ID allocations or Zookeeper node registrations.</li>
+</ul>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go Deeper</h2>
+<ul>
+<li><strong>System Design Interview – An Insider's Guide (Volume 1)</strong> by Alex Xu: Chapter 7 (<em>Design a Unique ID Generator in Distributed Systems</em>).</li>
+<li><strong>Twitter Engineering Blog</strong>: <em>Announcing Snowflake</em> (blog.twitter.com).</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

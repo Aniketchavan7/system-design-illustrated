@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Ad Click Aggregation">
+  <title>System Design Ad Click Aggregation | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-45-system-design--ad-click-aggregation--event-analytics">Module 45: System Design — Ad Click Aggregation &amp; Event Analytics</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a Real-Time Ad Click Aggregation and Analytics System (Google Ads, Meta Ads, TikTok), covering stream processing (Flink/Spark), windowing strategies (Tumbling, Hopping, Sliding), Watermark heuristics for late-arriving events, and click-fraud deduplication.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling ad click aggregation, review these core modules:</p>
+<ul>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Event Streaming</a> (Kafka topics, consumer groups, partitions)</li>
+<li><a href="../27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Calculating click throughput and aggregation storage)</li>
+<li><a href="../31-time-clocks-and-ordering/index.html">31 - Time, Clocks &amp; Ordering</a> (Event time vs Processing time vs Ingestion time)</li>
+<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent tracking endpoints)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine a busy highway with <strong>1 billion cars driving past billboard ads</strong> every day. Every time a driver looks at an ad or visits a store, a penny is transferred from the advertiser to the billboard owner.</p>
+<p>If your accounting system counted every single click on a separate piece of paper and billed advertisers one by one, your computers would melt under the paperwork. Even worse: what if a mischievous competitor writes a bot that clicks your billboard 10,000 times in 10 seconds (<strong>Click Fraud</strong>)? Or what if a driver drives through a mountain tunnel with no cell service, and their click arrives 15 minutes late (<strong>Late-Arriving Events</strong>)?</p>
+<p>An <strong>Ad Click Aggregation System</strong> groups clicks into tidy 1-minute buckets (<strong>Tumbling Windows</strong>), filters out robotic duplicate clicks, and uses an intelligent clock (<strong>Watermarks</strong>) to count late-arriving clicks accurately so advertisers are billed fairly to the exact penny!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Rain Gauge Measuring Rainfall During a Storm</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Rain Gauge Analogy</th>
+<th style="text-align:left">Ad Click Aggregation Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Individual Raindrops Falling</strong></td>
+<td style="text-align:left">Raw Ad Click Events</td>
+<td style="text-align:left">High-velocity click streams ingested into Apache Kafka.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Marked 1-Minute Measurement Beaker</strong></td>
+<td style="text-align:left">Tumbling Window (1-Minute)</td>
+<td style="text-align:left">Non-overlapping fixed time window aggregating metric counts.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Water Splashing from Shaken Trees (Delayed Drops)</strong></td>
+<td style="text-align:left">Late-Arriving Events (Watermark Lag)</td>
+<td style="text-align:left">Events delayed by mobile cell handoffs or airplane offline modes.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Mesh Filter Straining Leaves and Debris</strong></td>
+<td style="text-align:left">Click Fraud &amp; Bot Filter (Bloom Filter)</td>
+<td style="text-align:left">Identifies duplicate or robotic clicks from the same IP/Device.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Logging Total Inches in the Farm Logbook</strong></td>
+<td style="text-align:left">Analytical OLAP DB (ClickHouse / Druid)</td>
+<td style="text-align:left">Stores summarized aggregation tables for real-time advertiser dashboards.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Digital advertising engines (Google Search Ads, Instagram Sponsored Posts) power multi-billion dollar ecosystems:</p>
+<ol>
+<li><strong>Financial Integrity</strong>: Advertisers pay real money per click (Cost-Per-Click: CPC). Over-counting due to network retries causes advertiser lawsuits; under-counting loses revenue.</li>
+<li><strong>Massive Scale</strong>: Platforms process <strong>10 billion ad impressions and 1 billion clicks daily</strong> ($&gt; 50,000\text{ clicks/second}$ peak).</li>
+<li><strong>Event Time vs. Processing Time Discrepancies</strong>: A user clicks an ad at <code>14:00:00</code> on a subway train; their phone loses signal and delivers the click payload at <code>14:12:30</code>. The system must attribute the click to the <code>14:00:00</code> window for accurate analytics.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Clients[&quot;1. Ingestion Layer&quot;]
+        UserPhone[&quot;User Mobile / Web Client&quot;] --&gt;|&quot;POST /v1/ad_clicks&quot;| LB[&quot;Global Load Balancer&quot;]
+        LB --&gt; EdgeGW[&quot;Click Tracking Ingestion Service&quot;]
+        EdgeGW --&gt; KafkaRaw[&quot;Kafka: raw-clicks-topic (Partitioned by ad_id)&quot;]
+    end
+
+    subgraph StreamEngine[&quot;2. Real-Time Stream Aggregation (Apache Flink / Spark)&quot;]
+        KafkaRaw --&gt; DedupFilter{&quot;Bot &amp; Duplicate Filter (Redis / Bloom Filter)&quot;}
+        DedupFilter --&gt;|&quot;Fraud / Duplicate&quot;| Discard[&quot;Log &amp; Quarantine&quot;]
+        DedupFilter --&gt;|&quot;Valid Click&quot;| WindowEngine[&quot;Flink Window Engine (Event-Time Watermarks)&quot;]
+        
+        WindowEngine --&gt; Tumbling1m[&quot;Tumbling Window 1-Minute Aggregation&quot;]
+        Tumbling1m --&gt; CountAgg[&quot;SUM(clicks), SUM(spend), Unique Users&quot;]
+    end
+
+    subgraph Storage[&quot;3. Real-Time OLAP &amp; Billing&quot;]
+        CountAgg --&gt; KafkaAgg[&quot;Kafka: aggregated-clicks-topic&quot;]
+        KafkaAgg --&gt; OLAP[(&quot;ClickHouse / Apache Pinot (Advertiser Dashboard)&quot;)]
+        KafkaAgg --&gt; BillingDB[(&quot;Double-Entry Billing DB (PostgreSQL / Spanner)&quot;)]
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
+<p>Consider an ad network handling <strong>1 Billion Ad Clicks Daily</strong>:</p>
+<ul>
+<li><strong>Throughput Sizing</strong>:
+<ul>
+<li>$1\text{B} / 86,400 \approx 11,570\text{ clicks/second}$ average.</li>
+<li>Peak click throughput ($3\times$): <strong>$35,000\text{ clicks/second}$</strong>.</li>
+</ul>
+</li>
+<li><strong>Storage Reduction via 1-Minute Aggregation</strong>:
+<ul>
+<li>Raw click event: <code>(click_id, ad_id, campaign_id, user_id, ip, timestamp, bid_price)</code> $\approx 200\text{ bytes}$.</li>
+<li>Raw daily storage: $1\text{B} \times 200\text{ bytes} = 200\text{ Gigabytes/day}$.</li>
+<li>If 50,000 active ad campaigns receive clicks every minute:</li>
+<li>1-minute aggregation produces $50,000 \times 60 \times 24 = 72\text{ million rows/day}$.</li>
+<li>Aggregated row: <code>(ad_id, minute_timestamp, click_count, total_cost)</code> $\approx 32\text{ bytes}$.</li>
+<li>Aggregated daily storage: $72\text{M} \times 32\text{ bytes} \approx 2.3\text{ Gigabytes/day}$!</li>
+<li><strong>98.8% storage reduction</strong> while powering sub-100ms dashboard queries!</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-three-types-of-streaming-windows">1. Three Types of Streaming Windows</h3>
+<ul>
+<li><strong>Tumbling Windows (Fixed, Non-Overlapping)</strong>:
+<ul>
+<li>Example: <code>[12:00 - 12:01]</code>, <code>[12:01 - 12:02]</code>, <code>[12:02 - 12:03]</code>.</li>
+<li>Every event belongs to exactly one window. Best for financial billing and hourly stats.</li>
+</ul>
+</li>
+<li><strong>Hopping Windows (Fixed Length, Overlapping Step)</strong>:
+<ul>
+<li>Example: 5-minute window advancing every 1 minute (<code>[12:00 - 12:05]</code>, <code>[12:01 - 12:06]</code>).</li>
+<li>Best for moving averages and trendline detection.</li>
+</ul>
+</li>
+<li><strong>Sliding Windows (Dynamic Event-Driven)</strong>:
+<ul>
+<li>Bounded by time intervals relative to events (e.g., maximum 5 clicks from the same IP within any 10-second span).</li>
+<li>Best for real-time fraud and bot detection.</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-event-time-vs-processing-time--watermarks">2. Event Time vs. Processing Time &amp; Watermarks</h3>
+<ul>
+<li><strong>Event Time</strong>: The timestamp when the user physically tapped the screen (recorded by the mobile client).</li>
+<li><strong>Processing Time</strong>: The timestamp when the stream processor (Flink) processes the event.</li>
+<li><strong>The Watermark Algorithm</strong>:
+<ul>
+<li>A Watermark $W(t)$ is a declaration: <em>&quot;We assert that all events with Event Time $\le t$ have arrived&quot;</em>.</li>
+<li>To handle network delays, we set <strong>Bounded Out-of-Orderness</strong> (e.g., 5 minutes):
+$$W(t) = \max(\text{Event Time seen so far}) - 5\text{ minutes}$$</li>
+<li>When the Watermark passes <code>12:05:00</code>, the <code>[12:00 - 12:05]</code> window closes and outputs final numbers.</li>
+<li>Events arriving <em>after</em> the watermark are either processed via <strong>Side Outputs</strong> or dropped as late anomalies.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-click-fraud--bot-detection">3. Click-Fraud &amp; Bot Detection</h3>
+<p>Fraudulent networks generate fake clicks to drain competitor ad budgets.</p>
+<ul>
+<li><strong>Deduplication Window</strong>: If the same <code>(user_id, ad_id)</code> or <code>(ip_address, ad_id)</code> generates multiple clicks within 5 seconds, only the first click is charged; subsequent clicks are flagged as invalid clicks and discarded from billing.</li>
+<li><strong>IP Rate Limiting</strong>: Track clicks per IP subnet using Redis sliding window logs.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Lambda Architecture (Batch + Stream)</th>
+<th style="text-align:left">Kappa Architecture (Pure Streaming - Flink)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Code Maintenance</strong></td>
+<td style="text-align:left">Painful (must maintain dual codebases in Spark &amp; Flink)</td>
+<td style="text-align:left">Elegant (single processing logic in Flink)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Historical Reprocessing</strong></td>
+<td style="text-align:left">Easy (re-run MapReduce batch on raw files)</td>
+<td style="text-align:left">Requires replaying Kafka historical retention</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Real-Time Accuracy</strong></td>
+<td style="text-align:left">High (batch job corrects streaming inaccuracies nightly)</td>
+<td style="text-align:left">High (watermarks handle late events cleanly)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>System Complexity</strong></td>
+<td style="text-align:left">Very High</td>
+<td style="text-align:left">Moderate</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Relying on Processing Time for Billing</strong>: If Kafka experiences an ingestion backlog, 2 hours of queued clicks will all be processed within 1 minute. Using processing time attributes 2 hours of clicks to a single 1-minute billing bucket, corrupting advertiser analytics. Always aggregate on <strong>Event Time</strong>.</li>
+<li><strong>Missing Late-Event Side Outputs</strong>: Closing windows strictly and dropping late clicks causes under-counting for mobile users on intermittent transit Wi-Fi. Always configure side outputs in Flink to route late events to reconciliation tables.</li>
+<li><strong>Synchronous Database Writes per Click</strong>: Writing 35,000 individual SQL inserts per second overwhelms relational databases. Ingest through Kafka, aggregate in memory with Flink, and bulk-insert minute-level summaries into ClickHouse.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating tumbling window click aggregation, event-time watermark evaluation, late-event side output handling, and bot click deduplication is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 2 - Chapter 4 (Ad Click Aggregation)</a></li>
+<li><a href="https://www.vldb.org/pvldb/vol8/p1792-Akidau.pdf">Tyler Akidau et al.: The Dataflow Model (VLDB 2015)</a></li>
+<li><a href="https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/time-and-watermarks/">Apache Flink Documentation: Timely Stream Processing &amp; Watermarks</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-what-is-the-difference-between-event-time-ingestion-time-and-processing-time">Q1: What is the difference between Event Time, Ingestion Time, and Processing Time?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ul>
+<li><strong>Event Time</strong>: The timestamp when the action occurred on the client device (e.g., when the user tapped the ad).</li>
+<li><strong>Ingestion Time</strong>: The timestamp when the message arrived at the message queue broker (e.g., when Kafka recorded the event).</li>
+<li><strong>Processing Time</strong>: The local system clock of the stream processing node (e.g., Apache Flink worker) executing the aggregation code.
+For financial billing and business analytics, <strong>Event Time</strong> is mandatory because network lags and queue buffering introduce random delays between event occurrence and stream processing.</li>
+</ul>
+<h3 id="q2-how-do-watermarks-handle-late-arriving-events-in-apache-flink-or-google-cloud-dataflow">Q2: How do Watermarks handle late-arriving events in Apache Flink or Google Cloud Dataflow?</h3>
+<p><strong>Model Answer</strong>: A Watermark is a monotonically increasing timestamp emitted into the stream that acts as a completion horizon: $W(t) = \max(	ext{Event Time seen}) - 	ext{Allowed Latency } \Delta$.</p>
+<ul>
+<li>A Watermark $W(12:05)$ guarantees to downstream operators that no further events with timestamp $\le 12:05$ are expected to arrive.</li>
+<li>When $W(t)$ passes the end of a window (e.g., 12:00), the window closes and emits its final aggregated output.</li>
+<li>If a late event arrives with $t &lt; W$, Flink handles it using an <strong>Allowed Lateness Policy</strong>: it can either update the window via a retraction stream or divert the event to a <strong>Side Output</strong> for manual reconciliation.</li>
+</ul>
+<h3 id="q3-how-do-you-achieve-exactly-once-processing-in-an-ad-click-aggregation-pipeline">Q3: How do you achieve Exactly-Once Processing in an ad click aggregation pipeline?</h3>
+<p><strong>Model Answer</strong>: Exactly-once processing is achieved through end-to-end alignment across three pipeline stages:</p>
+<ol>
+<li><strong>Replay-able Source</strong>: Apache Kafka retains raw click offsets.</li>
+<li><strong>Stateful Stream Processing with Checkpointing (Chandy-Lamport Algorithm)</strong>: Flink periodically saves consistent snapshots of aggregation state and Kafka read offsets to durable storage (S3/GCS). If a worker crashes, Flink restores state and rewinds Kafka to the last checkpoint.</li>
+<li><strong>Idempotent / Transactional Sink</strong>: When writing aggregated summaries to ClickHouse or PostgreSQL, writes use <strong>Upserts</strong> on compound keys (<code>ad_id, window_start_time</code>) or two-phase commit sinks (<code>TwoPhaseCommitSinkFunction</code>).</li>
+</ol>
+<h3 id="q4-how-do-you-detect-and-filter-click-fraud-in-real-time">Q4: How do you detect and filter Click-Fraud in real time?</h3>
+<p><strong>Model Answer</strong>: Click fraud is filtered in a multi-tier pipeline:</p>
+<ol>
+<li><strong>Deduplication Filter (Fast Layer)</strong>: When a click arrives, hash <code>(user_id, ad_id, ip)</code> and check an atomic Redis key with a 5-second TTL. Duplicate clicks within 5 seconds are marked invalid and excluded from billing.</li>
+<li><strong>Behavioral Sliding Window (Anomaly Detection Layer)</strong>: Flink maintains a sliding window tracking click velocity per IP subnet and user agent. If an IP exceeds 50 clicks/minute, subsequent clicks are routed to a fraud queue.</li>
+<li><strong>Offline Machine Learning Classifier</strong>: A nightly batch job analyzes click-to-conversion rates, IP geolocation hops, and known botnet IP blacklists, issuing retroactive billing credits to advertisers for fraudulent clicks that bypassed real-time filters.</li>
+</ol>
+<h3 id="q5-why-is-clickhouse-or-apache-pinot-preferred-over-postgresql-for-storing-aggregated-ad-analytics">Q5: Why is ClickHouse or Apache Pinot preferred over PostgreSQL for storing aggregated ad analytics?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ul>
+<li><strong>Columnar Storage</strong>: Aggregated analytics queries calculate aggregate functions over specific columns (<code>SELECT ad_id, SUM(clicks), SUM(cost) WHERE date = '2026-11-23' GROUP BY ad_id</code>). Columnar databases only read the requested columns off disk, scanning $10	imes$ to $50	imes$ less data than row-oriented PostgreSQL.</li>
+<li><strong>Vectorized Query Execution</strong>: ClickHouse processes SIMD vector CPU instructions across column arrays, aggregating hundreds of millions of rows per second per core.</li>
+<li><strong>Massive Compression</strong>: Columnar compression (DoubleDelta, Zstandard) achieves $5	imes$ to $10	imes$ higher compression ratios than row-based storage engines.</li>
+</ul>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. Which windowing strategy produces non-overlapping, fixed-duration time buckets?</b></summary>
+A) Sliding Window<br/>
+B) Tumbling Window<br/>
+C) Session Window<br/>
+D) Hopping Window<br/><br/>
+<b>Answer: B</b>. Tumbling windows have fixed size and zero overlap (e.g. 12:00-12:01, 12:01-12:02).
+</details>
+<details>
+<summary><b>2. Why is Event Time preferred over Processing Time for calculating advertiser ad charges?</b></summary>
+A) Because Processing Time cannot be stored in Kafka.<br/>
+B) Because network delays and queue buffering would incorrectly shift clicks to later minutes, distorting billing attribution.<br/>
+C) Because Event Time is always in UTC.<br/>
+D) Because Processing Time requires GPS.<br/><br/>
+<b>Answer: B</b>. Event Time represents the true moment of user engagement, independent of network transit delays.
+</details>
+<details>
+<summary><b>3. What does a Watermark timestamp W(t) signify to a stream processing operator?</b></summary>
+A) That the database is full.<br/>
+B) That no further events with timestamp earlier than t are expected to arrive, triggering window completion.<br/>
+C) That the server should reboot.<br/>
+D) That the user clicked twice.<br/><br/>
+<b>Answer: B</b>. Watermarks provide a temporal progress indicator that allows windows to close and emit results.
+</details>
+<details>
+<summary><b>4. How does 1-minute click aggregation reduce database storage costs?</b></summary>
+A) By deleting all ad clicks after 1 hour.<br/>
+B) By combining thousands of raw click events for an ad into a single summary row per minute, achieving 95%+ storage reduction.<br/>
+C) By compressing data with MP3.<br/>
+D) By disabling SQL indexes.<br/><br/>
+<b>Answer: B</b>. Summarizing thousands of clicks into periodic count/sum rows drastically shrinks data footprint.
+</details>
+<details>
+<summary><b>5. Which database type is best suited for real-time advertiser analytics dashboards?</b></summary>
+A) Relational Row Store (PostgreSQL / MySQL)<br/>
+B) Distributed Columnar OLAP Store (ClickHouse / Apache Pinot)<br/>
+C) Redis String Key-Value<br/>
+D) MongoDB Document Store<br/><br/>
+<b>Answer: B</b>. Columnar OLAP stores provide sub-second aggregations (`SUM`, `AVG`, `GROUP BY`) across billions of rows.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

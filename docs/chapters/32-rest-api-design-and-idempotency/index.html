@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Rest Api Design And Idempotency">
+  <title>Rest Api Design And Idempotency | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-32-rest-api-design--idempotency">Module 32: REST API Design &amp; Idempotency</h1>
+<blockquote>
+<p>Deep-dive architectural guide covering RESTful resource modeling, HTTP semantics, idempotent request semantics, idempotency key locking protocols, and safe retries in distributed systems.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before diving into REST API design and idempotency, you should be familiar with:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a> (TCP, HTTP request/response lifecycles, and headers)</li>
+<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Reverse proxies, routing, and header mutation)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Network retries, exponential backoff, and duplicate delivery)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine ordering a pizza on a food delivery app with an unstable mobile connection. You tap &quot;Submit Order&quot; and charge $30. The loading spinner spins, but before your phone gets a confirmation, your Wi-Fi flickers and cuts out. Did the restaurant get your order? Did your card get charged?</p>
+<p>If you frantically tap &quot;Submit Order&quot; three more times without an <strong>Idempotency Key</strong>, you might get 4 pizzas and be billed $120. With an <strong>Idempotent API</strong>, your client attaches a unique request token (<code>Idempotency-Key: req_abc123</code>). No matter how many times your phone retries that exact same token over network hiccups, the server processes the charge exactly once and returns the exact same stored receipt every time.</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Postal Mailbox with an Anti-Theft One-Way Drop Slot</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Postal Analogy</th>
+<th style="text-align:left">REST &amp; Idempotency Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Tracking Number on Envelope</strong></td>
+<td style="text-align:left"><code>Idempotency-Key</code> Header</td>
+<td style="text-align:left">Client-generated UUID ensuring deduplication across retries.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Mailbox Drop Slot</strong></td>
+<td style="text-align:left">API Endpoint / Route</td>
+<td style="text-align:left">Well-defined URI representing resources (<code>/orders</code>, <code>/payments</code>).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Looking into the glass display</strong></td>
+<td style="text-align:left"><code>GET</code> Request</td>
+<td style="text-align:left">Safe, read-only operation; never modifies server state.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Dropping a new letter</strong></td>
+<td style="text-align:left"><code>POST</code> Request</td>
+<td style="text-align:left">Unsafe, non-idempotent by default unless guarded by an idempotency layer.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Replacing a form with an exact copy</strong></td>
+<td style="text-align:left"><code>PUT</code> Request</td>
+<td style="text-align:left">Idempotent by definition; overwrites state to identical target state.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Tearing up an old registered letter</strong></td>
+<td style="text-align:left"><code>DELETE</code> Request</td>
+<td style="text-align:left">Idempotent; removing an already deleted item yields same terminal state.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Postal Registry Log</strong></td>
+<td style="text-align:left">Idempotency KV Store</td>
+<td style="text-align:left">In-memory Redis store tracking key status (<code>PROCESSING</code>, <code>RESOLVED</code>).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>In distributed microservices, network communication is inherently unreliable (Fallacies of Distributed Computing #1: <em>The network is reliable</em>). When a client sends a mutating HTTP request (such as charging a credit card or issuing a bank transfer):</p>
+<ol>
+<li><strong>Request Drops Before Server</strong>: Server never received it; state didn't change.</li>
+<li><strong>Server Crashes Mid-Execution</strong>: State partially changed; client receives TCP RST or connection reset.</li>
+<li><strong>Response Drops on the Return Path</strong>: Server completed the mutation successfully, but the network connection timed out before the 200 OK reached the client.</li>
+</ol>
+<p>Without idempotency, a client retry leads to double-billing, duplicate records, and corrupted ledger states. Idempotency guarantees that executing an operation multiple times produces identical server state as executing it once:</p>
+<p>$$\forall x, \quad f(f(x)) = f(x)$$</p>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor Client as Mobile Client
+    participant GW as API Gateway
+    participant Cache as Redis (Idempotency Store)
+    participant Svc as Payment Service
+    participant DB as SQL Ledger
+
+    Client-&gt;&gt;GW: POST /v1/charges (Header: Idempotency-Key: key_123)
+    GW-&gt;&gt;Cache: SETNX key_123 &quot;PROCESSING&quot; EX 120
+    alt Key Already Exists and is PROCESSING
+        Cache--&gt;&gt;GW: Key exists (status=PROCESSING)
+        GW--&gt;&gt;Client: 409 Conflict / 425 Too Early (&quot;Concurrent request in-flight&quot;)
+    else Key Already Exists and is COMPLETED
+        Cache--&gt;&gt;GW: Return Cached Response {status: 200, charge_id: &quot;ch_999&quot;}
+        GW--&gt;&gt;Client: 200 OK (Cached response delivered instantly)
+    else Key Acquired Successfully (First Time)
+        Cache--&gt;&gt;GW: OK (Lock acquired)
+        GW-&gt;&gt;Svc: Process Payment
+        Svc-&gt;&gt;DB: INSERT transaction &amp; charge ledger
+        DB--&gt;&gt;Svc: Transaction Committed
+        Svc--&gt;&gt;GW: Charge Result {charge_id: &quot;ch_999&quot;, amount: 5000}
+        GW-&gt;&gt;Cache: SET key_123 {status: 200, body: {...}} EX 86400
+        GW--&gt;&gt;Client: 201 Created {charge_id: &quot;ch_999&quot;, status: &quot;succeeded&quot;}
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
+<p>Consider a global payment gateway like Stripe handling 2,000 payment API requests per second at peak:</p>
+<ul>
+<li><strong>Key Storage Size</strong>: UUIDv4 string (36 bytes) + SHA-256 hash of payload (32 bytes) + Cached Response Body (1 KB) $\approx 1.1\text{ KB}$ per idempotency record.</li>
+<li><strong>Daily Volume</strong>: $2,000\text{ req/s} \times 86,400\text{ s/day} \approx 172.8\text{ million requests/day}$.</li>
+<li><strong>Active Working Set (24-Hour Retention)</strong>: $172.8\text{M} \times 1.1\text{ KB} \approx 190\text{ GB}$ of Redis memory required.</li>
+<li><strong>Storage Cluster</strong>: A 3-node Redis cluster with 128 GB RAM per node with LRU eviction provides sub-millisecond duplicate checks ($&lt; 1.2\text{ ms}$).</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-http-method-semantics">1. HTTP Method Semantics</h3>
+<p>According to RFC 7231 / RFC 9110:</p>
+<ul>
+<li><strong>Safe Methods</strong>: <code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>. Calling them creates no server state mutations.</li>
+<li><strong>Idempotent Methods</strong>: <code>PUT</code> (full replacement), <code>DELETE</code> (removal), <code>GET</code>, <code>HEAD</code>. Calling them $N$ times has the same net side-effect as calling them once.</li>
+<li><strong>Non-Idempotent Methods</strong>: <code>POST</code> (resource creation), <code>PATCH</code> (partial modification, e.g., append/increment operations).</li>
+</ul>
+<h3 id="2-the-idempotency-key-lifecycle">2. The Idempotency Key Lifecycle</h3>
+<p>An enterprise idempotency engine implements a 4-state lifecycle:</p>
+<ol>
+<li><strong>Acquire Atomic Lock (<code>SETNX</code>)</strong>: When a request arrives with <code>Idempotency-Key</code>, the gateway attempts an atomic <code>SET key status=PROCESSING EX 60 NX</code>.</li>
+<li><strong>Handle In-Flight Conflicts</strong>: If <code>SETNX</code> returns 0 and status is <code>PROCESSING</code>, another thread or server is actively processing the payload. The gateway rejects the concurrent attempt with HTTP <code>409 Conflict</code> (or <code>425 Too Early</code>) and an advisory <code>Retry-After: 2</code> header.</li>
+<li><strong>Payload Fingerprinting</strong>: Along with the key, store a SHA-256 hash of the request path, verb, and body (<code>sha256(verb + path + body)</code>). If a subsequent request arrives with the same <code>Idempotency-Key</code> but a <em>different</em> body or target endpoint, immediately return HTTP <code>422 Unprocessable Entity</code> (&quot;Idempotency key reused with different parameters&quot;).</li>
+<li><strong>Commit &amp; Cache</strong>: Upon successful transaction completion, update the cache entry to <code>status=COMPLETED</code>, saving the HTTP status code, headers, and body with a 24-hour TTL. Subsequent retries return this exact payload without touching downstream databases.</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Mechanism</th>
+<th style="text-align:left">Pros</th>
+<th style="text-align:left">Cons</th>
+<th style="text-align:left">Best Used For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>No Idempotency Protection</strong></td>
+<td style="text-align:left">Zero storage overhead; simplest implementation</td>
+<td style="text-align:left">High risk of double-billing, duplicate rows, data corruption</td>
+<td style="text-align:left">Non-critical read APIs or internal telemetry ingestion</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Database Unique Constraints</strong></td>
+<td style="text-align:left">Guarantees uniqueness at DB engine level; ACID protected</td>
+<td style="text-align:left">High DB load; tight coupling to DB schema; cannot cache full HTTP response</td>
+<td style="text-align:left">Order IDs, user email registration, unique slug generation</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Distributed Cache Key Store (Redis)</strong></td>
+<td style="text-align:left">Sub-millisecond lookup; caches full response body; decoupled from backend</td>
+<td style="text-align:left">Requires Redis cluster maintenance; cache loss may allow duplicate execution</td>
+<td style="text-align:left">Public APIs, payment gateways, e-commerce checkout</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Optimistic Concurrency (ETags / Version)</strong></td>
+<td style="text-align:left">Prevents lost updates; standard HTTP protocol compliance</td>
+<td style="text-align:left">Client must manage and provide version headers (<code>If-Match</code>)</td>
+<td style="text-align:left">Resource updates, collaborative document editing</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Reusing Idempotency Keys Across Different Payloads</strong>: A buggy client sends <code>Idempotency-Key: abc</code> for a $10 transfer, and then reuses <code>abc</code> for a $500 transfer. If the server does not validate the SHA-256 payload fingerprint, it will silently return the cached $10 receipt without charging the $500!</li>
+<li><strong>Releasing the Lock on Downstream Timeout</strong>: If the payment processor times out after 10 seconds, deleting the idempotency key allows the client to retry. But the payment processor may have actually charged the card! The key state must transition to <code>FAILED</code> or hold until reconciliation completes.</li>
+<li><strong>Using URL Query Parameters for Mutating State</strong>: Calling <code>GET /v1/delete_user?id=123</code> violates HTTP safety principles. Web crawlers and prefetch engines will trigger user deletions! Always use <code>DELETE</code> or <code>POST</code>.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating RESTful endpoints, atomic idempotency locking, duplicate request prevention, payload hash collision detection, and cached replay is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://stripe.com/blog/idempotency">Stripe Engineering: Designing Robust and Predictable APIs with Idempotency</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2">IETF RFC 9110: HTTP Semantics - Section 9.2 (Idempotent Methods)</a></li>
+<li><a href="https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/">IETF Draft: The Idempotency-Key HTTP Header Field</a></li>
+<li><a href="https://cloud.google.com/apis/design">Google Cloud API Design Guide: Standard Methods and Custom Methods</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-what-is-the-exact-mathematical-and-architectural-definition-of-an-idempotent-api">Q1: What is the exact mathematical and architectural definition of an Idempotent API?</h3>
+<p><strong>Model Answer</strong>: An API operation is idempotent if making multiple identical requests has the same net server state effect as making a single request. Formally, $f(f(x)) = f(x)$. In HTTP, <code>GET</code>, <code>PUT</code>, <code>DELETE</code>, and <code>HEAD</code> are defined as idempotent by specification. <code>POST</code> is non-idempotent by default because repeated invocations append or trigger additional resources or transactions. In distributed systems, non-idempotent endpoints are made idempotent by incorporating an <code>Idempotency-Key</code> header with atomic deduplication storage.</p>
+<h3 id="q2-why-is-post-not-idempotent-but-put-is-idempotent">Q2: Why is <code>POST</code> not idempotent, but <code>PUT</code> is idempotent?</h3>
+<p><strong>Model Answer</strong>: <code>PUT</code> represents a complete resource replacement at a specific URI (<code>PUT /users/42</code>). If you execute <code>PUT /users/42</code> with <code>{ name: &quot;Bob&quot; }</code> ten times, the resource state on the database at <code>/users/42</code> remains identical after the 1st and 10th execution. In contrast, <code>POST /users</code> creates a new resource with a server-generated ID (<code>/users/101</code>, <code>/users/102</code>). Calling it ten times generates ten distinct database records and side effects.</p>
+<h3 id="q3-how-do-you-handle-concurrent-requests-that-arrive-with-the-exact-same-idempotency-key-simultaneously">Q3: How do you handle concurrent requests that arrive with the exact same <code>Idempotency-Key</code> simultaneously?</h3>
+<p><strong>Model Answer</strong>: When the first request arrives, the server executes an atomic <code>SETNX key &quot;PROCESSING&quot; EX &lt;ttl&gt;</code>. The first request acquires the lock and proceeds to business logic. The second concurrent request fails the <code>SETNX</code> check because the key already exists and holds the <code>PROCESSING</code> status. The server must immediately abort the second request and return HTTP <code>409 Conflict</code> (or <code>425 Too Early</code>), preventing two concurrent worker threads from charging the same customer in parallel.</p>
+<h3 id="q4-what-happens-if-the-client-reuses-an-idempotency-key-with-a-completely-different-request-body">Q4: What happens if the client reuses an <code>Idempotency-Key</code> with a completely different request body?</h3>
+<p><strong>Model Answer</strong>: The idempotency layer must compute a cryptographic hash (e.g., SHA-256) of the request verb, URI path, and serialized body upon key creation. When a repeat request arrives, the server verifies whether <code>sha256(current_body) == stored_hash</code>. If they do not match, the server must reject the request with HTTP <code>422 Unprocessable Entity</code> or <code>400 Bad Request</code>, signaling that an idempotency key cannot be mutated to execute a different operation.</p>
+<h3 id="q5-how-do-you-implement-idempotency-at-the-database-level-without-redis">Q5: How do you implement idempotency at the database level without Redis?</h3>
+<p><strong>Model Answer</strong>: Using a relational database table with an <code>idempotency_keys</code> table inside a local ACID transaction. The primary key or unique index on <code>idempotency_key</code> ensures that inserting an in-flight key fails immediately on duplicate submissions with a unique constraint violation, automatically aborting the transaction without mutating ledger balances (see companion <code>schema.sql</code> for full schema and transaction flow).</p>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. Which of the following HTTP methods is defined as safe AND idempotent by RFC specification?</b></summary>
+A) POST<br/>
+B) PATCH<br/>
+C) GET<br/>
+D) DELETE<br/><br/>
+<b>Answer: C</b>. Safe methods do not alter server state. GET is both safe and idempotent. DELETE and PUT are idempotent but NOT safe because they mutate server state.
+</details>
+<details>
+<summary><b>2. If a client receives a 504 Gateway Timeout on a payment POST request, what should it do?</b></summary>
+A) Never retry; assume payment failed.<br/>
+B) Retry the exact same request with the exact same Idempotency-Key.<br/>
+C) Generate a new Idempotency-Key and retry.<br/>
+D) Send a GET request to delete the account.<br/><br/>
+<b>Answer: B</b>. A 504 indicates the gateway did not hear back from the upstream service in time. Retrying with the <i>exact same</i> Idempotency-Key guarantees that if the upstream did process the payment, the cached result is returned without double charging.
+</details>
+<details>
+<summary><b>3. What HTTP status code should be returned if a request arrives with an Idempotency-Key that is currently in 'PROCESSING' state?</b></summary>
+A) 200 OK<br/>
+B) 500 Internal Server Error<br/>
+C) 409 Conflict (or 425 Too Early)<br/>
+D) 301 Moved Permanently<br/><br/>
+<b>Answer: C</b>. HTTP 409 Conflict indicates that the request conflicts with an in-progress operation for that resource key.
+</details>
+<details>
+<summary><b>4. How does ETags and `If-Match` provide idempotency and consistency during updates?</b></summary>
+A) By encrypting the payload with RSA.<br/>
+B) By ensuring optimistic concurrency control; the update only succeeds if the resource's current ETag matches the client's version.<br/>
+C) By compressing the HTTP body with gzip.<br/>
+D) By bypassing the API gateway directly to SQL.<br/><br/>
+<b>Answer: B</b>. ETags implement optimistic locking over HTTP. If another client updated the resource in the interim, the ETag changes, and the update is rejected with 412 Precondition Failed.
+</details>
+<details>
+<summary><b>5. Why should idempotency keys have an expiration time (TTL)?</b></summary>
+A) Because Redis cannot store data permanently.<br/>
+B) To prevent memory exhaustion while still covering the realistic retry window of clients (typically 24 to 72 hours).<br/>
+C) To allow attackers to double-charge cards after 5 minutes.<br/>
+D) Because HTTP headers expire automatically.<br/><br/>
+<b>Answer: B</b>. Client network retries occur over seconds or minutes, occasionally hours. Keeping keys indefinitely would consume unbounded memory without operational benefit.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

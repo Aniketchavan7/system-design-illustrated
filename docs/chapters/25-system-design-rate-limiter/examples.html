@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Distributed Rate Limiter (Stripe / Cloudflare)">
+  <title>System Design: Distributed Rate Limiter (Stripe / Cloudflare) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-distributed-rate-limiter">Real-World Production Deep Dives: Distributed Rate Limiter</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google (Doorman &amp; Cloud Armor)</strong>, <strong>Netflix (Zuul &amp; Concurrency Limits)</strong>, <strong>Cloudflare (eBPF/XDP)</strong>, and <strong>Stripe (Redis Lua)</strong> implement distributed rate limiting and overload protection at multi-million QPS scale.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-implements-rate-limiting-doorman--cloud-armor">🏢 Deep Dive 1: How Google Implements Rate Limiting (Doorman &amp; Cloud Armor)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Systems</strong>: <strong>Google Doorman</strong> (Global Distributed Client-Side Quota Server) and <strong>Google Cloud Armor</strong>.</li>
+<li><strong>Traffic Volume</strong>: Handles millions of RPCs per second across internal Google services (YouTube, Search, Bigtable) and cloud perimeter ingress.</li>
+<li><strong>The Challenge</strong>: A single client fleet with 50,000 Borg containers can accidentally launch an internal DDoS attack on a shared backend database if not coordinated globally.</li>
+</ul>
+<h3 id="2-googles-architecture-the-doorman-client-side-quota-architecture">2. Google's Architecture: The Doorman Client-Side Quota Architecture</h3>
+<pre><code>[ Google Service Client Fleet (50,000 Containers) ]
+      │                   │                   │
+      ▼                   ▼                   ▼
+ [ Local Bucket ]    [ Local Bucket ]    [ Local Bucket ]
+ (Local Cache)       (Local Cache)       (Local Cache)
+      │                   │                   │
+      └───────────────────┼───────────────────┘
+                          │ (Periodic Token Leases: Every 5s)
+                          ▼
+            [ Google Doorman Quota Server ]
+              ├── Global Resource Capacity Model
+              ├── Fair-Share Proportional Allocation
+              └── Dynamic Master Election via Chubby
+</code></pre>
+<h4 id="a-the-lease-based-token-model">A. The Lease-Based Token Model</h4>
+<ul>
+<li>Querying a centralized quota server for <em>every single RPC</em> would multiply network traffic and add 5ms latency to every operation.</li>
+<li><strong>Google Doorman's Solution</strong>:
+<ul>
+<li>Client containers periodically contact Doorman (e.g., every 5 seconds) to request a <strong>Lease of Capacity</strong> (e.g., &quot;grant me 200 operations for the next 5 seconds&quot;).</li>
+<li>The client consumes those operations locally in RAM with <strong>zero network latency</strong>.</li>
+<li>If the client's local bucket runs dry before the lease renews, it throttles requests locally.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-fair-share-allocation-algorithm">B. Fair-Share Allocation Algorithm</h4>
+<ul>
+<li>When total demand from all 50,000 clients exceeds backend capacity:
+<ul>
+<li>Doorman does <em>not</em> randomly drop requests.</li>
+<li>It computes a <strong>Fair-Share Max-Min algorithm</strong>, ensuring small, low-traffic clients receive 100% of their small requests, while massive batch jobs are proportionally dialed down.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-uses-rate-limiting-zuul-adaptive-concurrency-limits">🎬 Deep Dive 2: How Netflix Uses Rate Limiting (Zuul Adaptive Concurrency Limits)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix <strong>Zuul Edge Rate Limiter</strong> and the <code>concurrency-limits</code> library.</li>
+<li><strong>Scale</strong>: Over 100 billion edge requests daily; peak loads exceeding 2+ million concurrent connections.</li>
+<li><strong>Philosophy</strong>: Dynamic adaptive limits based on system health rather than brittle static numbers.</li>
+</ul>
+<h3 id="2-netflixs-architecture-tcp-vegas--littles-law">2. Netflix's Architecture: TCP Vegas &amp; Little's Law</h3>
+<pre><code>[ Inbound Request Stream to Zuul Gateway ]
+                    │
+                    ▼
+[ Netflix Adaptive Concurrency Limiter (Netty Interceptor) ]
+  ├── Measures Round-Trip Latency (RTT) per Request
+  ├── Compares with Moving Baseline (No-Load RTT)
+  │
+  ├── If RTT &lt;= Baseline: Limit = Limit + 1  (Additive Increase)
+  └── If RTT &gt; Baseline:  Limit = Limit * β  (Multiplicative Decrease)
+                    │
+                    ▼
+[ Upstream Microservice Target Pool ]
+</code></pre>
+<h4 id="a-why-static-rps-limits-fail-at-netflix">A. Why Static RPS Limits Fail at Netflix</h4>
+<ul>
+<li>If Netflix sets a hard-coded rate limit of 5,000 RPS for a service:
+<ul>
+<li>If a database node slows down, the service can only process 2,500 RPS before thread pools choke. The static rate limiter still lets 5,000 RPS through, causing the service to crash.</li>
+<li>Netflix replaced static RPS limits with <strong>Adaptive Concurrency Limits</strong> based on <strong>Little's Law</strong>:
+$$\text{Concurrency} = \text{Throughput} \times \text{Latency}$$</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-priority-shedding">B. Priority Shedding</h4>
+<p>When congestion occurs, Netflix sheds traffic according to strict priority tiers:</p>
+<ol>
+<li><strong>Critical (Never Dropped)</strong>: Video playback start, license checks.</li>
+<li><strong>Interactive</strong>: UI catalog browsing, user search.</li>
+<li><strong>Background (Dropped First)</strong>: Telemetry pings, viewing history sync.</li>
+</ol>
+<hr />
+<h2 id="deep-dive-3-how-cloudflare-implements-line-rate-drops-ebpf--xdp">🛡️ Deep Dive 3: How Cloudflare Implements Line-Rate Drops (eBPF &amp; XDP)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li>Handles over <strong>55 million HTTP requests per second</strong> across 330+ cities worldwide.</li>
+<li>Mitigates multi-terabit volumetric DDoS attacks at line rate.</li>
+</ul>
+<h3 id="2-in-kernel-ebpf--xdp-drops">2. In-Kernel eBPF &amp; XDP Drops</h3>
+<ul>
+<li>Standard web application proxies crash from kernel interrupt overhead when flooded with millions of packets per second.</li>
+<li>Cloudflare runs <strong>eBPF bytecode programs inside the Network Interface Card (NIC) driver</strong> using <strong>XDP (eXpress Data Path)</strong>:
+<ul>
+<li>Packets exceeding rate limit thresholds are dropped via <code>XDP_DROP</code> directly in the network card ring buffer before the Linux kernel allocates memory or triggers CPU interrupts.</li>
+<li>Absorbs millions of malicious packets per second with virtually <strong>zero server CPU utilization</strong>!</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-4-how-stripe-uses-atomic-redis-sliding-windows">💳 Deep Dive 4: How Stripe Uses Atomic Redis Sliding Windows</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li>Millions of payment API transactions daily across thousands of merchants.</li>
+<li>Multi-tier defense: Request Limiter, Concurrency Limiter, Usage Limiter, and Fraud Limiter.</li>
+</ul>
+<h3 id="2-atomic-redis-lua-execution">2. Atomic Redis Lua Execution</h3>
+<ul>
+<li>Fixed window counters suffer from the <strong>Boundary Burst Problem</strong> (doubling the permitted rate across window resets).</li>
+<li>Stripe implements a <strong>Sliding Window Log</strong> using Redis Sorted Sets (<code>ZREMRANGEBYSCORE</code>, <code>ZCARD</code>, <code>ZADD</code>) executed atomically inside a <strong>single Redis Lua script</strong>:
+<ul>
+<li>Redis executes Lua scripts atomically in a single thread, eliminating concurrency race conditions.</li>
+<li>Guarantees 100% mathematical accuracy under massive concurrency with sub-millisecond execution.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Doorman</th>
+<th>Netflix Concurrency Limits</th>
+<th>Cloudflare Edge Limiter</th>
+<th>Stripe API Limiter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Primary Level</strong></td>
+<td>Client-Side / Quota Server</td>
+<td>Gateway / Interceptor</td>
+<td>L3/L4/L7 Kernel (eBPF)</td>
+<td>L7 Reverse Proxy</td>
+</tr>
+<tr>
+<td><strong>Limiting Strategy</strong></td>
+<td>Lease-based Fair-Share</td>
+<td>Dynamic RTT Feedback (TCP Vegas)</td>
+<td>Volumetric Sliding Window</td>
+<td>Multi-Tier Token &amp; Sliding Window</td>
+</tr>
+<tr>
+<td><strong>State Storage</strong></td>
+<td>In-Memory Doorman Server</td>
+<td>Local In-Memory Counters</td>
+<td>eBPF Kernel Maps</td>
+<td>Distributed Redis Clusters</td>
+</tr>
+<tr>
+<td><strong>Drop Action</strong></td>
+<td>Client delays or throttles</td>
+<td>Drops non-critical traffic</td>
+<td><code>XDP_DROP</code> at line rate</td>
+<td>HTTP 429 Too Many Requests</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Propose a Single Global Limiter</strong>: Structure rate limiting as a multi-tier defense: Edge eBPF DDoS filter -&gt; API Gateway Token Bucket -&gt; Concurrency Limiter -&gt; Database query cost limiter.</li>
+<li><strong>Preventing Race Conditions</strong>: Always explain that distributed rate limiters in Redis require <strong>atomic Lua scripts</strong> or Redis Cell modules to avoid race conditions.</li>
+<li><strong>Adaptive Concurrency vs Static Limits</strong>: Differentiate yourself by explaining why static RPS limits fail during cascading failures and proposing <strong>Adaptive Concurrency Limits</strong> (Little's Law).</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Domain Name System (DNS)">
+  <title>Domain Name System (DNS) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="02--domain-name-system-dns">02 · Domain Name System (DNS)</h1>
+<blockquote>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: See <strong>Google Public DNS</strong>, <strong>Route 53</strong>, and <strong>Netflix</strong> examples in <a href="../02-domain-name-system/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Computers on the internet don't understand names like <code>google.com</code> or <code>netflix.com</code>—they only understand numerical coordinates called <strong>IP addresses</strong> (like <code>142.250.190.46</code> or <code>2607:f8b0:4005::200e</code>).</p>
+<p><strong>DNS (Domain Name System)</strong> is the decentralized global contact book of the internet. Whenever you type a URL, your computer asks a chain of specialized servers to translate that human-friendly name into the server's numerical IP address in a fraction of a second.</p>
+<h2 id="first-pass">First pass</h2>
+<p>In the <a href="../01-client-server-networking/index.html#first-pass">first lesson</a>, the browser already knew where to send <code>GET /guide</code>. Now start with only the name <code>trailnotes.example</code>. <strong>DNS</strong> is the system that maps that name to an address the browser can connect to.</p>
+<pre><code class="language-mermaid">flowchart LR
+    B[Browser] --&gt;|Look up trailnotes.example| R[Recursive resolver]
+    R --&gt;|Ask when answer is missing from cache| A[Authoritative DNS]
+    A --&gt;|Address and TTL| R
+    R --&gt;|Return address| B
+    B --&gt;|Connect and request the guide| S[Trail Notes endpoint]
+</code></pre>
+<p>The browser or operating system can reuse an answer it already has. Otherwise, it asks a <strong>recursive resolver</strong>. On a cache miss, the resolver follows referrals as needed to reach the <strong>authoritative DNS server</strong>, which publishes the site's record. The resolver returns the address, and the browser uses it for the HTTPS connection. The HTTP request itself travels to the site.</p>
+<p><strong>Predict.</strong> In this exercise, a resolver caches <code>192.0.2.10</code> at 09:00:00 with a 60-second <strong>TTL</strong>. The TTL sets how long the answer can be reused in this model. The site owner publishes <code>192.0.2.20</code> at 09:00:15. Which address does that resolver return at 09:00:30? What does it return on its first new lookup at 09:01:01?</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>At <strong>09:00:30</strong>, the cached answer still has 30 seconds left, so it returns <code>192.0.2.10</code>. At <strong>09:01:01</strong>, the old entry has expired. Assuming the resolver can query the authoritative server and receives the new record, it returns <code>192.0.2.20</code>. Other resolvers may have cached their answers at different times.</p>
+</details>
+<p>Use the existing <a href="#run-the-demo">Python simulator</a> to watch a cached answer expire. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Domain Name System</strong> and explain why two clients can receive different answers during a change.</p>
+<p><strong>Next lesson</strong> · <a href="../03-load-balancing/index.html#first-pass">Route the request to a healthy server</a></p>
+<hr />
+<h2 id="technical-reference">Technical reference</h2>
+<p>Explore record types, cache behavior, anycast, and DNS-based failover.</p>
+<h2 id="everyday-analogy-the-global-phone-directory--concierge">🍕 Everyday analogy: The Global Phone Directory &amp; Concierge</h2>
+<p>Imagine you visit an unfamiliar megacity looking for the <strong>Stripe Headquarters</strong>:</p>
+<ol>
+<li><strong>Your Pocket Notes (Local OS Cache):</strong> You check your notebook first. If you wrote down the address yesterday, you walk straight there (<strong>Cache Hit</strong>). If not, you ask for help.</li>
+<li><strong>The Hotel Concierge (Recursive Resolver):</strong> You ask your hotel concierge: <em>&quot;Where is Stripe?&quot;</em> The concierge doesn't know every building on earth, but they know who to call and will do all the running around for you.</li>
+<li><strong>The City Gatekeeper (Root Nameserver <code>.</code>):</strong> The concierge calls City Hall. City Hall says: <em>&quot;I don't know Stripe, but all commercial businesses ending in <code>.com</code> are registered in District 4.&quot;</em></li>
+<li><strong>The District Registry (TLD Nameserver <code>.com</code>):</strong> The concierge calls District 4. District 4 checks its registry and says: <em>&quot;Stripe's building records are managed by their private agency, <code>ns1.stripe.com</code>.&quot;</em></li>
+<li><strong>The Building Agency (Authoritative Nameserver):</strong> The concierge calls <code>ns1.stripe.com</code>. The agency looks at their live blueprint and answers: <em>&quot;Stripe is at <strong>54.187.128.85</strong>, and this record is valid for the next 5 minutes (<strong>TTL = 300s</strong>).&quot;</em></li>
+<li>The concierge hands you the address, writes it down in their front-desk ledger so other guests don't have to wait, and you're on your way!</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the analogy</th>
+<th style="text-align:left">In DNS architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>You (Traveler)</strong></td>
+<td style="text-align:left"><strong>Client (Browser / Mobile App)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Pocket Notes</strong></td>
+<td style="text-align:left"><strong>OS / Browser DNS Cache</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Helpful Hotel Concierge</strong></td>
+<td style="text-align:left"><strong>Recursive DNS Resolver</strong> (ISP, Cloudflare <code>1.1.1.1</code>, Google <code>8.8.8.8</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>City Hall Gatekeeper</strong></td>
+<td style="text-align:left"><strong>Root Nameserver</strong> (<code>.</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>District Registry</strong></td>
+<td style="text-align:left"><strong>Top-Level Domain (TLD) Server</strong> (<code>.com</code>, <code>.org</code>, <code>.net</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Building Agency</strong></td>
+<td style="text-align:left"><strong>Authoritative Nameserver</strong> (AWS Route 53, Cloudflare DNS)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Physical Street Address</strong></td>
+<td style="text-align:left"><strong>IP Address</strong> (e.g., <code>54.187.128.85</code> or IPv6)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>&quot;Valid for 5 minutes&quot;</strong></td>
+<td style="text-align:left"><strong>Time-To-Live (TTL)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<ol>
+<li><strong>Human Memory Limits:</strong> Humans cannot memorize billions of 32-bit IPv4 numbers (<code>172.217.16.206</code>) or 128-bit IPv6 hex strings (<code>2a00:1450:4009:81f::200e</code>). Names like <code>github.com</code> are permanent and intuitive.</li>
+<li><strong>Infrastructure Decoupling:</strong> IP addresses change frequently. A company might migrate servers from AWS Virginia to GCP Frankfurt, or scale up new server fleets. DNS acts as a layer of indirection: the domain name stays constant while the underlying IP points to different servers dynamically.</li>
+<li><strong>Global Load Balancing &amp; Geo-Routing:</strong> DNS can inspect where the user is calling from and return an IP address in Tokyo for Japanese users, and an IP address in Frankfurt for German users, cutting transit latency by $80%$.</li>
+</ol>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/dns_lookup.gif" alt="Hierarchical DNS Resolution Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor User as 👤 Client Browser
+    participant OS as 💻 Local OS Cache
+    participant Resolver as 🏢 Recursive Resolver (1.1.1.1)
+    participant Root as 🌐 Root Server (.)
+    participant TLD as 🏛️ TLD Server (.com)
+    participant Auth as 🏢 Authoritative DNS (ns1.example.com)
+
+    User-&gt;&gt;OS: 1. Lookup &quot;api.example.com&quot;
+    OS--&gt;&gt;User: Cache MISS (not found locally)
+    OS-&gt;&gt;Resolver: 2. Query &quot;api.example.com&quot; (Recursive)
+    Resolver-&gt;&gt;Root: 3. Where is .com?
+    Root--&gt;&gt;Resolver: 4. Referral to .com TLD (192.5.6.30)
+    Resolver-&gt;&gt;TLD: 5. Where is example.com?
+    TLD--&gt;&gt;Resolver: 6. Referral to ns1.example.com (205.251.192.48)
+    Resolver-&gt;&gt;Auth: 7. What is A record for &quot;api.example.com&quot;?
+    Auth--&gt;&gt;Resolver: 8. Return 93.184.216.34 (TTL = 300s)
+    Resolver--&gt;&gt;OS: 9. Cache record &amp; return IP
+    OS--&gt;&gt;User: 10. Connect to 93.184.216.34
+</code></pre>
+<ol>
+<li><strong>Step 1–2:</strong> Browser checks in-memory cache, then asks OS resolver. If missing, it fires a UDP query on port 53 to the Recursive Resolver.</li>
+<li><strong>Step 3–4:</strong> Recursive Resolver queries the <strong>Root Server (<code>.</code>)</strong>. The Root server does not know the full domain, but refers the resolver to the <strong><code>.com</code> TLD server</strong>.</li>
+<li><strong>Step 5–6:</strong> Resolver queries the <strong><code>.com</code> TLD server</strong>, which refers it to the domain owner's <strong>Authoritative Nameserver</strong> (<code>ns1.example.com</code>).</li>
+<li><strong>Step 7–8:</strong> Resolver asks the <strong>Authoritative Nameserver</strong>, which returns the authoritative <code>A</code> record (<code>93.184.216.34</code>) along with its TTL (300 seconds).</li>
+<li><strong>Step 9–10:</strong> Resolver stores the result in its cache and returns the IP to the client OS. Clients using that resolver can benefit until the entry expires, while still paying their round trip to the resolver.</li>
+</ol>
+<hr />
+<h2 id="worked-estimate--cold-and-warm-dns">🔢 Worked estimate · Cold and warm DNS</h2>
+<p>These hypothetical round-trip times compare a browser cache hit, a recursive resolver cache hit, and a lookup that needs all three referral stages.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Step</th>
+<th style="text-align:left">Operation</th>
+<th style="text-align:center">Transit Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:left">Browser checks local RAM cache</td>
+<td style="text-align:center"><strong>$0.1\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:left">Query sent to ISP / Cloudflare recursive resolver (Anycast)</td>
+<td style="text-align:center"><strong>$8\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center">3</td>
+<td style="text-align:left">Resolver $\to$ Root nameserver RTT</td>
+<td style="text-align:center"><strong>$15\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:left">Resolver $\to$ <code>.com</code> TLD nameserver RTT</td>
+<td style="text-align:center"><strong>$18\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center">5</td>
+<td style="text-align:left">Resolver $\to$ Authoritative nameserver (Route 53) RTT</td>
+<td style="text-align:center"><strong>$22\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Total Cold Lookup</strong></td>
+<td style="text-align:left"><strong>Full iterative resolution tree traversal</strong></td>
+<td style="text-align:center"><strong>$\approx 63\text{ ms}$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Recursive resolver cache hit</strong></td>
+<td style="text-align:left">Local cache miss and one network round trip</td>
+<td style="text-align:center"><strong>About 8 ms</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Local cache hit</strong></td>
+<td style="text-align:left">Browser uses its saved answer</td>
+<td style="text-align:center"><strong>0.1 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="dns-udp-packet-size-math">DNS UDP Packet Size Math</h3>
+<p>Without EDNS, classic DNS over UDP has a 512-byte message limit. EDNS lets the requester advertise a larger UDP payload it can receive. If the response is truncated, the server sets the <code>TC</code> bit and the client can retry over TCP. An open TCP connection can also be reused for multiple queries. <a href="https://www.rfc-editor.org/rfc/rfc6891.html">RFC 6891</a> · <a href="https://www.rfc-editor.org/rfc/rfc7766.html">RFC 7766</a></p>
+<hr />
+<h2 id="how-it-works-the-dns-hierarchy--architecture">⚙️ How it works: The DNS Hierarchy &amp; Architecture</h2>
+<h3 id="1-essential-dns-record-types">1. Essential DNS Record Types</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Record Type</th>
+<th style="text-align:left">Name</th>
+<th style="text-align:left">Purpose</th>
+<th style="text-align:left">Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>A</strong></td>
+<td style="text-align:left">Address Record</td>
+<td style="text-align:left">Maps a hostname to an <strong>IPv4</strong> address (32-bit)</td>
+<td style="text-align:left"><code>example.com</code> $\to$ <code>93.184.216.34</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>AAAA</strong></td>
+<td style="text-align:left">IPv6 Address</td>
+<td style="text-align:left">Maps a hostname to an <strong>IPv6</strong> address (128-bit)</td>
+<td style="text-align:left"><code>example.com</code> $\to$ <code>2606:2800:220:1::</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>CNAME</strong></td>
+<td style="text-align:left">Canonical Name</td>
+<td style="text-align:left">Creates an alias pointing one domain to another domain</td>
+<td style="text-align:left"><code>www.example.com</code> $\to$ <code>example.com</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>ALIAS / ANAME</strong></td>
+<td style="text-align:left">Virtual CNAME</td>
+<td style="text-align:left">Resolves an alias at the root/apex domain without breaking MX</td>
+<td style="text-align:left"><code>example.com</code> $\to$ <code>lb-123.aws.com</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>MX</strong></td>
+<td style="text-align:left">Mail Exchange</td>
+<td style="text-align:left">Directs email to mail servers with priority ranking</td>
+<td style="text-align:left"><code>example.com</code> $\to$ <code>10 mail.google.com</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>TXT</strong></td>
+<td style="text-align:left">Text Record</td>
+<td style="text-align:left">Arbitrary text used for domain verification, SPF, DKIM</td>
+<td style="text-align:left"><code>v=spf1 include:_spf.google.com ~all</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>NS</strong></td>
+<td style="text-align:left">Name Server</td>
+<td style="text-align:left">Delegates a DNS zone to specific authoritative servers</td>
+<td style="text-align:left"><code>example.com</code> $\to$ <code>ns1.cloudflare.com</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>PTR</strong></td>
+<td style="text-align:left">Pointer Record</td>
+<td style="text-align:left">Reverse DNS: maps an IP address back to a hostname</td>
+<td style="text-align:left"><code>34.216.184.93.in-addr.arpa</code> $\to$ <code>example.com</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>SOA</strong></td>
+<td style="text-align:left">Start of Authority</td>
+<td style="text-align:left">Core zone metadata (zone master, admin email, refresh intervals)</td>
+<td style="text-align:left">Serial number, refresh, retry, expire timers</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="2-anycast-routing-and-root-server-instances">2. Anycast routing and root server instances</h3>
+<p>The DNS root has 13 server identifiers, A through M, each with IPv4 and IPv6 addresses. Operators can run many instances behind a given identity. <a href="https://root-servers.org/faq/">Root Server Technical Operations Association FAQ</a></p>
+<p>In anycast, several locations announce the same address prefix. Routing policy determines the destination, so the selected site need not be physically closest. Distributing requests can help absorb surges. The outcome still depends on where the traffic lands and how much capacity is available. <a href="https://developers.google.com/speed/public-dns/docs/performance">Google Public DNS performance documentation</a></p>
+<hr />
+<h3 id="3-smart-dns-routing-strategies">3. Smart DNS Routing Strategies</h3>
+<p>Modern Cloud DNS services (like AWS Route 53, Cloudflare, NS1) provide advanced routing policies:</p>
+<pre><code class="language-mermaid">flowchart TD
+    User[&quot;👤 Inbound User Query&quot;] --&gt; Policy{&quot;DNS Routing Policy&quot;}
+
+    Policy --&gt;|Geolocation| Geo[&quot;🌍 GeoDNS: Route user to closest regional datacenter (e.g. EU vs US)&quot;]
+    Policy --&gt;|Latency Measurements| Latency[&quot;⚡ Latency-Based: Ping regional edges and return lowest RTT&quot;]
+    Policy --&gt;|Weighted Split| Weighted[&quot;⚖️ Weighted Round Robin: 95% traffic to v1, 5% traffic to v2 (Canary)&quot;]
+    Policy --&gt;|Health Checks| Failover[&quot;🛡️ Failover Routing: Primary DC down? Return Secondary DC IP!&quot;]
+</code></pre>
+<hr />
+<h2 id="trade-offs-short-ttl-vs-long-ttl">⚖️ Trade-offs: Short TTL vs Long TTL</h2>
+<p>The <strong>Time-To-Live (TTL)</strong> tells resolvers how long they are legally permitted to cache your record before asking your authoritative server again.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Short TTL (e.g. 30s to 60s)</th>
+<th style="text-align:left">Long TTL (e.g. 24 hours / 86400s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Disaster Recovery / Failover</strong></td>
+<td style="text-align:left">✅ <strong>Fast</strong>: Traffic shifts to new IP within 60 seconds</td>
+<td style="text-align:left">❌ <strong>Slow</strong>: Stale IP cached for up to 24 hours</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Authoritative DNS Query Load</strong></td>
+<td style="text-align:left">❌ <strong>High</strong>: Millions of queries hit your nameserver constantly</td>
+<td style="text-align:left">✅ <strong>Low</strong>: 99.9% of queries answered by resolver caches</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cost</strong></td>
+<td style="text-align:left">Higher DNS provider billing (per million queries)</td>
+<td style="text-align:left">Lower DNS query costs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Client Latency</strong></td>
+<td style="text-align:left">Slightly higher (more frequent cache misses)</td>
+<td style="text-align:left">Lowest (almost always an instant local cache hit)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Best Used For</strong></td>
+<td style="text-align:left">Fast-changing APIs, canary rollouts, active-passive failover</td>
+<td style="text-align:left">Static assets, landing pages, corporate websites</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Setting high TTL right before a datacenter migration:</strong></p>
+<ul>
+<li><em>The Disaster:</em> You migrate your database and servers to a new cloud provider on Sunday, update DNS, but your TTL was set to 48 hours. Half of your global users continue hitting your decommissioned servers for 2 days!</li>
+<li><em>The Fix:</em> <strong>Step down your TTL</strong> to 60 seconds 3 days <em>before</em> the planned migration. Once the migration is verified stable, raise the TTL back up.</li>
+</ul>
+</li>
+<li>
+<p><strong>Placing a CNAME record at the Zone Apex (Root Domain):</strong></p>
+<ul>
+<li><em>The Disaster:</em> Attempting to set <code>CNAME example.com -&gt; lb.aws.com</code>. According to RFC 1034, if a CNAME exists for a host, no other records (like MX for email, or SOA, or NS) can exist for that same host. This destroys your company's email delivery!</li>
+<li><em>The Fix:</em> Use an <strong>ALIAS</strong>, <strong>ANAME</strong>, or <strong>CNAME Flattening</strong> record provided by modern DNS providers. It synthesizes an <code>A</code> record dynamically at query time while allowing MX records to coexist.</li>
+</ul>
+</li>
+<li>
+<p><strong>Relying purely on DNS for sub-second failover:</strong></p>
+<ul>
+<li><em>Why it fails:</em> Many ISPs and mobile carriers blatantly <strong>ignore TTLs</strong> and cache records for hours to save their own bandwidth. Furthermore, web browsers cache IPs internally for 60 seconds regardless of DNS TTL.</li>
+<li><em>The Fix:</em> Measure connection recovery with your actual clients. An edge proxy can switch backends while clients retain the same public endpoint.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="run-the-demo">Run the demo</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 02-domain-name-system
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Observe the <strong>iterative step-by-step query log</strong> traversing from Root $\to$ TLD $\to$ Authoritative server on the first lookup.</li>
+<li>Watch how the second lookup returns instantly in <strong>0.1 ms</strong> via the local cache.</li>
+<li>Watch the TTL expire after 3.5 seconds and trigger a fresh lookup.</li>
+<li>See Anycast BGP routing route users across NYC, London, Tokyo, and Sydney.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Route 53</strong> can use health checks to select the endpoint returned in a new DNS answer. <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-failover.html">AWS failover record settings</a></li>
+<li><strong>Google Public DNS</strong> documents anycast routing and two levels of resolver caching. <a href="https://developers.google.com/speed/public-dns/docs/performance">Google Public DNS performance documentation</a></li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-why-does-dns-use-udp-port-53-by-default-instead-of-tcp-and-when-does-it-fall-back-to-tcp">Q1: &quot;Why does DNS use UDP port 53 by default instead of TCP, and when does it fall back to TCP?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>A small query over UDP can finish in a single round trip without opening a connection. Classic DNS over UDP has a 512-byte limit without EDNS. If a UDP response has the truncation bit set, the resolver can retry over TCP. DNS implementations can choose TCP up front and reuse an open connection for multiple queries. <a href="https://www.rfc-editor.org/rfc/rfc7766.html">RFC 7766</a> · <a href="https://www.rfc-editor.org/rfc/rfc6891.html">RFC 6891</a></p>
+</details>
+<hr />
+<h3 id="q2-what-is-anycast-routing-and-how-does-it-protect-dns-infrastructure-from-massive-ddos-attacks">Q2: &quot;What is Anycast routing, and how does it protect DNS infrastructure from massive DDoS attacks?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Anycast lets several locations advertise the same network prefix. Routing selects a path to one of them. Distribution across sites can spread an attack's load, but mitigation depends on how traffic is routed, what capacity each site has, and how attack traffic is filtered. <a href="https://developers.google.com/speed/public-dns/faq">Google Public DNS FAQ</a></p>
+</details>
+<hr />
+<h3 id="q3-what-is-the-difference-between-a-cname-and-an-alias-record-and-why-does-rfc-1034-forbid-cname-at-the-zone-apex">Q3: &quot;What is the difference between a CNAME and an ALIAS record, and why does RFC 1034 forbid CNAME at the zone apex?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>RFC 1034 Restriction:</strong> Section 3.6.2 dictates: <em>&quot;If a CNAME RR is present at a node, no other data should be present.&quot;</em> The apex / root domain (<code>example.com</code>) <strong>must</strong> contain <code>SOA</code> (Start of Authority) and <code>NS</code> (Name Server) records to function as a valid DNS zone. Therefore, creating a CNAME at <code>example.com</code> violates the protocol and breaks zone delegation and <code>MX</code> email delivery.</li>
+<li><strong>The Modern Solution (ALIAS / ANAME / CNAME Flattening):</strong>
+<ul>
+<li>An <code>ALIAS</code> record is a pseudo-record implemented by DNS providers (like Route 53 or Cloudflare).</li>
+<li>To the outside internet, the nameserver <strong>acts as an internal resolver</strong>: it resolves the target hostname (e.g. <code>dualstack.my-alb-123.amazonaws.com</code>) to its underlying IP addresses and returns those IP addresses as a standard <strong><code>A</code> record</strong> directly to the client.</li>
+<li>This allows the apex domain to point dynamically to a cloud load balancer while keeping <code>NS</code> and <code>MX</code> records completely intact.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-how-would-you-design-a-multi-region-disaster-recovery-failover-system-using-dns-and-what-are-its-major-limitations">Q4: &quot;How would you design a multi-region disaster-recovery failover system using DNS, and what are its major limitations?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Design:</strong>
+<ol>
+<li>Configure an active-passive or active-active DNS routing policy (e.g., in AWS Route 53).</li>
+<li>Deploy automated <strong>health-check probes</strong> from multiple global vantage points querying an endpoint (e.g., <code>https://region-a.example.com/healthz</code>).</li>
+<li>When the configured health checks mark Region A unhealthy and Region B is healthy, Route 53 can return Region B in new answers. Detection takes time and cached answers can still refer to Region A.</li>
+<li>Keep the TTL short (e.g., 30 to 60 seconds).</li>
+</ol>
+</li>
+<li><strong>Major Limitations in Real Production:</strong>
+<ol>
+<li><strong>Resolver Disobedience (Ignoring TTL):</strong> Resolvers with a cached answer can keep returning it until it expires. Reconnection behavior also depends on local policy.</li>
+<li><strong>Client-Side Caching:</strong> Clients may keep using an existing connection after the DNS record changes. Measure the time it takes for clients to reconnect.</li>
+<li><strong>Traffic Thundering Herd:</strong> When Region A dies and traffic abruptly swings to Region B, Region B can suffer a catastrophic cold-start crash if its database connection pools and caches are not pre-warmed.</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A web developer changes an <code>A</code> record from <code>1.2.3.4</code> to <code>5.6.7.8</code> with a TTL of 300 seconds. Why do some users still reach <code>1.2.3.4</code> ten minutes later?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Two primary reasons:</p>
+<ol>
+<li><strong>Rogue Resolvers:</strong> Some ISPs and upstream recursive resolvers enforce a minimum caching floor (e.g. 15 to 60 minutes) regardless of what authoritative TTL you configured.</li>
+<li><strong>Persistent Sockets:</strong> If users have an open, persistent HTTP/1.1 or HTTP/2 TCP connection to the old server, their browser continues sending requests over the already-open socket without performing a new DNS lookup until the socket closes.</li>
+</ol>
+</details>
+<hr />
+<ol start="2">
+<li><strong>What does an <code>NXDOMAIN</code> status code mean compared to an <code>A</code> record returning an empty answer with <code>NOERROR</code>?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<ul>
+<li><strong><code>NXDOMAIN</code> (Non-Existent Domain):</strong> The domain name itself does not exist anywhere in the DNS tree (e.g. <code>this-fake-site-does-not-exist-xyz.com</code>).</li>
+<li><strong><code>NOERROR</code> with empty answers:</strong> The domain name <strong>does exist</strong>, but it has no records matching the requested query type. For example, querying for an IPv6 <code>AAAA</code> record on a server that only configured an IPv4 <code>A</code> record returns <code>NOERROR</code> with 0 answers.</li>
+</ul>
+</details>
+<hr />
+<ol start="3">
+<li><strong>Why do recursive resolvers perform queries <em>iteratively</em> rather than asking the Root server to find the answer recursively?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>To protect the Root and TLD servers from catastrophic resource exhaustion. If the 13 Root servers had to maintain stateful open sockets and wait for answers on behalf of billions of queries simultaneously, they would run out of memory and crash instantly. By keeping Root servers purely <strong>iterative</strong> (returning immediate static referrals in $&lt; 1\text{ ms}$), the memory burden is offloaded to the millions of distributed recursive resolvers at the edge of the internet.</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Understanding Distributed Systems</strong> by Roberto Vitillo: Chapter on <em>Naming and Discovery</em>.</li>
+<li><strong>DNS and BIND (5th Edition)</strong> by Paul Albitz &amp; Cricket Liu: The definitive reference on domain name system internals.</li>
+<li><strong>Cloudflare Learning Center:</strong> Free, comprehensive guides on Anycast DNS, DNSSEC, and DoH (cloudflare.com/learning/dns).</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: What happens immediately after DNS returns the IP address.</li>
+<li><a href="../03-load-balancing/index.html">03 · Load balancing</a>: How DNS distributes traffic across multiple load balancers.</li>
+<li><a href="../12-content-delivery-networks/index.html">12 · Content delivery networks (CDNs)</a>: How GeoDNS routes traffic to the nearest edge Point of Presence.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

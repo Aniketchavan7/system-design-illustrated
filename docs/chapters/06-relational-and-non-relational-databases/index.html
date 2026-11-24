@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Relational (SQL) vs Non-Relational (NoSQL) Databases">
+  <title>Relational (SQL) vs Non-Relational (NoSQL) Databases | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="06--relational-sql-vs-non-relational-nosql-databases">06 · Relational (SQL) vs Non-Relational (NoSQL) Databases</h1>
+<blockquote>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational for Storage)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../06-relational-and-non-relational-databases/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>A <strong>relational (SQL) database</strong> is like a formal financial spreadsheet with strict rules: every row must follow the exact same column structure, every ID must point to a real record (<strong>foreign keys</strong>), and a transaction either succeeds $100%$ or rolls back completely (<strong>ACID</strong>).</p>
+<p>A <strong>non-relational (NoSQL) database</strong> is like a collection of labeled storage boxes: you can throw in flexible JSON documents of any shape, store simple key-value pairs at lightning speed, or scale horizontally across 50 servers without fighting schema constraints.</p>
+<hr />
+<h2 id="everyday-analogy-the-strict-financial-ledger-vs-the-labeled-cardboard-boxes">🍕 Everyday analogy: The Strict Financial Ledger vs The Labeled Cardboard Boxes</h2>
+<p>Imagine organizing a company's physical records:</p>
+<ul>
+<li><strong>Relational SQL (The Accountant's Ledger Book):</strong> You have a hardbound book with rigid printed columns: <code>Date</code>, <code>Account Number</code>, <code>Amount</code>, <code>Description</code>.
+<ul>
+<li>You cannot add half an entry. If money moves from Account A to Account B, both rows must update simultaneously. If you write down an invalid Account Number that doesn't exist on Page 1, the ledger rejects the entry (<strong>Foreign Key Constraint</strong>).</li>
+<li>Perfect for accounting, contracts, and banking.</li>
+</ul>
+</li>
+<li><strong>Document NoSQL (The Labeled Manila Folders):</strong> Each customer gets a manila folder.
+<ul>
+<li>Inside Customer A's folder is a simple paper note with an address.</li>
+<li>Inside Customer B's folder is an address, 3 tax forms, a business card, and a list of 10 phone numbers.</li>
+<li>You didn't have to reprint the entire company's filing cabinets just because Customer B had extra attributes (<strong>Schema Flexibility</strong>).</li>
+</ul>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In everyday life</th>
+<th style="text-align:left">In database architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Accountant's Printed Table</strong></td>
+<td style="text-align:left"><strong>SQL Relational Table</strong> (<code>users</code>, <code>orders</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Row in a ledger</strong></td>
+<td style="text-align:left"><strong>Database Record / Tuple</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Strict rules (&quot;Must match Account ID&quot;)</strong></td>
+<td style="text-align:left"><strong>Foreign Key &amp; Check Constraints</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Manila Folder with mixed papers</strong></td>
+<td style="text-align:left"><strong>NoSQL Document (JSON / BSON)</strong> (MongoDB)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Locker with a number and padlock</strong></td>
+<td style="text-align:left"><strong>Key-Value Store</strong> (Redis)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Flipping pages backwards to undo a mistake</strong></td>
+<td style="text-align:left"><strong>ACID Transaction Rollback</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<p>In 1995, almost all software ran on a single relational database (Oracle or MySQL). As internet traffic exploded in the 2010s, two major problems emerged:</p>
+<ol>
+<li><strong>Schema Rigidity at Scale:</strong> If an e-commerce catalog sells laptops, shoes, and groceries, laptops have <code>voltage</code> and <code>ram</code>, shoes have <code>size</code> and <code>material</code>, and groceries have <code>expiration_date</code>. In a relational database, you either create 50 nullable columns (<code>ALTER TABLE</code> takes 12 hours on a 500M row table and locks writes) or design complex join tables. Document NoSQL lets every product store its own custom attributes natively in JSON.</li>
+<li><strong>The Horizontal Scaling Ceiling:</strong> Relational databases are designed for <strong>strong consistency on a single physical machine</strong>. Running complex cross-table <code>JOIN</code> operations across 20 machines distributed over network cables is notoriously slow and difficult. NoSQL datastores trade away relational joins to distribute rows cleanly across hundreds of cluster nodes.</li>
+</ol>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/sql_vs_nosql.gif" alt="SQL vs NoSQL Architecture Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart TD
+    Req[&quot;💾 Data Storage Requirement&quot;] --&gt; Query{&quot;What is your data model and access pattern?&quot;}
+
+    Query --&gt;|Complex JOINs, Financial ledger, ACID transactions| SQL[&quot;🗄️ Relational / SQL&lt;br/&gt;(PostgreSQL, MySQL)&lt;br/&gt;• Strong consistency&lt;br/&gt;• Normalization &amp; foreign keys&quot;]
+
+    Query --&gt;|Hierarchical JSON, Polymorphic catalog, fast iteration| Doc[&quot;📄 Document NoSQL&lt;br/&gt;(MongoDB, DynamoDB)&lt;br/&gt;• Embedded sub-documents&lt;br/&gt;• Native JSON queries&quot;]
+
+    Query --&gt;|Sub-millisecond reads, Sessions, Leaderboards| KV[&quot;⚡ Key-Value&lt;br/&gt;(Redis, Memcached)&lt;br/&gt;• O(1) primary key lookup&lt;br/&gt;• In-memory data structures&quot;]
+
+    Query --&gt;|High-throughput write streams, Time-series, IoT| Wide[&quot;📊 Wide-Column / Columnar&lt;br/&gt;(Cassandra, ClickHouse)&lt;br/&gt;• Append-only writes&lt;br/&gt;• Column aggregation&quot;]
+
+    Query --&gt;|Deeply interconnected social graphs, Fraud rings| Graph[&quot;🕸️ Graph Database&lt;br/&gt;(Neo4j, Amazon Neptune)&lt;br/&gt;• Nodes &amp; Edges&lt;br/&gt;• Index-free adjacency&quot;]
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<h3 id="data-representation-normalized-sql-vs-denormalized-nosql">Data Representation: Normalized SQL vs Denormalized NoSQL</h3>
+<p>Suppose you are querying a user profile and their 3 shipping addresses:</p>
+<h4 id="1-relational-sql-normalized-across-2-tables">1. Relational SQL (Normalized across 2 tables)</h4>
+<ul>
+<li><code>users</code> table: 1 row ($120\text{ bytes}$)</li>
+<li><code>addresses</code> table: 3 rows ($3 \times 150\text{ bytes} = 450\text{ bytes}$)</li>
+<li><strong>Query:</strong> <code>SELECT * FROM users JOIN addresses ON users.id = addresses.user_id WHERE users.id = 42;</code></li>
+<li><strong>Execution Cost:</strong> 2 B-Tree index lookups + in-memory join hash table construction.</li>
+</ul>
+<h4 id="2-document-nosql-denormalized-into-1-document">2. Document NoSQL (Denormalized into 1 document)</h4>
+<ul>
+<li>Single JSON document stored contiguously on disk:<pre><code class="language-json">{
+  &quot;_id&quot;: &quot;usr_42&quot;,
+  &quot;name&quot;: &quot;Alice&quot;,
+  &quot;addresses&quot;: [
+    {&quot;city&quot;: &quot;New York&quot;, &quot;zip&quot;: &quot;10001&quot;},
+    {&quot;city&quot;: &quot;Austin&quot;, &quot;zip&quot;: &quot;78701&quot;},
+    {&quot;city&quot;: &quot;Seattle&quot;, &quot;zip&quot;: &quot;98101&quot;}
+  ]
+}
+</code></pre>
+</li>
+<li><strong>Query:</strong> <code>db.users.findOne({_id: &quot;usr_42&quot;})</code></li>
+<li><strong>Execution Cost:</strong> 1 single primary key lookup. Zero table joins. Fetches all data in a single sequential disk/memory read!</li>
+</ul>
+<hr />
+<h2 id="how-it-works-sql-vs-nosql-taxonomy">⚙️ How it works: SQL vs NoSQL Taxonomy</h2>
+<h3 id="1-acid-vs-base">1. ACID vs BASE</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Property</th>
+<th style="text-align:left">ACID (Relational SQL)</th>
+<th style="text-align:left">BASE (Distributed NoSQL)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>A</strong></td>
+<td style="text-align:left"><strong>Atomicity:</strong> All operations succeed, or all roll back</td>
+<td style="text-align:left"><strong>Basically Available:</strong> System remains up despite node crashes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>C / S</strong></td>
+<td style="text-align:left"><strong>Consistency:</strong> Database satisfies all schema constraints</td>
+<td style="text-align:left"><strong>Soft State:</strong> Data values may change over time without user input</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>I / E</strong></td>
+<td style="text-align:left"><strong>Isolation:</strong> Concurrent transactions don't corrupt state</td>
+<td style="text-align:left"><strong>Eventual Consistency:</strong> Replicas converge after propagation delay</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>D</strong></td>
+<td style="text-align:left"><strong>Durability:</strong> Committed data survives crashes/power loss</td>
+<td style="text-align:left">Durability via multi-node replication</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="2-the-5-main-categories-of-datastores">2. The 5 Main Categories of Datastores</h3>
+<h4 id="1-relational-rdbms-postgresql-mysql">1. Relational (RDBMS): PostgreSQL, MySQL</h4>
+<ul>
+<li>Tables with fixed columns, foreign keys, and SQL query language.</li>
+<li>Enforces strict data integrity and eliminates redundancy via <strong>normalization</strong>.</li>
+<li>Best for: Payment ledgers, user accounts, order checkouts, inventory stock.</li>
+</ul>
+<h4 id="2-document-stores-mongodb-amazon-dynamodb">2. Document Stores: MongoDB, Amazon DynamoDB</h4>
+<ul>
+<li>Stores data as semi-structured documents (JSON, BSON, XML).</li>
+<li>Documents can nest child arrays and objects directly without separate tables.</li>
+<li>Best for: Content management, e-commerce product catalogs, user profiles.</li>
+</ul>
+<h4 id="3-key-value-stores-redis-memcached">3. Key-Value Stores: Redis, Memcached</h4>
+<ul>
+<li>Stores arbitrary values mapped to a unique key string.</li>
+<li>In-memory execution delivers reads and writes in <strong>sub-millisecond ($&lt; 0.5\text{ ms}$)</strong> time.</li>
+<li>Best for: User session tokens, shopping carts, rate-limiting counters.</li>
+</ul>
+<h4 id="4-wide-column--columnar-apache-cassandra-scylladb-clickhouse">4. Wide-Column / Columnar: Apache Cassandra, ScyllaDB, ClickHouse</h4>
+<ul>
+<li>Groups data on disk by columns rather than rows.</li>
+<li><strong>Cassandra:</strong> Append-only LSM-tree storage engine optimized for hundreds of thousands of concurrent writes per second.</li>
+<li><strong>ClickHouse:</strong> Columnar analytical storage (OLAP) capable of scanning billions of rows per second for analytical dashboards.</li>
+<li>Best for: High-throughput write telemetry, IoT sensor logging, analytical aggregations.</li>
+</ul>
+<h4 id="5-graph-databases-neo4j-amazon-neptune">5. Graph Databases: Neo4j, Amazon Neptune</h4>
+<ul>
+<li>Models entities as <strong>Nodes</strong> and relationships as <strong>Edges</strong> with first-class properties.</li>
+<li>Eliminates recursive foreign-key joins using <strong>Index-Free Adjacency</strong> (navigating pointers directly in memory).</li>
+<li>Best for: Social networks (friend-of-a-friend), fraud detection rings, recommendation engines.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--the-comprehensive-decision-framework">⚖️ Trade-offs &amp; The Comprehensive Decision Framework</h2>
+<pre><code class="language-text">Do you require ACID transactions and complex multi-table JOINs?
+├── YES ──&gt; Use PostgreSQL / MySQL
+└── NO  ──&gt; What is your primary access pattern?
+            ├── High-speed primary key lookup / caching ──&gt; Redis / Memcached
+            ├── Flexible nested attributes / JSON docs ────&gt; MongoDB / DynamoDB
+            ├── Massive write throughput / time-series ────&gt; Apache Cassandra / ScyllaDB
+            ├── Millions of rows analytical queries ───────&gt; ClickHouse / Snowflake
+            └── Highly connected social or fraud graphs ──&gt; Neo4j
+</code></pre>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Premature NoSQL Adoption (&quot;SQL doesn't scale&quot;):</strong></p>
+<ul>
+<li><em>The Myth:</em> Many junior engineers assume PostgreSQL cannot scale beyond 1 million users. In reality, modern PostgreSQL on standard cloud hardware easily handles $10,000+\text{ RPS}$ and tens of millions of records.</li>
+<li><em>The Trap:</em> Moving to MongoDB too early means you lose foreign keys, transactions, and unique constraints. You end up writing buggy, complex validation code in your application layer to mimic what Postgres does automatically.</li>
+</ul>
+</li>
+<li>
+<p><strong>Re-implementing JOINs in Application Code with NoSQL:</strong></p>
+<ul>
+<li><em>The Trap:</em> You store users in one collection and orders in another. To show an order history page, your backend executes 1 query for the orders, then loops and fires 50 individual queries to fetch user data (<strong>the N+1 Query Problem</strong>), destroying latency.</li>
+<li><em>The Fix:</em> In NoSQL, design your data model around your <strong>access queries</strong>. Denormalize and embed the data directly if it is frequently read together!</li>
+</ul>
+</li>
+<li>
+<p><strong>Unbounded Document Growth in MongoDB:</strong></p>
+<ul>
+<li><em>The Trap:</em> Embedding an array that grows infinitely inside a single document (e.g. embedding all user comments inside a blog post document).</li>
+<li><em>Why it hurts:</em> MongoDB documents are hard-capped at <strong>16 MB</strong>. When an array outgrows 16 MB, writes crash, and moving fragmented documents causes massive disk I/O thrashing.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 06-relational-and-non-relational-databases
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch an <strong>ACID transaction rollback</strong> in SQL when an account has insufficient funds or when a foreign key violation occurs.</li>
+<li>Observe how a <strong>NoSQL document store</strong> accepts completely different polymorphic schemas (a Laptop with CPU specs vs a T-Shirt with clothing sizes) without database migrations.</li>
+<li>Observe <strong>O(1) Key-Value retrieval</strong> timing.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Stripe:</strong> Uses <strong>PostgreSQL</strong> as the core database for payments because strong consistency, zero data loss, and ACID guarantees are strictly mandatory for money.</li>
+<li><strong>Discord:</strong> Originally used MongoDB, then migrated to <strong>Apache Cassandra</strong>, and recently to <strong>ScyllaDB</strong> to store trillions of chat messages partitioned by channel ID.</li>
+<li><strong>Uber:</strong> Uses a combination of <strong>MySQL</strong> (via their custom Schemaless sharding layer), <strong>Redis</strong> for driver geolocation caching, and <strong>ClickHouse</strong> for ride analytics.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-when-would-you-choose-a-nosql-document-database-mongodb-over-a-relational-database-postgresql">Q1: &quot;When would you choose a NoSQL document database (MongoDB) over a relational database (PostgreSQL)?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>I evaluate database selection based on <strong>schema stability</strong>, <strong>read/write patterns</strong>, and <strong>scaling model</strong>:</p>
+<ul>
+<li><strong>Choose MongoDB / Document NoSQL when:</strong>
+<ol>
+<li><strong>Polymorphic / Dynamic Schemas:</strong> The data naturally forms a hierarchical document where items have widely varying attributes (e.g., e-commerce product catalogs with 10,000 distinct product categories, or CMS content blocks).</li>
+<li><strong>High Document Locality:</strong> Data is always written and read together as a single unit (e.g. an order with its line items and shipping address). Reading 1 document from disk is significantly faster than performing a 4-table SQL JOIN.</li>
+<li><strong>Rapid Horizontal Partitioning:</strong> When dataset size exceeds multi-terabyte limits where automated, built-in horizontal sharding is preferred over manual Postgres sharding.</li>
+</ol>
+</li>
+<li><strong>Choose PostgreSQL when:</strong>
+<ol>
+<li>Strong <strong>ACID guarantees</strong> and strict relational integrity (foreign keys) are required (e.g. banking, financial balances, supply-chain inventory).</li>
+<li>Complex relational analytical queries across many disparate business entities are routine.</li>
+<li>Note: Modern PostgreSQL natively supports <code>JSONB</code> columns with GIN indexes, allowing hybrid models (relational structure with semi-structured JSON fields).</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-explain-acid-vs-base-what-do-you-actually-sacrifice-when-moving-to-an-eventual-consistency-model">Q2: &quot;Explain ACID vs BASE. What do you actually sacrifice when moving to an eventual consistency model?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>ACID (Pessimistic &amp; Strong):</strong>
+<ul>
+<li>Prioritizes <strong>immediate global consistency</strong>.</li>
+<li>When a transaction commits, all locks are honored, constraints are validated, and every subsequent read across any replica immediately reflects the newest update.</li>
+<li><strong>The Cost:</strong> Higher latency during writes, reduced horizontal scaling, and vulnerability to node unavailability during network partitions (CAP theorem CP).</li>
+</ul>
+</li>
+<li><strong>BASE (Optimistic &amp; Eventual):</strong>
+<ul>
+<li>Prioritizes <strong>high availability and low latency</strong>.</li>
+<li>A write is accepted by a local replica and acknowledged immediately. Replicas synchronize asynchronously in the background.</li>
+<li><strong>What you sacrifice:</strong> You sacrifice <strong>read freshness</strong>. A user who updates their bio might refresh the page and read from a replica that has not yet received the replication stream, seeing their old bio for 200 ms (<strong>stale read</strong>). If concurrent conflicting writes occur on two nodes, the system must resolve conflicts via Last-Write-Wins (LWW) or CRDTs.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-why-does-apache-cassandra-achieve-millions-of-writes-per-second-while-postgresql-struggles-with-write-saturation">Q3: &quot;Why does Apache Cassandra achieve millions of writes per second while PostgreSQL struggles with write saturation?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>The difference comes down to the underlying <strong>Storage Engine architecture</strong>:</p>
+<ol>
+<li><strong>PostgreSQL uses B-Tree Storage Engines:</strong>
+<ul>
+<li>Modifying a row in a B-Tree requires <strong>random in-place disk overwrites</strong> to update 8KB or 16KB disk pages.</li>
+<li>If a table has 5 indexes, an <code>INSERT</code> triggers random disk writes across multiple index tree pages. Under high concurrency, disk head seek times (or SSD random I/O write amplification) bottleneck throughput.</li>
+</ul>
+</li>
+<li><strong>Cassandra uses Log-Structured Merge (LSM) Trees:</strong>
+<ul>
+<li>Cassandra never modifies data in-place on disk.</li>
+<li>Every write is appended sequentially to an append-only commit log on disk, and inserted into an in-memory sorted structure called a <strong>MemTable</strong>.</li>
+<li>Because sequential disk appends are $100\times$ faster than random seeks, Cassandra absorbs massive write streams without latency spikes. Periodically, MemTables are flushed to disk as immutable <strong>SSTables</strong>.</li>
+</ul>
+</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-what-is-polyglot-persistence-and-how-does-a-modern-enterprise-architecture-apply-it">Q4: &quot;What is Polyglot Persistence, and how does a modern enterprise architecture apply it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p><strong>Polyglot Persistence</strong> is the architectural practice of using different specialized database engines for different microservices within the same enterprise, rather than forcing all data into a single generic database:</p>
+<ul>
+<li><strong>Example: An Uber or DoorDash Architecture:</strong>
+<ol>
+<li><strong>PostgreSQL:</strong> Handles User Authentication, Payment Accounts, and Billing Invoices (mandates ACID).</li>
+<li><strong>Redis:</strong> Holds real-time driver locations, session tokens, and rate limits (requires $&lt; 1\text{ ms}$ in-memory latency).</li>
+<li><strong>Apache Cassandra / ScyllaDB:</strong> Stores ride history telemetry coordinates emitted every 3 seconds from 5 million cars (massive write stream).</li>
+<li><strong>Elasticsearch:</strong> Powers search boxes with fuzzy matching for restaurant menus and addresses.</li>
+<li><strong>ClickHouse:</strong> Powers the internal business analytics dashboard calculating hourly revenue across cities.</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A team builds an accounting ledger. They choose MongoDB without transactions. What critical failure mode can occur when transferring money between two accounts?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>A <strong>partial failure (violation of Atomicity)</strong>. If the system deducts $100 from Account A, and the server crashes or the network drops before the $100 is added to Account B, the $100 has permanently vanished into thin air. A relational database with ACID transactions guarantees that either both accounts update or neither updates.</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>In a NoSQL Document Store, when should you EMBED data inside a document vs REFERENCE it with an ID?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<ul>
+<li><strong>Embed when:</strong> Data has a strict 1-to-1 or bounded 1-to-few relationship, and is always read and written together (e.g., an Order and its 3 OrderLineItems).</li>
+<li><strong>Reference when:</strong> Data has a 1-to-many relationship that grows unbounded (e.g. a Celebrity user with 50 million followers), or when data is frequently modified independently from multiple contexts.</li>
+</ul>
+</details>
+<hr />
+<ol start="3">
+<li><strong>Why do Columnar databases (ClickHouse) process analytical queries (<code>SELECT AVG(age) FROM users</code>) 100x faster than Row-based databases (PostgreSQL)?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>In row-based databases, all columns of a row are stored contiguously on disk. To compute the average age, PostgreSQL must read every single byte of every user row (names, hashed passwords, bios, emails) from disk into RAM just to discard 95% of the data.<br />
+In columnar databases, all <code>age</code> values are stored contiguously on disk. ClickHouse reads <strong>only the <code>age</code> column</strong> from disk, using SIMD CPU instructions and vector processing to crunch millions of numbers per second.</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications (DDIA)</strong> by Martin Kleppmann: Chapter 2 (<em>Data Models and Query Languages</em>) and Chapter 3 (<em>Storage and Retrieval</em>).</li>
+<li><strong>Database Internals</strong> by Alex Petrov: In-depth comparison of B-Tree vs LSM-Tree storage engines.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../07-database-replication/index.html">07 · Database replication</a>: How SQL and NoSQL databases scale reads and survive hardware failures.</li>
+<li><a href="../08-database-partitioning/index.html">08 · Database partitioning</a>: How to shard databases when data exceeds a single server.</li>
+<li><a href="../09-storage-engines-and-indexing/index.html">09 · Storage engines &amp; indexes</a>: The B-Tree and LSM-Tree mechanics powering these engines.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

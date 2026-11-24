@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Data Encoding &amp; Schema Evolution">
+  <title>Data Encoding &amp; Schema Evolution | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-data-encoding--schema-evolution">Real-World Production Deep Dives: Data Encoding &amp; Schema Evolution</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> (Protocol Buffers standardizing Borg RPCs) and <strong>LinkedIn / Netflix</strong> (Apache Avro Schema Registries across trillions of Kafka events) maintain zero-downtime schema evolution.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-standardized-on-protocol-buffers">🏢 Deep Dive 1: How Google Standardized on Protocol Buffers</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Invention</strong>: Created at Google in 2001 to replace hand-rolled serialization formats.</li>
+<li><strong>Scale</strong>: Virtually <strong>100% of internal Google communication</strong> (billions of RPCs per second across Search, YouTube, Maps, Gmail, and Borg) is serialized using Protocol Buffers (<code>proto3</code>).</li>
+<li><strong>Design Priority</strong>: Ultra-fast C++ serialization speed, zero wasted bandwidth over internal networks, and strict backwards/forwards compatibility across continuous deployments.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ul>
+<li>Before Protobuf, different teams serialized server requests using ad-hoc text strings or direct memory dumps of C++ structs:
+<ul>
+<li>Memory struct dumps broke whenever a compiler version changed padding or when code ran on 32-bit vs 64-bit architectures.</li>
+<li>Text-based formats bloated internal gigabit switches and caused CPU bottlenecks in serialization.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-googles-architecture-unified-proto-schemas--generated-stubs">3. Google's Architecture: Unified Proto Schemas &amp; Generated Stubs</h3>
+<pre><code>[ Developer Defines Schema: service.proto ]
+                     │
+         Protobuf Compiler (protoc)
+                     │
+     ┌───────────────┼───────────────┐
+     ▼ (Generates)   ▼ (Generates)   ▼ (Generates)
+ [ C++ Stubs ]   [ Java Stubs ]  [ Go Stubs ]
+     │               │               │
+     └───────────────┼───────────────┘
+                     │ (Binary Encoded Packets over HTTP/2)
+                     ▼
+           [ Google gRPC Wire ]
+</code></pre>
+<h4 id="a-field-numbers-as-invariant-identifiers">A. Field Numbers as Invariant Identifiers</h4>
+<ul>
+<li>In Google's codebase, once a field is assigned a numeric tag (e.g. <code>int64 user_id = 1;</code>), that number is permanently bound to that concept.</li>
+<li>If a team deprecates a field, they use the <code>reserved</code> keyword:<pre><code class="language-protobuf">message UserProfile {
+    reserved 3, 7 to 9;
+    reserved &quot;foo&quot;, &quot;bar&quot;;
+    int64 user_id = 1;
+    string display_name = 2;
+}
+</code></pre>
+</li>
+<li>This prevents new engineers from reusing tag numbers, guaranteeing that historical log archives from 10 years ago can still be decoded without corruption.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-linkedin--netflix-use-apache-avro--schema-registries">🎬 Deep Dive 2: How LinkedIn &amp; Netflix Use Apache Avro &amp; Schema Registries</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Companies</strong>: LinkedIn (the creators of Apache Kafka) and Netflix (Keystone Pipeline).</li>
+<li><strong>Scale</strong>: Over <strong>1.5 trillion events per day</strong> flowing through Kafka topics into Petabyte-scale data lakes (Apache Iceberg / S3).</li>
+</ul>
+<h3 id="2-the-core-problem-why-protobuf-tags-wasted-space-at-petabyte-scale">2. The Core Problem: Why Protobuf Tags Wasted Space at Petabyte Scale</h3>
+<ul>
+<li>While Protobuf is compact, every message still contains field tag headers (1–2 bytes per field).</li>
+<li>In a Kafka topic receiving 20 million events per second with 50 fields per event, repeating tag headers across billions of messages wastes <strong>hundreds of Terabytes of storage per day</strong>.</li>
+</ul>
+<h3 id="3-the-architecture-confluent-schema-registry-with-apache-avro">3. The Architecture: Confluent Schema Registry with Apache Avro</h3>
+<pre><code>[ Event Producer (Netflix Zuul Gateway) ]
+                    │
+   1. Registers/Fetches Schema ID #42
+                    ▼
+     [ Confluent Schema Registry ]
+                    │
+   2. Writes Payload: [0x00] [SchemaID: 42] [Raw Binary Bytes]
+                    │ (Zero Field Tags in Message Payload!)
+                    ▼
+          [ Apache Kafka Topic ]
+                    │
+                    ▼
+[ Event Consumer (Flink / S3 Ingestion) ]
+  ├── Reads 4-byte Schema ID #42
+  ├── Fetches Schema #42 from local in-memory registry cache
+  └── Decodes raw bytes with 100% precision
+</code></pre>
+<h4 id="a-zero-wire-overhead">A. Zero Wire Overhead</h4>
+<ul>
+<li>Apache Avro completely strips field tags and names from the serialized message.</li>
+<li>A 50-field message is simply packed as raw contiguous binary values.</li>
+<li>The 4-byte Schema ID at the beginning of the message tells the consumer which exact schema version in the registry to use for decoding, achieving the theoretical maximum in data compression.</li>
+</ul>
+<h4 id="b-schema-compatibility-enforcement-in-cicd">B. Schema Compatibility Enforcement in CI/CD</h4>
+<ul>
+<li>When an engineer creates a PR modifying an event schema, the CI/CD pipeline tests the new schema against the Schema Registry:
+<ul>
+<li>If the change breaks <strong>Full Compatibility</strong> (e.g. adding a required field without a default), the pipeline <strong>fails the build immediately</strong>.</li>
+<li>Prevents breaking downstream analytics jobs or stream processors in production.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Protocol Buffers</th>
+<th>LinkedIn / Netflix Apache Avro</th>
+<th>JSON / REST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Schema Distribution</strong></td>
+<td>Compiled into client/server binaries</td>
+<td>Centralized Schema Registry</td>
+<td>Implicit / OpenAPI spec</td>
+</tr>
+<tr>
+<td><strong>Tag Overhead</strong></td>
+<td>1–2 bytes per field in every message</td>
+<td>Zero (Only 4-byte schema ID prefix)</td>
+<td>Full text field names repeated</td>
+</tr>
+<tr>
+<td><strong>Code Generation</strong></td>
+<td>Mandatory (<code>protoc</code> compiles stubs)</td>
+<td>Optional (Dynamic schema decoding)</td>
+<td>None required</td>
+</tr>
+<tr>
+<td><strong>Primary Domain</strong></td>
+<td>Synchronous RPCs (gRPC microservices)</td>
+<td>Asynchronous Streaming (Kafka / S3)</td>
+<td>Public APIs &amp; Web Browsers</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Explain Forward vs Backward Compatibility</strong>: In any microservice design interview, explain that rolling deployments require both: new code must read old data, and old code must read new data without crashing.</li>
+<li><strong>Never Change Protobuf Tag Numbers</strong>: Highlight that in binary protocols, field names are purely for human readability—the numeric tag is what the computer reads.</li>
+<li><strong>When to Propose Avro with Schema Registry</strong>: For high-volume event streaming systems (Kafka, analytics, telemetry), propose <strong>Apache Avro + Schema Registry</strong> to eliminate field tag overhead across petabytes of stored data.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

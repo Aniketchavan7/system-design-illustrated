@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Petabyte-Scale Video Streaming (YouTube / Netflix)">
+  <title>System Design: Petabyte-Scale Video Streaming (YouTube / Netflix) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-video-streaming-netflix--youtube">Real-World Production Deep Dives: Video Streaming (Netflix &amp; YouTube)</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Netflix</strong> and <strong>YouTube</strong> ingest, transcode, package, and deliver high-definition video at global scale, exploring Adaptive Bitrate Streaming (ABR) and custom encoding optimizations.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-netflix-streams-video-dynamic-optimizer--chunked-hlsdash">🎬 Deep Dive 1: How Netflix Streams Video (Dynamic Optimizer &amp; Chunked HLS/DASH)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Subscribers</strong>: Over 260 million global accounts streaming over <strong>100+ million hours of video daily</strong>.</li>
+<li><strong>Bandwidth Consumption</strong>: Accounts for <strong>15%+ of the world's downstream internet traffic</strong>.</li>
+<li><strong>Device Fragmentation</strong>: Must deliver flawless playback to thousands of heterogeneous devices: 4K HDR OLED TVs, budget Android phones on 3G cellular, PlayStations, and web browsers.</li>
+</ul>
+<h3 id="2-the-core-problem-at-netflix-scale">2. The Core Problem at Netflix Scale</h3>
+<ul>
+<li>A single static video file (e.g., a 10GB 1080p MP4) cannot stream effectively over the public internet:
+<ul>
+<li>If network bandwidth drops from 10Mbps to 3Mbps, video playback freezes to buffer.</li>
+<li>Mobile devices would waste gigabytes downloading high-bitrate video that their small screens cannot display.</li>
+<li>Different scenes have drastically different visual complexities: an action scene with rapid movement and explosions requires a high bitrate, whereas an animated scene with solid flat colors requires very few bits.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-netflixs-architecture-chunked-adaptive-bitrate-streaming">3. Netflix's Architecture: Chunked Adaptive Bitrate Streaming</h3>
+<pre><code>[ Master Video Asset (ProRes ~1TB) ]
+                 │
+                 ▼
+[ AWS Cloud: Parallel Transcoding Farm (Titus) ]
+  ├── Per-Title &amp; Per-Shot Dynamic Optimizer
+  └── Encodes into Bitrate Ladder (144p up to 4K Dolby Vision)
+                 │
+                 ▼
+[ Chunking &amp; Packaging Engine ]
+  ├── Splits Video into Independent 2-Second Segments (.mp4/.m4s)
+  └── Generates Manifest Files (.m3u8 for HLS / .mpd for DASH)
+                 │
+                 ▼ (Pre-Positioned via BGP)
+[ Netflix Open Connect Appliances (OCAs Inside ISPs) ]
+                 │
+                 │ HTTP/2 or HTTP/3 Segment Fetch
+                 ▼
+[ Netflix Video Player Client (Smart TV / Mobile) ]
+  ├── Dynamic Buffer-Based Adaptive Bitrate (BBA) Algorithm
+  └── Seamlessly switches bitrates between 2-second chunks!
+</code></pre>
+<h4 id="a-chunked-packaging-hls-and-mpeg-dash">A. Chunked Packaging (HLS and MPEG-DASH)</h4>
+<ul>
+<li>Netflix does not stream a single continuous file.</li>
+<li>The master video is sliced into <strong>hundreds of tiny, independent 2-second to 6-second chunk files</strong>.</li>
+<li>The client video player first downloads a <strong>Manifest File</strong> (an <code>.m3u8</code> playlist for HLS or an <code>.mpd</code> manifest for DASH):
+<ul>
+<li>The manifest lists all available video resolutions and bitrates along with URLs for each individual chunk.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-the-per-shot-dynamic-optimizer">B. The Per-Shot Dynamic Optimizer</h4>
+<p>Traditional video encoding applied a fixed bitrate ladder across an entire movie:</p>
+<ul>
+<li>Netflix engineered the <strong>Dynamic Optimizer</strong> (Per-Title and Per-Shot Encoding):
+<ul>
+<li>AI models analyze video frame-by-frame using <strong>VMAF (Video Multi-Method Assessment Fusion)</strong>, an objective perceptual video quality metric developed by Netflix.</li>
+<li>A quiet dialogue scene in <em>The Crown</em> is compressed down to <strong>1.5 Mbps</strong> while maintaining pristine 1080p visual fidelity.</li>
+<li>A fast-moving chase scene in <em>Formula 1: Drive to Survive</em> is dynamically allocated <strong>6.5 Mbps</strong>.</li>
+<li><strong>Result</strong>: Cut Netflix's overall global bandwidth consumption by <strong>over 25%</strong> with zero perceived reduction in visual quality!</li>
+</ul>
+</li>
+</ul>
+<h4 id="c-buffer-based-adaptive-bitrate-bba-algorithm">C. Buffer-Based Adaptive Bitrate (BBA) Algorithm</h4>
+<p>How does the client player decide which bitrate chunk to request next?</p>
+<ul>
+<li><strong>Legacy Throughput-Based ABR</strong>: Estimated network speed from the download speed of the previous chunk. However, network spikes caused constant, jarring video resolution flips.</li>
+<li><strong>Netflix's Buffer-Based Adaptation (BBA)</strong>:
+<ul>
+<li>The player ignores noisy network speed estimates and focuses strictly on <strong>Playback Buffer Occupancy</strong> (e.g., how many seconds of video are currently buffered in RAM):
+<ul>
+<li><strong>Buffer &lt; 10 seconds</strong>: Emergency state -&gt; Request lowest bitrate (prevent playback freeze).</li>
+<li><strong>Buffer between 10s and 30s</strong>: Gradually step up resolution ladder.</li>
+<li><strong>Buffer &gt; 30 seconds</strong>: Comfort state -&gt; Request highest 4K resolution.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-youtube-uses-transcoding--edge-streaming-google-ingestion--vp9av1">📺 Deep Dive 2: How YouTube Uses Transcoding &amp; Edge Streaming (Google Ingestion &amp; VP9/AV1)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Scale</strong>: Over <strong>500 hours of new video uploaded every single minute</strong>; billions of daily views.</li>
+<li><strong>The Challenge</strong>: Unlike Netflix (which encodes a curated catalog of finished studio titles in advance), YouTube must accept raw, messy user-generated video uploads from millions of creators and make them streamable globally within minutes.</li>
+</ul>
+<h3 id="2-youtubes-transcoding-pipeline">2. YouTube's Transcoding Pipeline</h3>
+<pre><code>[ Creator Uploads 4K Raw MP4 ]
+              │
+              ▼
+[ YouTube Ingestion Service ]
+              │
+              ▼
+[ Chunked Distributed Transcoding Farm (Borg) ]
+  ├── Video is split into 10-second GOP (Group of Pictures) slices
+  ├── Thousands of worker containers transcode slices in parallel
+  │   ├── Codecs: AV1, VP9, H.264
+  │   └── Resolutions: 144p, 240p, 360p, 720p, 1080p, 1440p, 4K
+  │
+  ▼
+[ Transcoded Slices Stitched into DASH Containers ]
+              │
+              ▼
+[ Edge Distribution: Google Global Cache (GGC) ]
+</code></pre>
+<h4 id="a-parallel-slice-transcoding">A. Parallel Slice Transcoding</h4>
+<ul>
+<li>Waiting for a single server to transcode an entire 2-hour 4K video linearly would take several hours.</li>
+<li>YouTube's ingestion engine splits the incoming video into small <strong>GOP (Group of Pictures)</strong> chunks bounded by keyframes (I-frames).</li>
+<li>Hundreds of Borg container tasks transcode the slices simultaneously across the cluster in parallel.</li>
+<li>The transcoded slices are stitched back together, making a 4K video available for playback across all resolutions in <strong>under 5 minutes</strong> from upload completion.</li>
+</ul>
+<h4 id="b-custom-hardware-google-vcu-video-coding-unit">B. Custom Hardware: Google VCU (Video Coding Unit)</h4>
+<ul>
+<li>Software encoding via CPU (x264/x265) consumes massive amounts of electricity and server rack space.</li>
+<li>Google designed custom proprietary ASICs called <strong>VCUs (Video (Coding) Processing Units)</strong> deployed in its data centers:
+<ul>
+<li>VCUs deliver <strong>20x to 30x higher compute efficiency</strong> than general-purpose server CPUs, enabling real-time live transcoding for millions of simultaneous YouTube Live streams.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Netflix Video Platform</th>
+<th>YouTube Video Platform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Catalog Nature</strong></td>
+<td>Closed, curated studio catalog (~20,000 titles)</td>
+<td>Open, user-generated content (Billions of videos)</td>
+</tr>
+<tr>
+<td><strong>Transcoding Philosophy</strong></td>
+<td>Heavy pre-computation (Per-shot optimization)</td>
+<td>Fast parallel slice transcoding via Borg + Custom ASICs</td>
+</tr>
+<tr>
+<td><strong>Delivery Network</strong></td>
+<td>Bespoke Open Connect ISP appliances (OCAs)</td>
+<td>Google Global Cache (GGC) + Anycast Edge</td>
+</tr>
+<tr>
+<td><strong>Streaming Protocol</strong></td>
+<td>HLS and MPEG-DASH over TCP/TLS</td>
+<td>MPEG-DASH over QUIC / HTTP/3</td>
+</tr>
+<tr>
+<td><strong>Quality Evaluation</strong></td>
+<td>VMAF perceptual metric per title</td>
+<td>Automated bitrate ladder based on creator popularity</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Propose Streaming a Single File</strong>: Always explain that modern video streaming architectures use <strong>Chunked Adaptive Bitrate Streaming (HLS / MPEG-DASH)</strong> where videos are divided into 2-6 second segments.</li>
+<li><strong>The Role of the Manifest File</strong>: Clearly describe how the client downloads the <code>.m3u8</code> or <code>.mpd</code> manifest first to discover the available resolution ladder and chunk URLs.</li>
+<li><strong>Adaptive Bitrate Algorithms</strong>: When asked how clients switch video resolutions, explain the difference between <strong>Throughput-based ABR</strong> (calculating network speed) and <strong>Buffer-based ABR (BBA)</strong> (monitoring the client's internal playback buffer), highlighting why BBA prevents erratic resolution fluttering.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

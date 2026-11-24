@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Relational (SQL) vs Non-Relational (NoSQL) Databases">
+  <title>Relational (SQL) vs Non-Relational (NoSQL) Databases | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-relational-vs-nosql-databases">Real-World Production Deep Dives: Relational vs NoSQL Databases</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix</strong> navigate the relational vs NoSQL trade-off at multi-petabyte scale, contrasting Google Spanner/Bigtable with Netflix Cassandra/Aurora polyglot persistence.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-uses-databases-cloud-spanner-vs-bigtable">🏢 Deep Dive 1: How Google Uses Databases (Cloud Spanner vs Bigtable)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Google Spanner</strong>: Powers Google AdWords, Google Play Billing, and Cloud Spanner. Manages billions of dollars in real-time transactions with strict ACID guarantees across worldwide data centers.</li>
+<li><strong>Google Bigtable</strong>: Powers Google Search indexing, Google Maps, Google Earth, and YouTube monitoring. Manages petabytes of semi-structured data across millions of operations per second with sub-10ms response times.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ol>
+<li><strong>The Traditional Relational Wall</strong>:
+<ul>
+<li>Standard relational databases (MySQL, PostgreSQL) provide strong ACID guarantees, but scaling them horizontally requires complex manual sharding, breaking cross-shard ACID transactions and foreign keys.</li>
+</ul>
+</li>
+<li><strong>The Traditional NoSQL Sacrifices</strong>:
+<ul>
+<li>First-generation NoSQL databases (Bigtable, Dynamo) scaled horizontally by abandoning ACID transactions, joins, and secondary indexes.</li>
+<li>For Google AdWords (financial billing), engineers spent months writing complex application-level compensation logic to handle eventual consistency anomalies, race conditions, and phantom balance deductions.</li>
+</ul>
+</li>
+</ol>
+<h3 id="3-googles-solution-two-specialized-architectures">3. Google's Solution: Two Specialized Architectures</h3>
+<pre><code>                    [ Database Workload at Google ]
+                                   │
+               Does it require multi-row ACID &amp; SQL?
+                                   │
+                 ┌─────────────────┴─────────────────┐
+                 ▼ (YES)                             ▼ (NO - Massive Write QPS)
+     [ Google Cloud Spanner ]                [ Google Bigtable ]
+     ├── Globally-Distributed SQL            ├── Wide-Column NoSQL Key-Value
+     ├── Synchronous Paxos Replication       ├── Appends to SSTables (LSM-tree)
+     ├── TrueTime API (Atomic Clocks + GPS)  ├── Sub-10ms Point Lookups
+     └── Strict Serializable ACID            └── Millions of QPS per Cluster
+</code></pre>
+<h4 id="a-google-cloud-spanner-globally-distributed-relational-acid">A. Google Cloud Spanner: Globally Distributed Relational ACID</h4>
+<p>Spanner was the world's first globally distributed database to achieve both horizontal scale and strict serializability:</p>
+<ul>
+<li><strong>TrueTime API</strong>: Every Google data center contains dedicated <strong>GPS receivers and Atomic Rubidium Clocks</strong>. TrueTime exposes an API returning an uncertainty window: $[	ext{earliest}, 	ext{latest}]$, guaranteeing time uncertainty $\epsilon &lt; 7	ext{ms}$.</li>
+<li><strong>Lock-Free Read Transactions</strong>: Spanner uses TrueTime to assign globally monotonic commit timestamps. Readers read data at a past timestamp without acquiring <em>any</em> locks, completely eliminating lock contention between readers and writers.</li>
+<li><strong>Two-Phase Commit over Paxos</strong>: Distributed writes use Paxos groups to replicate state safely across continents, followed by 2PC across Paxos leaders for multi-table transactions.</li>
+</ul>
+<h4 id="b-google-bigtable-high-throughput-wide-column-nosql">B. Google Bigtable: High-Throughput Wide-Column NoSQL</h4>
+<ul>
+<li>Bigtable organizes data into a sparse, distributed, persistent multi-dimensional sorted map:
+$$	ext{(row:string, column:string, time:int64)} 	o 	ext{string}$$</li>
+<li><strong>Data Model</strong>: Rows are maintained in lexicographical order.</li>
+<li><strong>High-Write Ingestion</strong>: High-velocity analytics (e.g., crawler pages, time-series telemetry) write directly to append-only logs and memory tables (MemTables) without coordination locks, achieving millions of writes per second per cluster.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-uses-databases-polyglot-persistence-cassandra-vs-aurora">🎬 Deep Dive 2: How Netflix Uses Databases (Polyglot Persistence: Cassandra vs Aurora)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Subscribers</strong>: 260+ million worldwide streaming over 100 million hours of video daily.</li>
+<li><strong>Read/Write Asymmetry</strong>:
+<ul>
+<li><strong>Viewing History &amp; Bookmark States</strong>: Massive write volume (every device saves playback timestamps every few seconds).</li>
+<li><strong>Billing &amp; Subscriptions</strong>: Relatively low write volume, but absolute zero tolerance for inconsistencies or race conditions.</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-the-core-problem-at-netflix-scale">2. The Core Problem at Netflix Scale</h3>
+<ul>
+<li>A single &quot;one-size-fits-all&quot; database architecture causes catastrophic failure:
+<ul>
+<li>Storing petabytes of high-velocity viewing bookmarks in a relational database caused database locks and replication lag.</li>
+<li>Storing user subscription states in an eventually consistent NoSQL database led to race conditions where users could upgrade their tier but still receive &quot;Access Denied&quot; or double-billing errors.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-netflixs-architecture-polyglot-persistence-strategy">3. Netflix's Architecture: Polyglot Persistence Strategy</h3>
+<pre><code>               [ Netflix API Gateway (Zuul) ]
+                              │
+             ┌────────────────┴────────────────┐
+             ▼                                 ▼
+   [ Playback Service ]              [ Billing &amp; Subscription ]
+             │                                 │
+             ▼                                 ▼
+[ Apache Cassandra Clusters ]         [ AWS Aurora / MySQL ]
+  ├── 100+ Nodes Multi-Region           ├── Multi-AZ Synchronous Replication
+  ├── Key: (accountId, videoId)         ├── Strict ACID Relational Transactions
+  ├── Writes: LOCAL_QUORUM              ├── Foreign Keys &amp; Constraints
+  └── Tunable Eventual Consistency      └── Guaranteed Financial Accuracy
+</code></pre>
+<h4 id="a-viewing-history-in-apache-cassandra">A. Viewing History in Apache Cassandra</h4>
+<ul>
+<li><strong>Why Cassandra</strong>: Masterless ring architecture with zero single points of failure.</li>
+<li><strong>Data Partitioning</strong>: The row key is <code>accountId</code>, ensuring all viewing history for a family profile is collocated on the same partition.</li>
+<li><strong>Clustering Key</strong>: The <code>last_viewed_timestamp</code> acts as a clustering key, allowing Netflix to fetch the subscriber's &quot;Continue Watching&quot; carousel with a single disk seek:<pre><code class="language-sql">SELECT videoId, playback_offset 
+FROM viewing_history 
+WHERE accountId = 'user_12345' 
+ORDER BY last_viewed_timestamp DESC 
+LIMIT 20;
+</code></pre>
+</li>
+<li><strong>Consistency Level</strong>: Writes use <code>LOCAL_QUORUM</code> (satisfies quorum within the local AWS region in &lt;5ms, asynchronously replicating to peer regions).</li>
+</ul>
+<h4 id="b-member-billing-in-aws-aurora--mysql">B. Member Billing in AWS Aurora / MySQL</h4>
+<ul>
+<li>Member registration, credit card payment tokens, plan tier changes (Standard vs Premium), and invoices live in relational <strong>AWS Aurora MySQL</strong>.</li>
+<li><strong>Transaction Safety</strong>: Upgrading a subscription involves inserting an audit invoice, updating account limits, and extending the billing cycle in a single atomic database transaction (<code>BEGIN ... COMMIT</code>).</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Cloud Spanner</th>
+<th>Netflix Cassandra Tier</th>
+<th>Netflix Aurora Tier</th>
+<th>Google Bigtable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Data Model</strong></td>
+<td>Relational / SQL Tables</td>
+<td>Wide-Column Key-Value</td>
+<td>Relational / SQL</td>
+<td>Wide-Column Sparse Map</td>
+</tr>
+<tr>
+<td><strong>Consistency</strong></td>
+<td>Strict Serializability</td>
+<td>Eventual / Tunable Quorum</td>
+<td>Strong ACID (Per-Cluster)</td>
+<td>Strong on Single Row</td>
+</tr>
+<tr>
+<td><strong>Horizontal Scale</strong></td>
+<td>Unlimited (Auto-sharding)</td>
+<td>Linear Horizontal (Ring)</td>
+<td>Vertical + Read Replicas</td>
+<td>Unlimited (Tablets)</td>
+</tr>
+<tr>
+<td><strong>Global Clocks</strong></td>
+<td>Hardware TrueTime (GPS)</td>
+<td>System NTP (LWW resolution)</td>
+<td>Single Primary Master</td>
+<td>System Timestamp</td>
+</tr>
+<tr>
+<td><strong>Ideal Workload</strong></td>
+<td>Global Financials &amp; Ads</td>
+<td>Viewing History &amp; Telemetry</td>
+<td>Subscriptions &amp; Invoicing</td>
+<td>Crawl Data &amp; Metrics</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Default to One Database</strong>: Always demonstrate <strong>Polyglot Persistence</strong>. In high-scale system designs, explicitly separate high-volume append data (viewing history, metrics, logs -&gt; NoSQL) from low-volume transactional state (payments, auth, user profiles -&gt; Relational).</li>
+<li><strong>Explain TrueTime in Spanner</strong>: Citing TrueTime demonstrates deep distributed systems knowledge: explain that Spanner solves the CAP theorem in practice by using atomic clocks to bound time uncertainty to &lt;7ms.</li>
+<li><strong>Cassandra Data Modeling Rule</strong>: In Cassandra/NoSQL interviews, emphasize that queries dictate schema design. Design tables around exact query patterns (Partition Key for distribution + Clustering Keys for sorting).</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

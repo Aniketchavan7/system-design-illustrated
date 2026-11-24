@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Back-of-the-Envelope Estimation">
+  <title>Back-of-the-Envelope Estimation | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="27--back-of-the-envelope-estimation">27 · Back-of-the-Envelope Estimation</h1>
+<blockquote>
+<p><strong>Part 0 · Foundations</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Jeff Dean's latency rules) &amp; <strong>Netflix</strong> (capacity planning for 260M subscribers) execute real-world estimations are documented in <a href="../27-back-of-the-envelope-estimation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<hr />
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Back-of-the-envelope estimation is the art of <strong>rapidly calculating system scale (QPS, memory, disk storage, network bandwidth)</strong> before writing a single line of architecture. It is not about finding the exact decimal; it is about finding the <strong>order of magnitude</strong> ($10	ext{ RPS}$ vs $10,000	ext{ RPS}$; $10	ext{ GB}$ vs $10	ext{ TB}$).</p>
+<ul>
+<li><strong>Powers of 10 shortcuts</strong>:
+<ul>
+<li>$1	ext{ Million requests/day} \approx \mathbf{12	ext{ requests/second (RPS)}}$.</li>
+<li>$1	ext{ Billion requests/day} \approx \mathbf{12,000	ext{ RPS}}$.</li>
+<li>Peak traffic is typically estimated at $\mathbf{2	imes 	ext{average}}$.</li>
+</ul>
+</li>
+<li><strong>Hardware Latency Reality</strong>: Reading from RAM ($\approx 100	ext{ ns}$) is <strong>100,000 times faster</strong> than reading from a spinning disk ($\approx 10	ext{ ms}$) and <strong>1,500,000 times faster</strong> than a cross-ocean network round trip ($\approx 150	ext{ ms}$).</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy-planning-a-wedding-banquet">🍕 Everyday analogy: Planning a Wedding Banquet</h2>
+<p>Imagine planning a wedding:</p>
+<ul>
+<li>You don't need to know if Uncle Bob eats exactly $412	ext{ grams}$ or $420	ext{ grams}$ of chicken.</li>
+<li>You estimate: <em>&quot;150 guests $	imes$ 1 main dish $\approx$ 150 meals. Plus 20% buffer for hungry eaters $\approx$ 180 portions.&quot;</em></li>
+<li>If your rough estimate said 150 portions and you prepared for 15, your guests starve. If you prepared for 15,000, food rots and you go bankrupt.</li>
+</ul>
+<p>Back-of-the-envelope estimation gives you the exact ballpark to pick the right server size, database tier, and caching budget.</p>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<p>Without back-of-the-envelope estimations:</p>
+<ol>
+<li><strong>Architectural Over-Engineering</strong>: A candidate proposes a multi-datacenter Kafka cluster with Cassandra sharding for a service receiving $5	ext{ requests/minute}$.</li>
+<li><strong>Catastrophic Under-Provisioning</strong>: A team provisions a standard $20/mo SQL database for a service expected to ingest $50	ext{ GB of telemetry logs per second}$, causing Day 1 production crashes.</li>
+<li><strong>Interview Disqualification</strong>: Top-tier tech companies (Google, Meta, Amazon) explicitly score candidates on whether they can calculate QPS, storage growth, and RAM sizing in under 3 minutes.</li>
+</ol>
+<hr />
+<h2 id="the-cheat-sheet-powers-of-2--10">🔢 The Cheat Sheet: Powers of 2 &amp; 10</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Power of 2</th>
+<th style="text-align:left">Exact Bytes</th>
+<th style="text-align:left">Approximate (Powers of 10)</th>
+<th style="text-align:left">Standard Unit</th>
+<th style="text-align:left">Real-World Context</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">$2^{10}$</td>
+<td style="text-align:left">1,024</td>
+<td style="text-align:left">$1	ext{ Thousand } (10^3)$</td>
+<td style="text-align:left"><strong>1 KB</strong></td>
+<td style="text-align:left">Small JSON API response</td>
+</tr>
+<tr>
+<td style="text-align:left">$2^{20}$</td>
+<td style="text-align:left">1,048,576</td>
+<td style="text-align:left">$1	ext{ Million } (10^6)$</td>
+<td style="text-align:left"><strong>1 MB</strong></td>
+<td style="text-align:left">High-res thumbnail / photo</td>
+</tr>
+<tr>
+<td style="text-align:left">$2^{30}$</td>
+<td style="text-align:left">1,073,741,824</td>
+<td style="text-align:left">$1	ext{ Billion } (10^9)$</td>
+<td style="text-align:left"><strong>1 GB</strong></td>
+<td style="text-align:left">1 hour of SD video stream</td>
+</tr>
+<tr>
+<td style="text-align:left">$2^{40}$</td>
+<td style="text-align:left">1,099,511,627,776</td>
+<td style="text-align:left">$1	ext{ Trillion } (10^{12})$</td>
+<td style="text-align:left"><strong>1 TB</strong></td>
+<td style="text-align:left">Standard server NVMe SSD</td>
+</tr>
+<tr>
+<td style="text-align:left">$2^{50}$</td>
+<td style="text-align:left">1,125,899,906,842,624</td>
+<td style="text-align:left">$1	ext{ Quadrillion } (10^{15})$</td>
+<td style="text-align:left"><strong>1 PB</strong></td>
+<td style="text-align:left">Daily YouTube upload ingestion</td>
+</tr>
+<tr>
+<td style="text-align:left">$2^{60}$</td>
+<td style="text-align:left">1,152,921,504,606,846,976</td>
+<td style="text-align:left">$1	ext{ Quintillion } (10^{18})$</td>
+<td style="text-align:left"><strong>1 EB</strong></td>
+<td style="text-align:left">Total storage of global cloud providers</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="latency-numbers-every-software-engineer-must-know">⏱️ Latency Numbers Every Software Engineer Must Know</h2>
+<p><em>Original figures compiled by Google Senior Fellow Jeff Dean, updated for modern NVMe hardware:</em></p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Operation</th>
+<th style="text-align:left">Real-World Time</th>
+<th style="text-align:left">Scaled to Human Time (1ns = 1s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>L1 CPU Cache Reference</strong></td>
+<td style="text-align:left">$0.5	ext{ ns}$</td>
+<td style="text-align:left">0.5 seconds (A single heartbeat)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Branch Mispredict</strong></td>
+<td style="text-align:left">$5	ext{ ns}$</td>
+<td style="text-align:left">5 seconds</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>L2 CPU Cache Reference</strong></td>
+<td style="text-align:left">$7	ext{ ns}$</td>
+<td style="text-align:left">7 seconds</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Mutex Lock / Unlock</strong></td>
+<td style="text-align:left">$25	ext{ ns}$</td>
+<td style="text-align:left">25 seconds</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Main Memory (RAM) Reference</strong></td>
+<td style="text-align:left">$100	ext{ ns}$</td>
+<td style="text-align:left">1.6 minutes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Compress 1KB with Snappy</strong></td>
+<td style="text-align:left">$2,000	ext{ ns } (2	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left">33 minutes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read 1MB Sequentially from Memory</strong></td>
+<td style="text-align:left">$5,000	ext{ ns } (5	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left">1.4 hours</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read 1MB Sequentially from NVMe SSD</strong></td>
+<td style="text-align:left">$10,000	ext{ ns } (10	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left">2.8 hours</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>SSD Random Read (NVMe)</strong></td>
+<td style="text-align:left">$20,000	ext{ ns } (20	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left">5.5 hours</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Send 1KB Packet over 1Gbps LAN</strong></td>
+<td style="text-align:left">$10,000	ext{ ns } (10	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left">2.8 hours</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>HDD Spinning Disk Seek</strong></td>
+<td style="text-align:left">$10,000,000	ext{ ns } (10	ext{ ms})$</td>
+<td style="text-align:left"><strong>4 months!</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Round Trip Time (RTT): US to Europe</strong></td>
+<td style="text-align:left">$150,000,000	ext{ ns } (150	ext{ ms})$</td>
+<td style="text-align:left"><strong>5 years!</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-core-architectural-takeaways">The Core Architectural Takeaways:</h3>
+<ol>
+<li><strong>RAM is $100,000	imes$ faster than disk seeks</strong>: Keep hot data in cache.</li>
+<li><strong>Sequential disk I/O matches network speed</strong>: Log-structured storage (Kafka, LSM-trees) is fast because it uses sequential disk writes.</li>
+<li><strong>Cross-region network latency dominates everything</strong>: Avoid synchronous cross-datacenter round-trips on write paths.</li>
+</ol>
+<hr />
+<h2 id="the-master-estimation-template">📐 The Master Estimation Template</h2>
+<p>Whenever an interviewer gives you a design problem:</p>
+<h3 id="1-traffic-qps-math">1. Traffic (QPS) Math</h3>
+<ul>
+<li><strong>Input</strong>: Daily Active Users (DAU) and average actions per user per day.</li>
+<li><strong>Formula</strong>:
+$$	ext{Average QPS} = \frac{	ext{DAU} 	imes 	ext{Requests per user}}{86,400	ext{ seconds}}$$</li>
+<li><strong>Rule of Thumb</strong>: Round $86,400$ to <strong>$100,000$</strong> for fast mental math:
+$$	ext{Average QPS} \approx \frac{	ext{Total Daily Requests}}{100,000}$$</li>
+<li><strong>Peak QPS</strong>: $	ext{Peak QPS} = 	ext{Average QPS} 	imes 2$.</li>
+</ul>
+<h3 id="2-storage-estimation-math">2. Storage Estimation Math</h3>
+<ul>
+<li><strong>Formula</strong>:
+$$	ext{Daily Storage} = 	ext{Daily Writes} 	imes 	ext{Average Payload Size}$$
+$$	ext{5-Year Storage} = 	ext{Daily Storage} 	imes 365 	imes 5 \approx 	ext{Daily Storage} 	imes 2,000$$</li>
+</ul>
+<h3 id="3-memory-cache-sizing-math-the-8020-rule">3. Memory (Cache Sizing) Math: The 80/20 Rule</h3>
+<ul>
+<li><strong>The Pareto Principle</strong>: $20%$ of hot content generates $80%$ of read traffic.</li>
+<li><strong>Formula</strong>:
+$$	ext{RAM Required} = 	ext{Daily Read Volume (Bytes)} 	imes 0.20$$</li>
+</ul>
+<hr />
+<h2 id="try-it-yourself">💻 Try It Yourself</h2>
+<p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/27-back-of-the-envelope-estimation/demo.py"><code>demo.py</code></a> is an interactive estimation tool that takes DAU, read/write ratios, and payload sizes to generate complete infrastructure sizing reports in milliseconds.</p>
+<p>Run it directly in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Google Search</strong>: Capacity engineers use QPS estimates to provision Borg container tasks worldwide ahead of major global events (Olympics, elections).</li>
+<li><strong>Netflix Open Connect</strong>: Uses 80/20 cache estimations to determine how many 200TB flash storage appliances (OCAs) must be deployed in each regional ISP.</li>
+<li><strong>Amazon AWS</strong>: EC2 auto-scaling groups use capacity prediction curves based on historical back-of-the-envelope models.</li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions--deep-answers">🎯 Top 5 Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-do-you-quickly-estimate-qps-from-daily-active-users-dau-in-an-interview">Q1: &quot;How do you quickly estimate QPS from Daily Active Users (DAU) in an interview?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>State your assumptions clearly:</p>
+<ol>
+<li><em>&quot;Assume $100	ext{M DAU}$ and each user makes 10 requests per day.&quot;</em></li>
+<li>Total requests $= 1	ext{ Billion requests/day}$.</li>
+<li>Divide by $100,000$ seconds (rounding $86,400$):
+$$	ext{Average QPS} \approx \frac{1,000,000,000}{100,000} = \mathbf{10,000	ext{ QPS}}$$</li>
+<li>Apply peak multiplier ($2	imes$):
+$$	ext{Peak QPS} = 10,000 	imes 2 = \mathbf{20,000	ext{ QPS}}$$
+Interviewers reward fast, clean arithmetic over struggling with exact decimals.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-estimate-the-storage-required-for-twitter-over-5-years">Q2: &quot;Estimate the storage required for Twitter over 5 years.&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ol>
+<li>Assume $300	ext{M DAU}$. $100	ext{M}$ users post 2 tweets/day $= 200	ext{M tweets/day}$.</li>
+<li>Each tweet is 280 chars $+$ metadata (User ID, timestamp) $\approx 500	ext{ bytes}$.</li>
+<li>Assume 20% of tweets contain an image ($200	ext{ KB}$):
+<ul>
+<li>Text storage: $200	ext{M} 	imes 500	ext{B} = 100	ext{ GB/day}$.</li>
+<li>Media storage: $40	ext{M} 	imes 200	ext{ KB} = 8,000	ext{ GB/day} = 8	ext{ TB/day}$.</li>
+<li>Total daily storage $\approx 8.1	ext{ TB/day}$.</li>
+</ul>
+</li>
+<li>5-Year Storage:
+$$8.1	ext{ TB} 	imes 365 	imes 5 \approx 8.1	ext{ TB} 	imes 1,825 \approx \mathbf{14.8	ext{ Petabytes}}$$</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-how-do-you-size-the-ram-needed-for-a-redis-caching-tier">Q3: &quot;How do you size the RAM needed for a Redis caching tier?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Apply the <strong>80/20 Pareto rule</strong>:</p>
+<ol>
+<li>Calculate daily read volume. If daily active data volume is $5	ext{ TB}$.</li>
+<li>To satisfy 80% of reads from RAM, you need:
+$$5	ext{ TB} 	imes 0.20 = \mathbf{1	ext{ TB of RAM}}$$</li>
+<li>Account for Redis memory overhead (pointers, hash tables, slab allocation) $\approx 25%$ extra buffer:
+$$	ext{Total RAM} \approx 1	ext{ TB} 	imes 1.25 = \mathbf{1.25	ext{ TB}}$$</li>
+<li>Provision four $256	ext{ GB}$ or eight $128	ext{ GB}$ Redis cluster instances.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-why-is-sequential-disk-access-comparable-in-speed-to-ram-access">Q4: &quot;Why is sequential disk access comparable in speed to RAM access?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Disk latency is dominated by physical seek times (moving the mechanical head or initializing NAND flash row buffers). Once the initial seek occurs, hardware controllers read contiguous blocks at the physical bus bandwidth limit (up to 3–7 GB/s on PCIe 4.0 NVMe). Sequential disk access bypasses seek overhead, which is why log-structured engines (Kafka, LSM-trees) achieve near-RAM write throughput on standard disks.</p>
+</details>
+<hr />
+<h3 id="q5-estimate-the-network-egress-bandwidth-for-youtube">Q5: &quot;Estimate the network egress bandwidth for YouTube.&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ol>
+<li>Assume 1 Billion hours of video watched per day.</li>
+<li>Average bitrate across mobile and desktop: $2.5	ext{ Mbps}$.</li>
+<li>Continuous egress bandwidth:
+$$	ext{Bandwidth} = \frac{1,000,000,000	ext{ hrs} 	imes 3600	ext{s} 	imes 2.5	ext{ Mbps}}{86,400	ext{s}} \approx \mathbf{104	ext{ Terabits per second (Tbps)}}$$</li>
+<li>With a 98% CDN cache offload, origin egress drops to only $\approx 2	ext{ Tbps}$.</li>
+</ol>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go Deeper</h2>
+<ul>
+<li><strong>System Design Interview – An Insider's Guide (Volume 1)</strong> by Alex Xu: Chapter 2 (<em>Back-of-the-envelope Estimation</em>).</li>
+<li><strong>Jeff Dean's Original Stanford Talk</strong>: <em>Numbers Everyone Should Know</em> (Google Research).</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

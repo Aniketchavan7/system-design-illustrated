@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Scaling from One to Millions of Users">
+  <title>Scaling from One to Millions of Users | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="26--scaling-from-one-to-millions-of-users">26 · Scaling from One to Millions of Users</h1>
+<blockquote>
+<p><strong>Part 0 · Foundations</strong> · ⏱️ ~25 min read · Prerequisites: None (Foundational)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> evolved from single-machine monolithic scripts to global multi-region infrastructures are documented in <a href="../26-scaling-from-one-to-millions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<hr />
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Every giant platform (Google, Netflix, Instagram) started on a single physical computer. Scaling is not about building a 100-million-user system on day one; it is a <strong>step-by-step evolutionary sequence</strong>:</p>
+<ol>
+<li><strong>Step 1 (Single Box)</strong>: Web app, database, and files on 1 machine.</li>
+<li><strong>Step 2 (Separate Layers)</strong>: Move database to its own dedicated machine.</li>
+<li><strong>Step 3 (Horizontal Scaling &amp; Load Balancer)</strong>: Add multiple web servers behind a reverse proxy.</li>
+<li><strong>Step 4 (Database Replication)</strong>: Primary for writes, multiple read replicas for queries.</li>
+<li><strong>Step 5 (Caching &amp; CDN)</strong>: Cache hot queries in RAM (Redis); push static images to edge CDNs.</li>
+<li><strong>Step 6 (Stateless Web Tier)</strong>: Move user sessions out of server memory into a shared cache.</li>
+<li><strong>Step 7 (Data Centers &amp; GeoDNS)</strong>: Route users across worldwide data centers.</li>
+<li><strong>Step 8 (Async Message Queues)</strong>: Decouple slow background tasks (emails, video processing) with Kafka/RabbitMQ.</li>
+<li><strong>Step 9 (Database Sharding)</strong>: Partition tables horizontally across multiple database clusters.</li>
+</ol>
+<hr />
+<h2 id="everyday-analogy-the-food-truck-to-global-restaurant-empire">🍕 Everyday analogy: The Food Truck to Global Restaurant Empire</h2>
+<p>Imagine opening a small food business:</p>
+<ul>
+<li><strong>Day 1 (Food Truck)</strong>: You take orders, cook burgers, and handle cash in a single truck. If 10 customers arrive at once, the line stalls. (<strong>Single-Server Monolith</strong>).</li>
+<li><strong>Month 2 (Separation of Concerns)</strong>: You hire a cashier so you can focus strictly on cooking. (<strong>Separating Web Server from Database</strong>).</li>
+<li><strong>Year 1 (Load Balancing)</strong>: You buy 3 trucks and place a host at the entrance directing customers to the truck with the shortest line. (<strong>Load Balancer + Horizontal Scaling</strong>).</li>
+<li><strong>Year 3 (Central Prep Kitchen)</strong>: Instead of slicing onions per order, a central kitchen preps ingredients overnight and stores them in cooling trays. (<strong>Caching Tier</strong>).</li>
+<li><strong>Year 5 (Franchise Sharding)</strong>: Opening locations in Tokyo, London, and New York. Each kitchen handles local customers independently. (<strong>Geo-Distribution &amp; Database Sharding</strong>).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Business Milestone</th>
+<th style="text-align:left">System Architecture Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>One Food Truck</strong></td>
+<td style="text-align:left">Single box hosting web app, DB, and static assets</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Dedicated Cashier</strong></td>
+<td style="text-align:left">Database separated from web tier</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Entrance Host</strong></td>
+<td style="text-align:left">Layer 7 Load Balancer (Nginx / ALB)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Pre-sliced Ingredients</strong></td>
+<td style="text-align:left">In-Memory Cache (Redis / Memcached)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Wholesale Depot</strong></td>
+<td style="text-align:left">Content Delivery Network (CDN)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Order Slips to Kitchen</strong></td>
+<td style="text-align:left">Message Queues (Kafka / SQS)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Regional Franchises</strong></td>
+<td style="text-align:left">Multi-Region Active-Active Sharding</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<p>When an application experiences exponential growth (e.g., $10 	o 10,000 	o 10,000,000	ext{ users}$), scaling by simply buying a larger computer (<strong>Vertical Scaling / Scaling Up</strong>) hits hard physical limits:</p>
+<ol>
+<li><strong>CPU &amp; RAM Ceilings</strong>: Even a server with 128 cores and 1TB RAM maxes out during traffic spikes.</li>
+<li><strong>Cost Asymmetry</strong>: High-end enterprise servers cost exponentially more than equivalent commodity servers.</li>
+<li><strong>Single Point of Failure (SPOF)</strong>: If your one giant server suffers a power glitch, hardware defect, or kernel panic, your entire business goes dark.</li>
+</ol>
+<p><strong>Horizontal Scaling (Scaling Out)</strong> solves this by adding commodity servers in parallel, achieving virtually unlimited throughput and high availability.</p>
+<hr />
+<h2 id="picture-it-the-9-stage-evolution">🖼️ Picture It: The 9-Stage Evolution</h2>
+<pre><code class="language-mermaid">flowchart TD
+    User([&quot;👤 Global Users&quot;]) --&gt; GeoDNS[&quot;🌐 GeoDNS / Anycast&quot;]
+    GeoDNS --&gt; CDN[&quot;⚡ CDN (Static Assets)&quot;]
+    GeoDNS --&gt; LB[&quot;⚖️ Load Balancer&quot;]
+    
+    subgraph WebTier[&quot;Stateless Web Tier (Auto-Scaling)&quot;]
+        LB --&gt; Web1[&quot;🖥️ Web Server 1&quot;]
+        LB --&gt; Web2[&quot;🖥️ Web Server 2&quot;]
+        LB --&gt; Web3[&quot;🖥️ Web Server N&quot;]
+    end
+    
+    WebTier &lt;--&gt; SessionStore[(&quot;🚀 Shared Redis Cache&lt;br/&gt;(Sessions &amp; Hot Data)&quot;)]
+    WebTier --&gt; Queue[&quot;📬 Message Queue (Kafka/SQS)&quot;]
+    Queue --&gt; Workers[&quot;👷 Async Background Workers&quot;]
+    
+    subgraph DataTier[&quot;Sharded Database Tier&quot;]
+        WebTier --&gt; MasterDB[(&quot;💾 Shard 1 (Primary Write)&quot;)]
+        MasterDB -. Replication .-&gt; ReplicaDB[(&quot;💾 Shard 1 (Read Replicas)&quot;)]
+        WebTier --&gt; Shard2[(&quot;💾 Shard 2 (Primary Write)&quot;)]
+    end
+    
+    Workers --&gt; DataTier
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's trace how infrastructure demands change from <strong>1,000 users to 10,000,000 Daily Active Users (DAU)</strong>:</p>
+<h3 id="scale-milestones">Scale Milestones:</h3>
+<ol>
+<li><strong>At 1,000 Users</strong>:
+<ul>
+<li>$1,000	ext{ DAU} 	imes 20	ext{ requests/day} = 20,000	ext{ requests/day} \approx \mathbf{0.23	ext{ requests/second}}$.</li>
+<li>Single $10/mo VPS (2 vCPUs, 4GB RAM) handles this comfortably.</li>
+</ul>
+</li>
+<li><strong>At 100,000 Users</strong>:
+<ul>
+<li>$100,000	ext{ DAU} 	imes 50	ext{ requests/day} = 5,000,000	ext{ req/day} \approx \mathbf{58	ext{ RPS average (150 RPS peak)}}$.</li>
+<li>Separate web server from PostgreSQL database. Add Redis for caching hot queries.</li>
+</ul>
+</li>
+<li><strong>At 10,000,000 Users (The 10M Milestone)</strong>:
+<ul>
+<li>$10,000,000	ext{ DAU} 	imes 100	ext{ requests/day} = 1,000,000,000	ext{ req/day}$.</li>
+<li><strong>Average QPS</strong>: $\frac{10^9}{86,400	ext{s}} \approx \mathbf{11,574	ext{ QPS}}$.</li>
+<li><strong>Peak QPS ($2	imes$)</strong>: $\approx \mathbf{23,000	ext{ QPS}}$.</li>
+<li><strong>Infrastructure Required</strong>:
+<ul>
+<li>40–60 Stateless web application containers behind load balancers.</li>
+<li>10+ Redis cache cluster nodes serving $90%$ of reads in $&lt;1	ext{ms}$.</li>
+<li>4–8 Horizontally sharded database clusters with primary-replica replication.</li>
+<li>CDN absorbing $95%$ of all bandwidth egress.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-decoupling-state-why-stateless-web-servers-are-mandatory">1. Decoupling State: Why Stateless Web Servers Are Mandatory</h3>
+<p>If Web Server A stores User Alice's login session in its local RAM:</p>
+<ul>
+<li>Alice's subsequent requests <em>must</em> hit Web Server A (<strong>Sticky Sessions</strong>).</li>
+<li>If Web Server A crashes or auto-scales down, Alice is logged out.</li>
+<li><strong>The Solution</strong>: Web servers store zero session state. All session tokens live in a fast, distributed <strong>Redis cluster</strong>. Any web server can handle any request from any user seamlessly.</li>
+</ul>
+<h3 id="2-database-sharding-horizontal-partitioning">2. Database Sharding: Horizontal Partitioning</h3>
+<p>When database writes exceed the I/O capacity of a single primary database:</p>
+<ul>
+<li>Tables are sharded by a <strong>Shard Key</strong> (e.g., <code>user_id % 4</code>).</li>
+<li>Shard 0 handles users with IDs ending in 0; Shard 1 handles IDs ending in 1.</li>
+<li>Sharding allows linear write scaling across commodity database hardware.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Evolution Step</th>
+<th style="text-align:left">Primary Benefit</th>
+<th style="text-align:left">Operational Cost / Trade-Off</th>
+<th style="text-align:left">When to Implement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Separate DB Box</strong></td>
+<td style="text-align:left">Eliminates CPU contention between app &amp; DB</td>
+<td style="text-align:left">Additional network latency hop (1–2ms)</td>
+<td style="text-align:left">$&gt;1,000	ext{ users}$</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Load Balancer</strong></td>
+<td style="text-align:left">Eliminates single point of failure</td>
+<td style="text-align:left">SSL termination overhead; health checking</td>
+<td style="text-align:left">$&gt;10,000	ext{ users}$</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>In-Memory Cache</strong></td>
+<td style="text-align:left">Drops DB read load by 80–95%</td>
+<td style="text-align:left">Cache invalidation complexity; stale data risk</td>
+<td style="text-align:left">$&gt;50,000	ext{ users}$</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Message Queue</strong></td>
+<td style="text-align:left">Absorbs traffic spikes; non-blocking APIs</td>
+<td style="text-align:left">Eventual consistency; dead-letter queue handling</td>
+<td style="text-align:left">$&gt;100,000	ext{ users}$</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Database Sharding</strong></td>
+<td style="text-align:left">Unlimited horizontal write scaling</td>
+<td style="text-align:left">Joins across shards are impossible; resharding</td>
+<td style="text-align:left">$&gt;1,000,000	ext{ users}$</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li><strong>Premature Microservices &amp; Sharding</strong>:
+<ul>
+<li><em>Pitfall</em>: Designing a 50-service microservice mesh with database sharding on day one with 500 users.</li>
+<li><em>Result</em>: Massive deployment overhead, distributed network failures, and months of engineering delay. Build a clean modular monolith first, scale database reads with caching, and shard only when write bottlenecks emerge.</li>
+</ul>
+</li>
+<li><strong>Stateful Web Servers</strong>:
+<ul>
+<li><em>Pitfall</em>: Storing user uploads or session files on the web server's local disk.</li>
+<li><em>Result</em>: Auto-scaling deletes user uploads when instances terminate. Always use cloud object storage (S3) and shared caching (Redis).</li>
+</ul>
+</li>
+<li><strong>No Database Connection Pooling</strong>:
+<ul>
+<li><em>Pitfall</em>: Allowing 50 web servers with 200 threads each to open 10,000 direct connections to PostgreSQL.</li>
+<li><em>Result</em>: PostgreSQL crashes from connection memory overhead. Use PgBouncer or proxy connection pools.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try It Yourself</h2>
+<p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/26-scaling-from-one-to-millions/demo.py"><code>demo.py</code></a> simulates the step-by-step traffic collapse of a single server and demonstrates how each architectural layer (Load Balancer, Cache, Database Read Replicas) restores sub-millisecond latencies under surging traffic.</p>
+<p>Run it directly in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch the single server choke and drop requests when concurrency exceeds capacity.</li>
+<li>See the <strong>Cache Layer</strong> absorb 85% of queries instantly.</li>
+<li>Observe how the <strong>Load Balancer</strong> distributes traffic uniformly across parallel worker nodes.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Instagram</strong>: Scaled from 1 server to 14 million users in 1 year with just 3 engineers by relying on simple PostgreSQL master-replica replication, Memcached, and AWS EC2.</li>
+<li><strong>Shopify</strong>: Sustains millions of concurrent shoppers during Black Friday by keeping the web tier completely stateless and caching catalog data in Redis.</li>
+<li><strong>Netflix</strong>: Distributes 100% of video streaming workloads across stateless microservices in AWS, serving global metadata across multiple cloud regions.</li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions--deep-answers">🎯 Top 5 Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-when-should-you-scale-vertically-versus-horizontally">Q1: &quot;When should you scale vertically versus horizontally?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Vertical Scaling (Scale Up)</strong> is best in early startup stages: it introduces zero distributed systems complexity, requires no network coordination, and maintains strict single-node ACID transactions.</li>
+<li><strong>Horizontal Scaling (Scale Out)</strong> is mandatory when:
+<ol>
+<li>Traffic exceeds single-node hardware limits (memory bus, CPU sockets, NIC bandwidth).</li>
+<li>Business requirements demand <strong>High Availability (HA)</strong> without single points of failure.</li>
+<li>Cost optimization dictates using pools of cheap commodity cloud instances rather than high-tier bare-metal instances.</li>
+</ol>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-why-must-web-application-servers-be-stateless-to-support-auto-scaling">Q2: &quot;Why must web application servers be stateless to support auto-scaling?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>If a web server maintains client state (e.g. session data, cart contents, in-flight file buffers) in local memory:</p>
+<ol>
+<li>The load balancer must use <strong>sticky sessions</strong> (source-IP affinity), preventing even load distribution.</li>
+<li>If traffic drops and the auto-scaler terminates 5 idle instances, all users pinned to those instances lose their session state and are logged out.
+By moving state to external stores (Redis for sessions, S3 for files), web servers become interchangeable workers that can scale from 2 to 200 instances without user disruption.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-how-does-a-cdn-improve-both-latency-and-backend-server-stability">Q3: &quot;How does a CDN improve both latency and backend server stability?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>A CDN delivers two distinct architectural benefits:</p>
+<ol>
+<li><strong>Latency Reduction</strong>: Edge servers terminate TCP/TLS handshakes geographically close to the user (5–15ms RTT vs 150ms+ to origin) and serve cached static assets (images, CSS, JS bundles) instantly.</li>
+<li><strong>Origin Shielding</strong>: By serving $&gt;95%$ of asset requests from edge memory, the CDN absorbs traffic spikes, preventing origin web servers and database connections from being overwhelmed by static asset requests.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-what-are-the-biggest-challenges-when-sharding-a-relational-database">Q4: &quot;What are the biggest challenges when sharding a relational database?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ol>
+<li><strong>Cross-Shard Joins</strong>: Joining tables that reside on different physical database servers is slow and requires application-level stitching.</li>
+<li><strong>Celebrity / Hotspot Keys</strong>: If a viral user (e.g. celebrity with 50M followers) hashes to Shard 2, Shard 2 collapses from write saturation while other shards sit idle.</li>
+<li><strong>Resharding Complexity</strong>: When data growth outgrows the current number of shards, rebalancing keys across new shards requires consistent hashing or complex live data migrations.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q5-what-is-the-difference-between-read-replicas-and-database-sharding">Q5: &quot;What is the difference between Read Replicas and Database Sharding?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Read Replicas</strong> scale <strong>read throughput</strong>: All replicas contain a complete copy of the database. All writes still funnel through the single primary database, meaning read replicas <em>cannot</em> scale write capacity.</li>
+<li><strong>Database Sharding</strong> scales <strong>write throughput and storage volume</strong>: Data is partitioned so each shard contains a unique subset of the total rows. Multiple shards accept writes concurrently, enabling unlimited horizontal write scaling.</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check Yourself</h2>
+<ol>
+<li><strong>If your primary database is handling 2,000 writes/sec and reaches 95% CPU, will adding 5 read replicas fix the issue?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+No. Read replicas only offload read queries (`SELECT`). Every write (`INSERT`/`UPDATE`/`DELETE`) must still be committed by the primary database and replicated to all replicas. To scale write capacity, you must implement database sharding, caching writes, or asynchronous message queuing.
+</details>
+<hr />
+<ol start="2">
+<li><strong>Why should user uploads (images, PDFs) never be stored on local web server disk in an auto-scaled cloud environment?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+Because cloud instances are ephemeral. When traffic subsides, auto-scaling groups automatically terminate excess instances, permanently deleting all files stored on local disks. Uploads must be stored in durable cloud object stores (like Amazon S3 or Google Cloud Storage).
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go Deeper</h2>
+<ul>
+<li><strong>System Design Interview – An Insider's Guide (Volume 1)</strong> by Alex Xu: Chapter 1 (<em>Scale from Zero to Millions of Users</em>).</li>
+<li><strong>Web Scalability for Startup Engineers</strong> by Artur Ejsmont: Chapter 1 (<em>Core Concepts &amp; Scalability Principles</em>).</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Cloud File Storage">
+  <title>System Design Cloud File Storage | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-cloud-file-storage">Real-World Production Implementations: Cloud File Storage</h1>
+<p>This document explores how Dropbox and Google Drive store, chunk, deduplicate, and synchronize petabytes of user files.</p>
+<hr />
+<h2 id="1-dropbox-the-magic-pocket--sync-engine-architecture">1. Dropbox: The Magic Pocket &amp; Sync Engine Architecture</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Dropbox syncs files for over <strong>700 million registered users</strong>, storing exabytes of data. Dropbox originally ran on Amazon S3 before migrating to its custom-built storage infrastructure (<strong>Magic Pocket</strong>).</p>
+<pre><code class="language-mermaid">flowchart TD
+    Desktop[&quot;Dropbox Desktop Client (Python/Rust)&quot;] --&gt;|&quot;Chunk into 4MB Blocks&quot;| ChunkEngine[&quot;Client Chunking Daemon&quot;]
+    ChunkEngine --&gt;|&quot;Compute SHA-256&quot;| HashCalc[&quot;Hash Calculator&quot;]
+    
+    HashCalc --&gt;|&quot;POST /commit_batch&quot;| API[&quot;Dropbox API Gateway&quot;]
+    API --&gt; MetaServer[&quot;Metadata Server (Edgestore / MySQL)&quot;]
+    
+    HashCalc --&gt;|&quot;Stream Missing Blocks&quot;| MagicPocket[&quot;Magic Pocket (Custom S3 Storage Engine)&quot;]
+    
+    MetaServer --&gt; NotificationSvc[&quot;Notification Server (WebSocket Cluster)&quot;]
+    NotificationSvc --&gt;|&quot;Push File Change&quot;| MobilePhone[&quot;User Mobile / Laptop Client&quot;]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Magic Pocket (Exabyte Storage Architecture)</strong>:
+<ul>
+<li>Custom-designed hardware and software storage engine deployed across Dropbox datacenters.</li>
+<li>Slices files into immutable 4MB blocks, storing them with $8+4$ Reed-Solomon erasure coding across distributed disk storage sleds, achieving $99.9999999999%$ (12 9's) durability.</li>
+</ul>
+</li>
+<li><strong>Variable-Length Chunking (Rabin Fingerprints)</strong>:
+<ul>
+<li>Fixed-size chunking suffers from the <strong>byte-shift problem</strong>: inserting 1 byte at the start of a file shifts all subsequent 4MB boundaries, invalidating every block hash.</li>
+<li>Dropbox implements content-defined variable-length chunking (using Rabin fingerprint rolling hashes) to identify natural boundary cuts, ensuring insertions only modify a single local block.</li>
+</ul>
+</li>
+<li><strong>Rust Sync Engine (Nucleus)</strong>:
+<ul>
+<li>Dropbox rewrote its desktop synchronization client in Rust to provide formal correctness proofs, eliminating multi-threaded race conditions in local file watching.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-google-google-drive--colossus-distributed-file-system">2. Google: Google Drive &amp; Colossus Distributed File System</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google Drive integrates with Google Docs, Sheets, Gmail, and Android backups, serving over <strong>1 billion users</strong>.</p>
+<pre><code class="language-mermaid">flowchart LR
+    DriveClient[&quot;Google Drive Client&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
+    GFE --&gt; DriveBackend[&quot;Drive Backend Orchestrator&quot;]
+    DriveBackend --&gt; Spanner[(&quot;Google Cloud Spanner (Global Metadata)&quot;)]
+    DriveBackend --&gt; Colossus[(&quot;Colossus (Google File System 2)&quot;)]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Colossus Storage Engine</strong>:
+<ul>
+<li>The successor to Google File System (GFS).</li>
+<li>Manages block striping, Reed-Solomon encoding, and automatic disk repair across millions of storage nodes.</li>
+</ul>
+</li>
+<li><strong>Global Metadata on Google Cloud Spanner</strong>:
+<ul>
+<li>File directories, permissions, and sharing ACLs are stored in Google Cloud Spanner.</li>
+<li>Spanner's TrueTime atomic transactions guarantee that if a user revokes access to a shared folder, permission updates apply globally across all Google datacenters instantaneously without replication lag.</li>
+</ul>
+</li>
+<li><strong>Real-Time Collaborative Operational Transformation (OT)</strong>:
+<ul>
+<li>For native Google Docs files, Drive does not sync 4MB binary blocks. Instead, it uses <strong>Operational Transformation (OT)</strong> to stream individual keystroke character operations over WebSockets, allowing multiple users to edit the same sentence simultaneously in real-time.</li>
+</ul>
+</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

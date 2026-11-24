@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Metrics Monitoring And Alerting">
+  <title>System Design Metrics Monitoring And Alerting | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-44-system-design--metrics-monitoring--alerting-system">Module 44: System Design — Metrics Monitoring &amp; Alerting System</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a large-scale Metrics Monitoring &amp; Alerting System (Prometheus, Datadog, Google Monarch, Netflix Atlas), covering Time-Series Databases (TSDB), Gorilla compression, Pull vs. Push collection models, and sliding-window alert evaluation.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling metrics monitoring systems, review these core modules:</p>
+<ul>
+<li><a href="../09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (LSM-trees vs Append-only time-series engines)</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (High-throughput metric ingestion pipelines)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Alert deduplication, flapping prevention, on-call paging)</li>
+<li><a href="../35-system-design-notification-system/index.html">35 - Global Notification System</a> (PagerDuty, Slack, SMS dispatch)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine an intensive care unit (ICU) hospital with <strong>100,000 patient beds</strong>. Every second, sensors record each patient's heart rate, oxygen level, and blood pressure. That's millions of numbers arriving every minute!</p>
+<p>If a doctor's pager buzzed every single time a heart rate dipped for half a second, the doctor would go insane from false alarms (<strong>Alert Fatigue / Flapping</strong>). And if the hospital saved every single millisecond heart beat forever on hard drives, their storage would fill up in days.</p>
+<p>A <strong>Metrics Monitoring System</strong> takes millions of numbers per second, compresses them by 90% using mathematical tricks (<strong>Gorilla XOR Compression</strong>), shrinks old data into 1-hour averages (<strong>Downsampling / Rollups</strong>), and triggers alarms only when a patient's numbers stay dangerous for at least 3 minutes straight (<strong>Alert Evaluation Window</strong>)!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of an <strong>Air Traffic Control Tower Flight Telemetry Dashboard</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Air Traffic Analogy</th>
+<th style="text-align:left">Metrics Monitoring Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Cockpit Transponder Broadcasting Altitude</strong></td>
+<td style="text-align:left">Metric Datapoint (<code>name</code>, <code>tags</code>, <code>val</code>, <code>ts</code>)</td>
+<td style="text-align:left">4-tuple: Metric string, dimensional labels, float value, Unix timestamp.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Radar Sweeping Planes Every 5 Seconds</strong></td>
+<td style="text-align:left">Pull-Based Scraping (Prometheus)</td>
+<td style="text-align:left">Central collector polling <code>/metrics</code> HTTP endpoints on worker pods.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Radar Screen History Log Tape</strong></td>
+<td style="text-align:left">Time-Series Database (TSDB)</td>
+<td style="text-align:left">Specialized storage engine optimized for timestamp-ordered numeric sequences.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Compressing Identical Altitude Readings</strong></td>
+<td style="text-align:left">Gorilla Compression (Delta-of-Delta)</td>
+<td style="text-align:left">Bitwise compression reducing 16 bytes per datapoint to $\approx 1.37\text{ bytes}$.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Alarm Buzzer when Plane Altitude &lt; 1,000ft for 30s</strong></td>
+<td style="text-align:left">Alert Rule Evaluation (<code>PENDING</code> $\rightarrow$ <code>FIRING</code>)</td>
+<td style="text-align:left">Evaluates rules over sliding time windows before triggering PagerDuty.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Operating thousands of microservice instances across multi-region cloud clusters presents massive observability challenges:</p>
+<ol>
+<li><strong>Unprecedented Data Volume</strong>: 50,000 microservice pods emitting 100 metrics every 10 seconds generates <strong>500,000 datapoints/second</strong> ($43.2\text{ billion datapoints/day}$).</li>
+<li><strong>Heavy Read vs Write Asymmetry</strong>: Ingestion is 99% writes, while human engineers and dashboards execute complex aggregations (p99 latency over 7 days).</li>
+<li><strong>Storage Cost</strong>: Storing billions of uncompressed 64-bit float numbers in standard SQL databases consumes hundreds of terabytes and results in query timeouts.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Instrumentation[&quot;1. Metrics Collection Layer&quot;]
+        AppPod1[&quot;Microservice Pod A (/metrics)&quot;]
+        AppPod2[&quot;Microservice Pod B (/metrics)&quot;]
+        Daemon[&quot;Host Node Exporter (CPU/RAM)&quot;]
+    end
+
+    subgraph Ingestion[&quot;2. Collection Engine (Pull vs Push)&quot;]
+        PromPull[&quot;Metrics Collector / Scraper (Prometheus / Otel)&quot;]
+        PromPull --&gt;|&quot;HTTP GET /metrics (every 10s)&quot;| AppPod1
+        PromPull --&gt;|&quot;HTTP GET /metrics (every 10s)&quot;| AppPod2
+        PromPull --&gt;|&quot;HTTP GET /metrics (every 10s)&quot;| Daemon
+    end
+
+    subgraph TSDB[&quot;3. Time-Series Storage &amp; Downsampling&quot;]
+        PromPull --&gt; InMemBuffer[&quot;In-Memory Head Block (WAL + Gorilla XOR)&quot;]
+        InMemBuffer --&gt;|&quot;Flush 2h Blocks&quot;| BlockStorage[(&quot;Persistent TSDB (Local NVMe / S3)&quot;)]
+        BlockStorage --&gt; Downsampler[&quot;Compactor &amp; Downsampler (10s -&gt; 5m -&gt; 1h)&quot;]
+        Downsampler --&gt; ColdArchive[(&quot;Cold Long-Term Storage (S3 / GCS)&quot;)]
+    end
+
+    subgraph Alerting[&quot;4. Query &amp; Alert Evaluation Engine&quot;]
+        AlertRule[&quot;Alert Evaluator (Runs every 15s)&quot;]
+        AlertRule --&gt;|&quot;PromQL Query: p99 &gt; 500ms for 3m&quot;| InMemBuffer
+        AlertRule --&gt; StateCheck{&quot;State Machine&quot;}
+        StateCheck --&gt;|&quot;Breached &lt; 3m&quot;| Pending[&quot;State: PENDING (Do Not Page)&quot;]
+        StateCheck --&gt;|&quot;Breached &gt; 3m&quot;| Firing[&quot;State: FIRING (Page Engineer)&quot;]
+        Firing --&gt; AlertMgr[&quot;AlertManager (Deduplicate &amp; Group)&quot;]
+        AlertMgr --&gt; PagerDuty[&quot;PagerDuty / Slack / Email&quot;]
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
+<p>Consider a system monitoring <strong>50,000 Microservice Pods</strong>:</p>
+<ul>
+<li><strong>Data Ingestion Volume</strong>:
+<ul>
+<li>Each pod emits 100 unique metrics (CPU, RAM, request latency, error count, connection pools).</li>
+<li>Metrics collected every 10 seconds:</li>
+<li>Metric streams: $50,000 \times 100 = 5\text{ million time series}$.</li>
+<li>Ingestion rate: $5\text{M} / 10\text{ s} = 500,000\text{ metric datapoints/second}$.</li>
+<li>Daily datapoints: $500,000 \times 86,400 \approx 43.2\text{ billion datapoints/day}$.</li>
+</ul>
+</li>
+<li><strong>Gorilla Compression Sizing</strong>:
+<ul>
+<li>Raw uncompressed datapoint: 8-byte Unix timestamp + 8-byte IEEE 754 float = 16 bytes.</li>
+<li>Raw daily volume: $43.2\text{B} \times 16\text{ bytes} \approx 691.2\text{ Gigabytes/day}$.</li>
+<li>With <strong>Gorilla XOR Compression</strong> ($\approx 1.37\text{ bytes/datapoint}$ $\approx 12\times$ compression):</li>
+<li>Compressed daily volume: $43.2\text{B} \times 1.37\text{ bytes} \approx 59.2\text{ Gigabytes/day}$!</li>
+<li>59.2 GB fits easily on modern high-speed NVMe SSD drives.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-the-pull-vs-push-metrics-model">1. The Pull vs. Push Metrics Model</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Pull Model (Prometheus)</th>
+<th style="text-align:left">Push Model (Datadog / Graphite)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>How it works</strong></td>
+<td style="text-align:left">Central scraper queries HTTP <code>/metrics</code> on targets</td>
+<td style="text-align:left">Agents/apps push metrics to collector via UDP/HTTP</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Health Detection</strong></td>
+<td style="text-align:left">Automatic (if scrape fails, target is DOWN)</td>
+<td style="text-align:left">Difficult (silence could mean idle or dead)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Network &amp; Security</strong></td>
+<td style="text-align:left">Requires collector access to pod network</td>
+<td style="text-align:left">Firewall friendly (outbound traffic from pods)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Ephemeral Jobs</strong></td>
+<td style="text-align:left">Needs Pushgateway for short-lived batch jobs</td>
+<td style="text-align:left">Ideal for short-lived AWS Lambda / serverless</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-gorilla-tsdb-compression-facebook-engine">2. Gorilla TSDB Compression (Facebook Engine)</h3>
+<p>Modern TSDBs (Prometheus, InfluxDB, M3DB) use Facebook's <strong>Gorilla</strong> compression algorithms:</p>
+<ul>
+<li><strong>Timestamp Compression (Delta-of-Delta)</strong>:
+<ul>
+<li>Metrics arrive at predictable intervals (every 10s: $T_0, T_0+10, T_0+20$).</li>
+<li>The first delta is $D = T_n - T_{n-1} = 10$.</li>
+<li>The delta-of-delta is $\Delta = D_n - D_{n-1} = 10 - 10 = 0$.</li>
+<li>If $\Delta = 0$, store a single bit <code>0</code>! 95%+ of timestamps compress down to a single bit.</li>
+</ul>
+</li>
+<li><strong>Value Compression (XOR Floating Point)</strong>:
+<ul>
+<li>Metric values rarely fluctuate wildly (e.g., CPU 42.1%, then 42.15%).</li>
+<li>XOR the current float with the previous float: $V_n \oplus V_{n-1}$.</li>
+<li>Most leading and trailing bits are identical zeroes, allowing variable-length bit packing.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-downsampling--retention-policies">3. Downsampling &amp; Retention Policies</h3>
+<p>To keep query times fast across months of data:</p>
+<ul>
+<li><strong>Raw Tier (10-second resolution)</strong>: Retained for 14 days for live incident debugging.</li>
+<li><strong>5-Minute Rollups (avg, min, max, count)</strong>: Retained for 90 days.</li>
+<li><strong>1-Hour Rollups</strong>: Retained for 15 months for year-over-year capacity planning.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Relational DB (PostgreSQL / Timescale)</th>
+<th style="text-align:left">Centralized SaaS (Datadog)</th>
+<th style="text-align:left">Open-Source TSDB (Prometheus + Thanos)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Ingestion Scale</strong></td>
+<td style="text-align:left">Moderate (tens of thousands / sec)</td>
+<td style="text-align:left">Unlimited (cloud managed)</td>
+<td style="text-align:left">High (millions / sec with sharding)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Operational Overhead</strong></td>
+<td style="text-align:left">High (table vacuuming, partition maintenance)</td>
+<td style="text-align:left">Zero (SaaS)</td>
+<td style="text-align:left">Moderate (managing Kubernetes clusters)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cost at Scale</strong></td>
+<td style="text-align:left">Predictable infrastructure cost</td>
+<td style="text-align:left">Catastrophically expensive at scale</td>
+<td style="text-align:left">Low infrastructure cost</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Query Language</strong></td>
+<td style="text-align:left">SQL</td>
+<td style="text-align:left">Datadog UI</td>
+<td style="text-align:left">PromQL (powerful vector math)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>High Cardinality Explosions</strong>: Adding raw User IDs or IP addresses as metric labels (e.g., <code>http_requests_total{user_id=&quot;12345&quot;}</code>). Generating 10 million distinct label combinations creates 10 million distinct time-series streams in memory, causing out-of-memory crashes! <em>Rule: Labels must have bounded low cardinality (e.g., <code>status_code</code>, <code>method</code>, <code>endpoint</code>).</em></li>
+<li><strong>Missing Evaluation Window (&quot;Alert Flapping&quot;)</strong>: Triggering alerts on single instantaneous spikes causes engineers' phones to ring every time a GC pause occurs. Always require a sustained duration (<code>FOR 5m</code>).</li>
+<li><strong>Missing Downsampling</strong>: Querying 1 year of raw 10-second datapoints requires loading 3.1 million floats into memory per dashboard panel, freezing browser tabs.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (<code>OK</code> $\rightarrow$ <code>PENDING</code> $\rightarrow$ <code>FIRING</code>) is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 2 - Chapter 5 (Metrics Monitoring and Alerting System)</a></li>
+<li><a href="https://www.vldb.org/pvldb/vol8/p1816-teller.pdf">Pelkonen et al.: Gorilla - A Fast, Scalable, In-Memory Time Series Database (VLDB 2015)</a></li>
+<li><a href="https://prometheus.io/docs/prometheus/latest/storage/">Prometheus Architecture &amp; Storage Engine Internals</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-how-does-gorilla-compression-achieve-a-10x-reduction-in-time-series-storage-size">Q1: How does Gorilla compression achieve a 10x reduction in time-series storage size?</h3>
+<p><strong>Model Answer</strong>: Gorilla compresses timestamps and floating-point values independently:</p>
+<ol>
+<li><strong>Delta-of-Delta for Timestamps</strong>: Because metrics are scraped at regular intervals (e.g., every 10s), the difference between consecutive time deltas ($\Delta = (T_n - T_{n-1}) - (T_{n-1} - T_{n-2})$) is zero most of the time. When $\Delta = 0$, Gorilla stores a single bit <code>0</code>.</li>
+<li><strong>XOR Floating-Point Compression</strong>: Successive float values (e.g., CPU percentage) have similar binary representations. By computing $V_n \oplus V_{n-1}$, identical leading and trailing bits become zeros. Gorilla only encodes the number of leading and trailing zeros followed by the meaningful bits.
+Together, these techniques compress 16-byte datapoints down to an average of <strong>1.37 bytes</strong>.</li>
+</ol>
+<h3 id="q2-what-is-the-high-cardinality-problem-in-metrics-monitoring-and-how-do-you-prevent-it">Q2: What is the &quot;High Cardinality Problem&quot; in metrics monitoring, and how do you prevent it?</h3>
+<p><strong>Model Answer</strong>: In time-series databases, a unique time-series stream is created for every unique combination of metric name and key-value label pairs.</p>
+<ul>
+<li>If a developer adds a high-cardinality tag like <code>user_id</code> ($10	ext{M}$ values) or <code>order_id</code> ($100	ext{M}$ values) to a metric, the system must allocate 10 million independent time-series streams in memory.</li>
+<li>This results in memory exhaustion, massive index bloat, and TSDB crashes.</li>
+<li><strong>Prevention</strong>: Enforce strict admission control and linting rejecting UUIDs or dynamic strings in label keys. High-cardinality attributes belong in distributed tracing (OpenTelemetry) or structured logs, never metric labels.</li>
+</ul>
+<h3 id="q3-what-is-the-difference-between-pull-and-push-metrics-architectures-and-when-should-you-use-each">Q3: What is the difference between Pull and Push metrics architectures, and when should you use each?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ul>
+<li><strong>Pull Architecture (Prometheus)</strong>: The central monitoring server polls <code>/metrics</code> HTTP endpoints on target nodes. It provides automatic health detection (if the scrape fails, the target is known to be dead), eliminates backpressure from targets, and centralizes scrape frequencies.</li>
+<li><strong>Push Architecture (Datadog/CloudWatch)</strong>: Target services push metrics to a monitoring gateway. It is firewall-friendly (requires only outbound connections), ideal for ephemeral serverless workloads (AWS Lambda) that terminate before a scraper can poll them, and handles high-frequency event pushes.</li>
+</ul>
+<h3 id="q4-how-do-you-prevent-alert-fatigue-and-flapping-alerts">Q4: How do you prevent &quot;Alert Fatigue&quot; and flapping alerts?</h3>
+<p><strong>Model Answer</strong>:</p>
+<ol>
+<li><strong>Sustained Duration Condition (<code>FOR</code> clause)</strong>: Require the metric to breach the threshold continuously for $M$ minutes (e.g., <code>CPU &gt; 90% FOR 5m</code>) before advancing from <code>PENDING</code> to <code>FIRING</code>.</li>
+<li><strong>AlertManager Deduplication &amp; Grouping</strong>: Group related alerts into a single notification (e.g., if a datacenter switch fails, group 50 individual server unreachable alerts into <em>&quot;Datacenter Switch Offline: 50 pods affected&quot;</em>).</li>
+<li><strong>Inhibit Rules</strong>: Suppress downstream alerts when a root dependency has already triggered (e.g., if the entire database cluster is down, mute downstream API latency alerts).</li>
+</ol>
+<h3 id="q5-how-do-you-scale-prometheus-across-thousands-of-kubernetes-clusters">Q5: How do you scale Prometheus across thousands of Kubernetes clusters?</h3>
+<p><strong>Model Answer</strong>: Single-node Prometheus instances cannot handle global enterprise scale. We implement a distributed architecture using <strong>Thanos</strong> or <strong>Cortex/M3DB</strong>:</p>
+<ol>
+<li><strong>Local Prometheus per Cluster</strong>: Each Kubernetes cluster runs a local Prometheus instance with a short retention window (e.g., 24 hours).</li>
+<li><strong>Thanos Sidecar</strong>: Runs alongside Prometheus, streaming immutable 2-hour TSDB blocks directly to durable object storage (Google Cloud Storage / Amazon S3).</li>
+<li><strong>Thanos Query &amp; Store Gateway</strong>: A centralized querier evaluates global PromQL queries by fanning out across regional sidecars and object storage, providing unified multi-cluster dashboards with unlimited historical retention.</li>
+</ol>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. Why does Gorilla compression use XOR for floating-point values?</b></summary>
+A) Because XOR encrypts passwords.<br/>
+B) Because consecutive metric readings share identical leading and trailing bits, allowing variable-length encoding of the remaining bits.<br/>
+C) Because XOR turns floats into integers.<br/>
+D) Because XOR is faster than addition.<br/><br/>
+<b>Answer: B</b>. XORing similar floats yields many leading and trailing zero bits, achieving massive compression.
+</details>
+<details>
+<summary><b>2. What happens if a developer adds `user_id` as a metric label?</b></summary>
+A) The dashboard loads 10x faster.<br/>
+B) High Cardinality Explosion: creates millions of unique time-series streams, causing TSDB out-of-memory crashes.<br/>
+C) The database automatically converts to SQL.<br/>
+D) The network cable overheats.<br/><br/>
+<b>Answer: B</b>. Millions of label permutations multiply time-series streams, exhausting RAM.
+</details>
+<details>
+<summary><b>3. What is the alert state transition sequence in Prometheus?</b></summary>
+A) FIRING -> PENDING -> OK<br/>
+B) OK -> PENDING (during evaluation window) -> FIRING (if condition persists)<br/>
+C) ERROR -> WARNING -> CRITICAL<br/>
+D) SLEEP -> WAKE -> RUN<br/><br/>
+<b>Answer: B</b>. The intermediate PENDING state ensures transient blips do not page engineers.
+</details>
+<details>
+<summary><b>4. Why are short-lived serverless functions (like AWS Lambda) difficult to monitor via Pull scraping?</b></summary>
+A) Because Lambda does not use Python.<br/>
+B) Because Lambda instances spin up, execute in milliseconds, and terminate before a periodic scraper can initiate an HTTP connection.<br/>
+C) Because Lambda has no memory.<br/>
+D) Because Lambda is encrypted.<br/><br/>
+<b>Answer: B</b>. Ephemeral functions require push-based metrics emission before shutdown.
+</details>
+<details>
+<summary><b>5. What process reduces raw 10-second metrics into 1-hour historical rollups?</b></summary>
+A) Encryption<br/>
+B) Downsampling and Compaction<br/>
+C) Sharding<br/>
+D) Consistent Hashing<br/><br/>
+<b>Answer: B</b>. Downsampling averages historical intervals to keep long-term queries fast and storage affordable.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

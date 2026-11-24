@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Back-of-the-Envelope Estimation">
+  <title>Back-of-the-Envelope Estimation | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-back-of-the-envelope-estimation">Real-World Production Deep Dives: Back-of-the-Envelope Estimation</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix</strong> use quantitative estimation models for global capacity planning, datastore sizing, and network bandwidth forecasting.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-uses-quantitative-estimation-jeff-deans-capacity-planning">🏢 Deep Dive 1: How Google Uses Quantitative Estimation (Jeff Dean's Capacity Planning)</h2>
+<h3 id="1-production-context--history">1. Production Context &amp; History</h3>
+<ul>
+<li>In the early 2000s, Google Fellow <strong>Jeff Dean</strong> formulated the famous lecture <em>&quot;Numbers Everyone Should Know&quot;</em>, transforming distributed systems engineering from guesswork into rigorous quantitative sizing.</li>
+<li>Google SREs (Site Reliability Engineers) never deploy a new service without a <strong>Capacity Plan</strong> proving that network switches, memory allocations, and cluster CPU quotas can survive traffic growth.</li>
+</ul>
+<h3 id="2-googles-web-search-index-sizing-model">2. Google's Web Search Index Sizing Model</h3>
+<p>When Google sized its crawling and index storage:</p>
+<ol>
+<li><strong>The Crawl Target</strong>: Estimate 20 Billion web pages indexed.</li>
+<li><strong>Page Content</strong>: Average HTML page after compression is $\approx 20	ext{ KB}$.</li>
+<li><strong>Raw Storage Requirement</strong>:
+$$20,000,000,000 	imes 20	ext{ KB} = 400	ext{ Terabytes of raw text}$$</li>
+<li><strong>The Storage Multipliers</strong>:
+<ul>
+<li>Inverted word index + PageRank link graph adds $2	imes$ overhead $	o 800	ext{ TB}$.</li>
+<li>3x GFS / Colossus distributed replication $	o \mathbf{2.4	ext{ Petabytes}}$.</li>
+</ul>
+</li>
+<li><strong>Memory Sizing</strong>:
+<ul>
+<li>Google calculated that keeping the entire 2.4PB index in RAM was financially impossible.</li>
+<li>Using the 80/20 rule, they partitioned the inverted index so the top 20% most frequent search terms resided in RAM across thousands of leaf search machines, while long-tail queries fetched from disk.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="deep-dive-2-how-netflix-sizes-its-global-cdn-capacity-planning-for-260m-subscribers">🎬 Deep Dive 2: How Netflix Sizes Its Global CDN (Capacity Planning for 260M Subscribers)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li>Over 260 million active subscribers streaming over <strong>100+ million hours of video daily</strong>.</li>
+<li>Accounts for <strong>15%+ of the world's downstream internet traffic</strong>.</li>
+</ul>
+<h3 id="2-netflixs-open-connect-appliance-oca-sizing-math">2. Netflix's Open Connect Appliance (OCA) Sizing Math</h3>
+<p>How does Netflix determine how many physical storage appliances to ship to an ISP (e.g., Comcast in Chicago)?</p>
+<ol>
+<li><strong>Peak Evening Consumption</strong>:
+<ul>
+<li>Chicago subscribers stream a peak aggregate bandwidth of <strong>1.2 Terabits per second (Tbps)</strong> at 9:00 PM.</li>
+</ul>
+</li>
+<li><strong>OCA Hardware Capacity</strong>:
+<ul>
+<li>Each custom Netflix OCA server has a <strong>100Gbps network interface card</strong> and <strong>200TB of NVMe flash storage</strong>.</li>
+</ul>
+</li>
+<li><strong>Server Count Calculation</strong>:
+$$	ext{Servers Needed} = \frac{1,200	ext{ Gbps}}{100	ext{ Gbps/server}} = 12	ext{ Servers}$$
+Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Servers}}$ deployed in the Chicago IXP rack.</li>
+<li><strong>Storage Sizing</strong>:
+<ul>
+<li>14 servers $	imes$ 200TB $= 2.8	ext{ Petabytes}$ of local flash storage.</li>
+<li>Completely holds the top 4,000 most popular movies and episodes, delivering a <strong>$98%$ local cache hit rate</strong> with zero origin bandwidth consumption during prime time!</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="comparative-estimation-matrix">⚖️ Comparative Estimation Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Google SRE Planning</th>
+<th>Netflix Open Connect Planning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Primary Sizing Bottleneck</strong></td>
+<td>In-memory RAM for low-latency ranking (&lt;100ms)</td>
+<td>Egress network bandwidth (Tbps) at ISP edge</td>
+</tr>
+<tr>
+<td><strong>Replication Overhead</strong></td>
+<td>3x synchronous Paxos replication factor</td>
+<td>Proactive overnight push replication to edge OCAs</td>
+</tr>
+<tr>
+<td><strong>Safety Headroom Factor</strong></td>
+<td>$1.5	imes$ to $2.0	imes$ peak traffic headroom</td>
+<td>Provisioned for $N+2$ server rack failures</td>
+</tr>
+<tr>
+<td><strong>Cost Tradeoff</strong></td>
+<td>RAM vs NVMe Flash for search indexing</td>
+<td>Transit ISP peering fees vs Hardware CapEx</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Memorize the Rule of Thumb</strong>: Remember that $1	ext{M requests/day} \approx 12	ext{ QPS}$ and $1	ext{B requests/day} \approx 12,000	ext{ QPS}$. It allows you to produce immediate QPS answers in seconds.</li>
+<li><strong>Always Account for Replication Overhead</strong>: When calculating storage, never stop at raw data size. Always multiply by $3	imes$ for distributed replication (e.g. S3, GFS, Cassandra).</li>
+<li><strong>Buffer for Caching Overhead</strong>: In RAM estimation, always add a 20–30% memory buffer for data structure pointers, slab fragmentation, and hash map overhead.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

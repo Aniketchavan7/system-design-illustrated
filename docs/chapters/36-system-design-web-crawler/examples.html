@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Web Crawler">
+  <title>System Design Web Crawler | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-distributed-web-crawlers">Real-World Production Implementations: Distributed Web Crawlers</h1>
+<p>This document explores how Google and Internet Archive crawl the entire public web at planetary scale.</p>
+<hr />
+<h2 id="1-google-googlebot-architecture--planetary-crawling">1. Google: Googlebot Architecture &amp; Planetary Crawling</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google indexes hundreds of billions of web pages. <strong>Googlebot</strong> operates across thousands of servers distributed in Google data centers worldwide, coordinating via Google's distributed file system (Colossus) and Bigtable.</p>
+<pre><code class="language-mermaid">flowchart TD
+    Frontier[&quot;Mercator URL Frontier (Borg Cluster)&quot;] --&gt; Scheduler[&quot;Crawl Scheduler &amp; Rate Controller&quot;]
+    Scheduler --&gt; DNSPool[&quot;Google Global DNS Cache&quot;]
+    Scheduler --&gt; FetcherPool[&quot;Thousands of Headless Crawler Workers&quot;]
+    
+    FetcherPool --&gt; TargetHost[&quot;Target Web Servers (Worldwide)&quot;]
+    TargetHost --&gt; FetcherPool
+    
+    FetcherPool --&gt; Caffeine[&quot;Caffeine Indexing Pipeline&quot;]
+    Caffeine --&gt; Bigtable[(&quot;Bigtable (Document Repository)&quot;)]
+    Caffeine --&gt; DuplicateDetection[&quot;SimHash &amp; Content Dedup Engine&quot;]
+    Caffeine --&gt; LinkExtractor[&quot;Link Extractor&quot;]
+    LinkExtractor --&gt; Frontier
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Adaptive Host Politeness (Crawl Budget)</strong>:
+<ul>
+<li>Googlebot dynamically calculates the &quot;Crawl Budget&quot; for every website based on server response time and error rate.</li>
+<li>If a website returns HTTP 500 errors or response time slows from 200ms to 2,000ms, Googlebot immediately scales down its request frequency to protect the web server.</li>
+</ul>
+</li>
+<li><strong>Two-Stage Crawling (Crawling vs. Rendering)</strong>:
+<ul>
+<li><strong>Stage 1 (Immediate Crawl)</strong>: Fetches raw HTML and extracts hyperlinks immediately.</li>
+<li><strong>Stage 2 (WRS - Web Rendering Service)</strong>: Because modern websites rely heavily on JavaScript (React, Vue, Angular), raw HTML often contains empty <code>&lt;div&gt;</code> tags. Googlebot queues pages into WRS, which renders the DOM using headless Chromium, executing JavaScript to discover dynamically generated links.</li>
+</ul>
+</li>
+<li><strong>Caffeine Real-Time Incremental Indexer</strong>:
+<ul>
+<li>Replaced Google's legacy MapReduce batch indexing. Caffeine continuously processes crawled pages within seconds of crawling, pushing breaking news articles into Google Search results almost instantaneously.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-internet-archive-the-wayback-machine--heritrix-crawler">2. Internet Archive: The Wayback Machine &amp; Heritrix Crawler</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>The Internet Archive has preserved over <strong>800 billion web pages</strong> since 1996 using its open-source distributed crawler, <strong>Heritrix</strong>.</p>
+<pre><code class="language-mermaid">flowchart LR
+    Heritrix[&quot;Heritrix Distributed Crawler&quot;] --&gt; Frontier[&quot;BDB-backed URL Frontier&quot;]
+    Frontier --&gt; Politeness[&quot;Domain Delay Throttler&quot;]
+    Politeness --&gt; StreamDownload[&quot;Raw HTTP Stream Downloader&quot;]
+    StreamDownload --&gt; WARC[&quot;WARC Archive File Generator (ISO 28500)&quot;]
+    WARC --&gt; Petabox[(&quot;Petabox Storage Clusters&quot;)]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>WARC (Web ARChive) File Format</strong>:
+<ul>
+<li>Instead of storing individual web pages as separate disk files (which would exhaust file system inodes), Heritrix streams hundreds of HTTP request/response pairs sequentially into giant <strong>WARC (Web ARChive)</strong> container files (typically 1 GB per WARC).</li>
+</ul>
+</li>
+<li><strong>Long-Term Politeness</strong>:
+<ul>
+<li>Unlike commercial search engines that crawl aggressively for fresh news, Heritrix is designed for archival permanence. It enforces strict multi-second delays per host to ensure minimal impact on historical and academic web servers.</li>
+</ul>
+</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

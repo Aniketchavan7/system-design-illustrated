@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Distributed Job Scheduler">
+  <title>System Design Distributed Job Scheduler | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-distributed-job-schedulers">Real-World Production Implementations: Distributed Job Schedulers</h1>
+<p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Apache Airflow</strong>, and <strong>Celery</strong> schedule and coordinate billions of background tasks.</p>
+<hr />
+<h2 id="1-google-borg-chronos--distributed-cron-infrastructure">1. Google: Borg Chronos &amp; Distributed Cron Infrastructure</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Inside Google, the cluster management system (<strong>Borg</strong>) runs millions of containers across hundreds of thousands of machines. Google replaced fragile individual machine crontabs with <strong>Chronos</strong>, a fault-tolerant distributed cron service.</p>
+<pre><code class="language-mermaid">flowchart TD
+    Engineer[&quot;Google Engineer / SRE&quot;] --&gt;|&quot;Define Borg Job (.bcl)&quot;| ChronosLeader[&quot;Chronos Master Leader&quot;]
+    
+    subgraph HAControlPlane[&quot;Paxos Consensus Group&quot;]
+        ChronosLeader &lt;--&gt; Paxos[(&quot;Paxos State Machine (Chubby Lock)&quot;)]
+        ChronosStandby[&quot;Chronos Standby Replicas&quot;] &lt;--&gt; Paxos
+    end
+
+    ChronosLeader --&gt;|&quot;Due Tasks&quot;| BorgMaster[&quot;Borg Master (Cluster Orchestrator)&quot;]
+    BorgMaster --&gt; Borglet1[&quot;Borglet Worker Pod 1&quot;]
+    BorgMaster --&gt; Borglet2[&quot;Borglet Worker Pod 2&quot;]
+    
+    Borglet1 --&gt;|&quot;Execution Status&quot;| ChronosLeader
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Chubby Paxos Leader Election</strong>:
+<ul>
+<li>Chronos deploys across multiple datacenter cells.</li>
+<li>Master nodes maintain a persistent lock lease in <strong>Google Chubby</strong> (Google's Paxos lock service).</li>
+<li>If the active Chronos master suffers a hardware failure, a standby master takes over within 3 seconds, resuming the scheduler without dropping tasks.</li>
+</ul>
+</li>
+<li><strong>Job Failure Policies &amp; Overload Quotas</strong>:
+<ul>
+<li>Chronos allows developers to specify backoff policies (exponential backoff with jitter) and concurrent execution caps. If an hourly data pipeline job runs longer than 60 minutes, Chronos can either skip the next run or execute in parallel depending on policy.</li>
+</ul>
+</li>
+<li><strong>Colossus Persistent Logging</strong>:
+<ul>
+<li>Every job launch, stdout/stderr stream, and return code is stored in Google's distributed file system (<strong>Colossus</strong>), enabling global search and debugging across trillions of historical executions.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-netflix-meson--conductor-workflow-orchestration">2. Netflix: Meson &amp; Conductor Workflow Orchestration</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Netflix processes billions of asynchronous tasks daily: encoding 4K video files, training machine learning recommendation algorithms, and processing subscriber billing renewals. Netflix built <strong>Meson</strong> and open-sourced <strong>Netflix Conductor</strong> to orchestrate these distributed workflows.</p>
+<pre><code class="language-mermaid">flowchart TD
+    ClientSvc[&quot;Client Microservices&quot;] --&gt; Zuul[&quot;Netflix Zuul Gateway&quot;]
+    Zuul --&gt; ConductorServer[&quot;Netflix Conductor Server&quot;]
+    
+    subgraph ConductorCore[&quot;Conductor Orchestration Engine&quot;]
+        ConductorServer --&gt; Dynomite[(&quot;Dynomite / Redis (State &amp; Queues)&quot;)]
+        ConductorServer --&gt; Elasticsearch[(&quot;Elasticsearch (Workflow Index)&quot;)]
+    end
+
+    ConductorServer --&gt;|&quot;Dispatch Work&quot;| WorkerPool[&quot;Distributed Worker Fleet (EC2 / Titus Containers)&quot;]
+    WorkerPool --&gt;|&quot;Long-Poll Tasks&quot;| ConductorServer
+    WorkerPool --&gt;|&quot;Ack &amp; Heartbeat&quot;| ConductorServer
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>State Machine Directed Acyclic Graph (DAG)</strong>:
+<ul>
+<li>Complex business workflows are modeled as JSON-defined <strong>Directed Acyclic Graphs (DAGs)</strong>.</li>
+<li>Example: <em>Step 1: Reserve inventory -&gt; Step 2: Charge credit card -&gt; Step 3: Send email confirmation</em>.</li>
+<li>If Step 2 fails, Conductor executes automated compensating tasks in reverse order.</li>
+</ul>
+</li>
+<li><strong>Long-Polling Task Decoupling</strong>:
+<ul>
+<li>Rather than pushing tasks directly to workers (which can overwhelm busy servers), workers long-poll Conductor for work when they have idle compute capacity.</li>
+</ul>
+</li>
+<li><strong>Dynomite Distributed In-Memory Queue</strong>:
+<ul>
+<li>Conductor uses Netflix's <strong>Dynomite</strong> (distributed Redis wrapper) to manage in-flight task queues and millisecond state transitions with active-active cross-region replication.</li>
+</ul>
+</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

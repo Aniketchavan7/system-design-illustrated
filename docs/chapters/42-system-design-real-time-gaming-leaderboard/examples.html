@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Real Time Gaming Leaderboard">
+  <title>System Design Real Time Gaming Leaderboard | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-real-time-gaming-leaderboards">Real-World Production Implementations: Real-Time Gaming Leaderboards</h1>
+<p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Riot Games</strong>, and <strong>Epic Games</strong> architect and operate global real-time leaderboards for tens of millions of concurrent players.</p>
+<hr />
+<h2 id="1-google-google-play-games-leaderboard-services">1. Google: Google Play Games Leaderboard Services</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google Play Games supports billions of player accounts and hundreds of thousands of Android game titles. Its leaderboard service handles tens of billions of daily score submissions with global consistency.</p>
+<pre><code class="language-mermaid">flowchart TD
+    AndroidClient[&quot;Android Mobile Game&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
+    GFE --&gt; PlayGamesSvc[&quot;Play Games Leaderboard Service (Borg)&quot;]
+    
+    PlayGamesSvc --&gt; ShardRouter{&quot;Leaderboard Shard Router&quot;}
+    ShardRouter --&gt; BigtableActive[(&quot;Google Cloud Bigtable (Active Season Table)&quot;)]
+    ShardRouter --&gt; SpannerArchive[(&quot;Cloud Spanner (Historical Player Records)&quot;)]
+    
+    PlayGamesSvc --&gt; MemoryCache[(&quot;Regional In-Memory Skip List Caches&quot;)]
+    MemoryCache --&gt; AndroidClient
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Bigtable RowKey Design for Leaderboards</strong>:
+<ul>
+<li>Google stores leaderboards on <strong>Google Cloud Bigtable</strong>.</li>
+<li>RowKey format: <code>leaderboard_id#inverted_score#timestamp#user_id</code>.</li>
+<li>By inverting the score (<code>Integer.MAX_VALUE - score</code>), Bigtable's natural lexicographical B-Tree sorting automatically arranges high scores at the top of the table. Scanning the Top-100 is an instantaneous single-tablet range scan!</li>
+</ul>
+</li>
+<li><strong>Social vs. Global Leaderboards</strong>:
+<ul>
+<li>Google maintains two distinct leaderboards: <strong>Public Global</strong> and <strong>Friends Circle</strong>.</li>
+<li>Friends leaderboards are computed dynamically in-memory by taking the player's Google+ / Contacts social graph and intersecting with Bigtable score records.</li>
+</ul>
+</li>
+<li><strong>Anti-Cheat Heuristics</strong>:
+<ul>
+<li>Scores that deviate by more than 5 standard deviations from historical gameplay physics are flagged and diverted to a quarantine queue before touching the public leaderboard.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-netflix-netflix-games-global-player-ranking--social-challenges">2. Netflix: Netflix Games Global Player Ranking &amp; Social Challenges</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Netflix has expanded into mobile and cloud gaming, offering titles like <em>Stranger Things: 1984</em>, <em>Oxenfree</em>, and competitive multiplayer arcade games to over 260 million subscribers.</p>
+<pre><code class="language-mermaid">flowchart TD
+    GameClient[&quot;Netflix Game App (iOS / Android)&quot;] --&gt; Zuul[&quot;Netflix Zuul 2 Gateway&quot;]
+    Zuul --&gt; LeaderboardOrchestrator[&quot;Leaderboard Microservice&quot;]
+    
+    LeaderboardOrchestrator --&gt; RedisCluster[(&quot;EVCache / Redis Sorted Set Cluster&quot;)]
+    LeaderboardOrchestrator --&gt; Kafka[&quot;Kafka Score Event Stream&quot;]
+    
+    Kafka --&gt; Analytics[&quot;Netflix Keystone Streaming Analytics&quot;]
+    Kafka --&gt; AuroraDB[(&quot;Amazon Aurora MySQL (Cold Storage)&quot;)]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Redis Cluster ZSET Partitioning</strong>:
+<ul>
+<li>Netflix partitions tournament leaderboards by <code>game_id:tournament_season:country</code>.</li>
+<li>Player scores update in Redis Sorted Sets within 2ms.</li>
+</ul>
+</li>
+<li><strong>Profile-Aware Sub-Leaderboards</strong>:
+<ul>
+<li>Netflix accounts often have multiple household profiles (Kids, Adults).</li>
+<li>The leaderboard service scopes rankings to profile IDs, ensuring family members have independent rankings while enabling household challenge leaderboards.</li>
+</ul>
+</li>
+<li><strong>Keystone Stream Auditing</strong>:
+<ul>
+<li>Every score change emits an event to <strong>Netflix Keystone (Kafka)</strong>, which feeds real-time Flink analytics to detect abnormal score velocities (identifying botting and modified APKs).</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="3-riot-games-league-of-legends-ranked-tier-distribution">3. Riot Games: League of Legends Ranked Tier Distribution</h2>
+<ul>
+<li><strong>Division &amp; LP System</strong>: Rather than a single 100-million player leaderboard, Riot divides players into Tiers (Iron to Challenger) and divisions (I to IV).</li>
+<li><strong>Matchmaking Rating (MMR) vs. League Points (LP)</strong>: MMR is an internal hidden Elo score; LP is the visible leaderboard representation. This abstraction prevents player churn caused by sudden rank demotions after close losses.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

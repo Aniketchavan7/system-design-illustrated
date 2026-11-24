@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Web Crawler">
+  <title>System Design Web Crawler | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-36-system-design--distributed-web-crawler">Module 36: System Design — Distributed Web Crawler</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a large-scale Distributed Web Crawler (Googlebot style), covering the URL Frontier, Politeness Queues, Bloom Filter deduplication, DNS pre-resolution, and SimHash content deduplication.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling the distributed web crawler, review these core modules:</p>
+<ul>
+<li><a href="../02-domain-name-system/index.html">02 - Domain Name System</a> (DNS resolution, caching, and DNS lookup latency)</li>
+<li><a href="../08-database-partitioning/index.html">08 - Database Partitioning</a> (Sharding crawled document repositories)</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Distributing target hosts across crawler nodes)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Worker crashes, timeouts, and spider traps)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine you want to read every book in a 1,000-story library. You start with book #1 on the shelf. In book #1, the author cites 5 other books. You write down those 5 titles on your &quot;To-Read List&quot; (<strong>URL Frontier</strong>).</p>
+<p>When you finish book #1, you pick the next book from your list. But wait:</p>
+<ol>
+<li>What if three different books all cite the same book? You need a quick checklist to make sure you don't read the same book 50 times (<strong>Bloom Filter Deduplication</strong>).</li>
+<li>What if a mischievous book tells you to read Chapter 1, which tells you to read Chapter 2, which tells you to read Chapter 1 in an infinite loop (<strong>Spider Trap</strong>)?</li>
+<li>What if you storm into the library counter and demand 1,000 books in one second, crashing into the librarian (<strong>Host Politeness</strong>)?</li>
+</ol>
+<p>A <strong>Distributed Web Crawler</strong> uses a polite, intelligent frontier queue system to discover, fetch, parse, and catalog billions of web pages across the entire internet without crashing websites or getting stuck in infinite loops!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of an <strong>International Fleet of Postal Explorers Mapping Uncharted Islands</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Exploration Analogy</th>
+<th style="text-align:left">Distributed Web Crawler Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>List of Target Islands to Visit</strong></td>
+<td style="text-align:left">URL Frontier</td>
+<td style="text-align:left">Prioritized, politeness-controlled queue of URLs to crawl.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Explorers' Master Map of Visited Islands</strong></td>
+<td style="text-align:left">Visited URL Store (Bloom Filter)</td>
+<td style="text-align:left">High-speed probabilistic filter checking if a URL was already crawled.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Ship Speed Limits per Harbor</strong></td>
+<td style="text-align:left">Politeness Delay (1 request / sec / host)</td>
+<td style="text-align:left">Enforces crawl-delay to prevent overwhelming target web servers.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Harbor Rules Document on Dock</strong></td>
+<td style="text-align:left"><code>robots.txt</code> Parser &amp; Cache</td>
+<td style="text-align:left">Respects webmaster access policies and forbidden directories.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cataloging Flora and Fauna Specimens</strong></td>
+<td style="text-align:left">HTML Parser &amp; Content Extractor</td>
+<td style="text-align:left">Strips boilerplate, extracts text, and discovers new outbound hyperlinks.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Checking if Two Specimens are Identical</strong></td>
+<td style="text-align:left">Content Fingerprinting (SimHash)</td>
+<td style="text-align:left">Detects duplicate or near-duplicate articles across different domains.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>The World Wide Web contains tens of billions of publicly accessible web pages:</p>
+<ol>
+<li><strong>Immense Scale</strong>: Crawling 1 billion web pages per month requires fetching $\approx 400$ pages per second continuously 24/7.</li>
+<li><strong>Politeness Requirements</strong>: A crawler that fires 100 simultaneous requests at a small mom-and-pop blog is indistinguishable from a Distributed Denial of Service (DDoS) attack.</li>
+<li><strong>Spider Traps</strong>: Infinite dynamic calendar links (<code>/calendar?year=2026&amp;month=13&amp;day=...</code>) or circular redirects can trap a crawler forever, exhausting memory and disk.</li>
+<li><strong>Duplicate Content</strong>: Over 30% of web content consists of mirrored pages, syndicated news stories, or URL parameter variations (<code>?ref=twitter</code>). Storing duplicate copies wastes petabytes of storage.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Frontier[&quot;1. URL Frontier (Prioritization &amp; Politeness)&quot;]
+        SeedURLs[&quot;Seed URLs&quot;] --&gt; IngressQueue[&quot;Priority Queues (F1, F2...)&quot;]
+        IngressQueue --&gt; PrioritySelector[&quot;Priority Bias Selector&quot;]
+        PrioritySelector --&gt; HostRouting[&quot;Host Mapping (Consistent Hashing)&quot;]
+        HostRouting --&gt; HostQueues[&quot;Per-Host FIFO Queues (Host1, Host2...)&quot;]
+        HostQueues --&gt; PolitenessDelay[&quot;Politeness Delay Manager (Delay / Host)&quot;]
+    end
+
+    subgraph Fetcher[&quot;2. Fetching &amp; Parsing Engine&quot;]
+        PolitenessDelay --&gt; Worker[&quot;Crawler Worker Thread&quot;]
+        Worker --&gt; DNSCache[&quot;Local DNS Cache (Pre-Resolved IPs)&quot;]
+        Worker --&gt; RobotsCache[&quot;Robots.txt Cache (Disallow Rules)&quot;]
+        Worker --&gt; Download[&quot;HTTP Fetcher (Stream Downloader)&quot;]
+        Download --&gt; HTMLParser[&quot;HTML &amp; Link Parser&quot;]
+    end
+
+    subgraph StoragePipeline[&quot;3. Deduplication &amp; Storage&quot;]
+        HTMLParser --&gt; ContentDedup{&quot;Content Fingerprint (SimHash)&quot;}
+        ContentDedup --&gt;|&quot;Duplicate&quot;| DiscardDoc[&quot;Discard Document&quot;]
+        ContentDedup --&gt;|&quot;Unique&quot;| DocStore[(&quot;Document Blob Store (GCS/S3)&quot;)]
+        
+        HTMLParser --&gt; ExtractLinks[&quot;Extracted Outbound URLs&quot;]
+        ExtractLinks --&gt; URLFilter{&quot;Seen URL Filter (Bloom Filter)&quot;}
+        URLFilter --&gt;|&quot;Already Seen&quot;| DropURL[&quot;Drop URL&quot;]
+        URLFilter --&gt;|&quot;New URL&quot;| IngressQueue
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
+<p>Consider crawling <strong>1 Billion Web Pages per month</strong>:</p>
+<ul>
+<li><strong>Throughput Required</strong>:
+<ul>
+<li>1 Billion pages / $(30\text{ days} \times 86,400\text{ s}) \approx 386\text{ pages/second}$.</li>
+<li>Peak crawl throughput ($2\times$): $\approx 800\text{ pages/second}$.</li>
+</ul>
+</li>
+<li><strong>Bandwidth Sizing</strong>:
+<ul>
+<li>Average web page size (HTML + metadata): $100\text{ KB}$.</li>
+<li>Ingress bandwidth: $800\text{ pages/s} \times 100\text{ KB} = 80\text{ MB/s} = 640\text{ Mbps}$ continuous network ingress.</li>
+</ul>
+</li>
+<li><strong>Storage Sizing (1 Month Retention)</strong>:
+<ul>
+<li>Total raw HTML storage: $1\text{B} \times 100\text{ KB} = 100\text{ Terabytes/month}$.</li>
+<li>Compressed storage (gzip $\approx 3\times$ reduction): $\approx 33\text{ TB/month}$.</li>
+</ul>
+</li>
+<li><strong>Bloom Filter for URL Deduplication</strong>:
+<ul>
+<li>Tracking 1 billion URLs with a false-positive rate $p = 0.01$ (1%):</li>
+<li>Bits required: $m = -\frac{n \ln p}{(\ln 2)^2} \approx \frac{1\text{B} \times 4.605}{0.48} \approx 9.6\text{ billion bits} \approx 1.2\text{ GB}$ of RAM!</li>
+<li>1.2 GB of RAM easily fits inside a single server or Redis instance.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-the-url-frontier-design">1. The URL Frontier Design</h3>
+<p>Mercator-style URL Frontiers split queue management into two distinct layers:</p>
+<ul>
+<li><strong>Prioritization Layer (Prioritizer)</strong>: Multiple queues ($F_1, F_2, \dots, F_k$) where higher priority is given to authoritative domains (Wikipedia, BBC) and frequently updated pages.</li>
+<li><strong>Politeness Layer (Politeness Queues)</strong>:
+<ul>
+<li>URLs are partitioned into separate queues by host domain (<code>host = parse_domain(url)</code>).</li>
+<li>A thread-safe scheduler ensures that at most one connection is made to <code>example.com</code> per second, storing the <code>last_accessed_timestamp</code> per host in an in-memory heap or queue.</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-url-normalization">2. URL Normalization</h3>
+<p>Before checking if a URL has been seen, it must be canonicalized:</p>
+<ul>
+<li>Convert scheme and host to lowercase: <code>HTTP://Example.com/</code> $\rightarrow$ <code>http://example.com/</code></li>
+<li>Strip default ports: <code>:80</code> on HTTP, <code>:443</code> on HTTPS.</li>
+<li>Remove tracking fragments and query parameters: <code>/page#section</code> $\rightarrow$ <code>/page</code>, strip <code>?utm_source=...</code>.</li>
+<li>Resolve relative paths: <code>/news/../sports/index.html</code> $\rightarrow$ <code>/sports/index.html</code>.</li>
+</ul>
+<h3 id="3-spider-trap-avoidance">3. Spider Trap Avoidance</h3>
+<ul>
+<li><strong>Path Depth Limit</strong>: Reject URLs with depth $&gt; 10$ (<code>/a/b/c/d/e/f/g/h/i/j/k</code>).</li>
+<li><strong>Robots Exclusion Standard</strong>: Check <code>/robots.txt</code> before crawling any path.</li>
+<li><strong>Strict Fetch Timeouts</strong>: Set aggressive socket timeouts (e.g., 5 seconds) to avoid hanging on slow HTTP streams.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Breadth-First Search (BFS)</th>
+<th style="text-align:left">Depth-First Search (DFS)</th>
+<th style="text-align:left">Priority-Biased Politeness Frontier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Domain Coverage</strong></td>
+<td style="text-align:left">Broad coverage of shallow pages</td>
+<td style="text-align:left">Gets trapped deep in dynamic directories</td>
+<td style="text-align:left">Controlled balance of high-value sites</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Server Politeness</strong></td>
+<td style="text-align:left">Hits the same host repeatedly (DDoS risk)</td>
+<td style="text-align:left">Pounds single host consecutively</td>
+<td style="text-align:left">Guaranteed inter-request delay per host</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Crawl Trap Resilience</strong></td>
+<td style="text-align:left">Poor (fills memory with infinite links)</td>
+<td style="text-align:left">Worst (dives endlessly into loops)</td>
+<td style="text-align:left">Excellent (depth + length caps)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Engineering Complexity</strong></td>
+<td style="text-align:left">Minimal (single queue)</td>
+<td style="text-align:left">Minimal (single stack)</td>
+<td style="text-align:left">High (dual-tier priority + politeness queues)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>DNS Bottleneck</strong>: Making a synchronous DNS query for every single URL introduces a $20 - 100\text{ ms}$ latency penalty per link. <em>Rule: Maintain a dedicated local in-memory DNS cache (e.g., dnsmasq or custom DNS pool) with pre-resolved IP mappings.</em></li>
+<li><strong>Ignoring <code>robots.txt</code></strong>: Crawling web servers without checking <code>robots.txt</code> violates web conventions and can result in legal notices and immediate IP blacklisting. Cache <code>robots.txt</code> per host with a 24-hour TTL.</li>
+<li><strong>Exact-Match Content Comparison</strong>: Checking if page HTML is 100% identical via SHA-256 fails because minor changes (e.g., dynamic timestamps or copyright years) alter the cryptographic hash. <em>Use 64-bit SimHash or MinHash to detect near-duplicate pages.</em></li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating a multi-threaded web crawler with per-host politeness throttling, Bloom filter URL deduplication, robots.txt compliance, and HTML parsing is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://www.cs.princeton.edu/courses/archive/fall06/cos435/papers/mercatortopics.pdf">Mercator: A Scalable, Extensible Web Crawler (Heydon &amp; Najork, 1999)</a></li>
+<li><a href="https://developers.google.com/search/docs/crawling-indexing/googlebot">Google Engineering: Googlebot and Web Crawling Architecture</a></li>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 1 - Chapter 9 (Design a Web Crawler)</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-how-does-a-web-crawler-guarantee-politeness-so-it-doesnt-ddos-target-websites">Q1: How does a Web Crawler guarantee politeness so it doesn't DDoS target websites?</h3>
+<p><strong>Model Answer</strong>: Politeness is enforced via the <strong>URL Frontier's Politeness Queue Architecture</strong>:</p>
+<ol>
+<li>URLs are mapped to host-specific FIFO queues based on domain name (e.g., <code>queue:nytimes.com</code>, <code>queue:wikipedia.org</code>).</li>
+<li>A dedicated scheduler assigns worker threads to host queues using a priority heap tracking <code>next_allowed_crawl_time</code>.</li>
+<li>When a worker finishes fetching from <code>nytimes.com</code>, it records <code>timestamp + delay</code> (typically 500ms to 1s, or specified by <code>Crawl-delay</code> in <code>robots.txt</code>). No worker is permitted to fetch from <code>nytimes.com</code> until that cooldown elapses.</li>
+</ol>
+<h3 id="q2-how-do-you-detect-and-avoid-spider-traps">Q2: How do you detect and avoid &quot;Spider Traps&quot;?</h3>
+<p><strong>Model Answer</strong>: Spider traps are websites generating infinite URLs dynamically (e.g., infinite calendar pages or recursive directory links). We combat traps using multiple heuristic filters:</p>
+<ol>
+<li><strong>URL Length &amp; Depth Capping</strong>: Discard URLs exceeding 255 characters or path depth $&gt; 8$ segments.</li>
+<li><strong>Repeating Pattern Detection</strong>: Regular expression filters detecting repeating path segments (<code>/blog/archive/blog/archive/...</code>).</li>
+<li><strong>Per-Host Page Limits</strong>: Cap the maximum number of pages crawled per domain (e.g., 50,000 pages max per site).</li>
+<li><strong>Content-Based Near-Duplicate Detection</strong>: Using SimHash to identify when structurally identical pages are being dynamically generated.</li>
+</ol>
+<h3 id="q3-why-is-a-bloom-filter-preferred-over-a-hash-set-for-tracking-visited-urls">Q3: Why is a Bloom Filter preferred over a Hash Set for tracking visited URLs?</h3>
+<p><strong>Model Answer</strong>: Scale. Tracking 10 billion URLs in a standard Python/Java Hash Set (each URL $\approx 80\text{ bytes}$) requires at least $800\text{ GB}$ to $1.2\text{ TB}$ of RAM due to object pointer overhead.
+A <strong>Bloom Filter</strong> is an in-memory bit array with multiple cryptographic hash functions:</p>
+<ul>
+<li>Requires only $\approx 9.6\text{ bits}$ per item for a 1% false positive rate.</li>
+<li>10 billion URLs require only $\approx 12\text{ GB}$ of RAM.</li>
+<li>While a Bloom filter can have false positives (falsely assuming a new URL was visited), in web crawling a 0.5% skip rate is completely acceptable compared to the 98% savings in memory infrastructure.</li>
+</ul>
+<h3 id="q4-how-do-you-identify-duplicate-or-near-duplicate-web-pages-across-different-domains">Q4: How do you identify duplicate or near-duplicate web pages across different domains?</h3>
+<p><strong>Model Answer</strong>: Using <strong>SimHash (Locality-Sensitive Hashing)</strong>:</p>
+<ol>
+<li>Tokenize document text into words/n-grams.</li>
+<li>Hash each word into a 64-bit binary vector.</li>
+<li>Compute a weighted sum vector across all words (incrementing bit positions for 1s, decrementing for 0s).</li>
+<li>The final 64-bit SimHash fingerprint has the mathematical property that documents with 90%+ identical content differ by only a few bits (Hamming distance $\le 3$).</li>
+<li>Matching documents with Hamming distance $\le 3$ flags near-duplicates (e.g., republished syndicated news articles) without performing full text comparison.</li>
+</ol>
+<h3 id="q5-how-do-you-handle-dns-lookup-bottlenecks-when-fetching-hundreds-of-pages-per-second">Q5: How do you handle DNS lookup bottlenecks when fetching hundreds of pages per second?</h3>
+<p><strong>Model Answer</strong>: Standard synchronous DNS resolution takes 20ms to 100ms per domain, which paralyzes crawler worker threads. We resolve this by:</p>
+<ol>
+<li><strong>Local DNS Caching</strong>: Maintaining a high-throughput in-memory DNS cache mapping domains to resolved IP addresses with an asynchronous refresh thread.</li>
+<li><strong>DNS Pre-fetching</strong>: When outbound URLs are parsed from a page, background workers immediately initiate non-blocking asynchronous DNS queries (<code>getaddrinfo</code> async) so IPs are already cached when the URL reaches the head of the frontier queue.</li>
+</ol>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. What is the primary purpose of the Politeness layer in the URL Frontier?</b></summary>
+A) To translate foreign languages.<br/>
+B) To ensure target web servers are not overwhelmed with concurrent requests from the crawler.<br/>
+C) To remove CSS files.<br/>
+D) To encrypt web pages.<br/><br/>
+<b>Answer: B</b>. Politeness queues throttle requests per host (typically 1 req/sec) to avoid accidental Denial of Service.
+</details>
+<details>
+<summary><b>2. Why is SimHash preferred over SHA-256 for document deduplication?</b></summary>
+A) SimHash is faster to compute.<br/>
+B) SHA-256 changes completely on a single character difference, whereas SimHash preserves similarity, allowing near-duplicate detection.<br/>
+C) SHA-256 only works on numbers.<br/>
+D) SimHash encrypts the URL.<br/><br/>
+<b>Answer: B</b>. Locality-Sensitive Hashing (SimHash) produces fingerprints where small text variations yield small Hamming distances.
+</details>
+<details>
+<summary><b>3. What file does a polite web crawler inspect first before requesting pages from a domain?</b></summary>
+A) `/index.html`<br/>
+B) `/robots.txt`<br/>
+C) `/favicon.ico`<br/>
+D) `/sitemap.xml`<br/><br/>
+<b>Answer: B</b>. `/robots.txt` specifies webmaster crawl permissions, disallow paths, and crawl delays.
+</details>
+<details>
+<summary><b>4. How does URL Normalization prevent redundant crawling?</b></summary>
+A) By converting relative paths, lowercase schemes, and removing query fragments so identical pages map to the same URL string.<br/>
+B) By deleting foreign characters.<br/>
+C) By compressing URLs with gzip.<br/>
+D) By purchasing new domain names.<br/><br/>
+<b>Answer: A</b>. Normalization canonicalizes URLs (`HTTP://Site.com/a#sec` $\rightarrow$ `http://site.com/a`) so duplicates hit the cache.
+</details>
+<details>
+<summary><b>5. In a Bloom Filter, what does a positive result ("Found") indicate?</b></summary>
+A) The item is 100% guaranteed to be in the set.<br/>
+B) The item is probably in the set (with a small configurable false positive probability), but never a false negative.<br/>
+C) The item was deleted.<br/>
+D) The server is down.<br/><br/>
+<b>Answer: B</b>. Bloom filters can yield false positives, but never false negatives ("Never False Negative, Sometimes False Positive").
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

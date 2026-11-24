@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CAP &amp; PACELC Theorems: Distributed Trade-offs">
+  <title>CAP &amp; PACELC Theorems: Distributed Trade-offs | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-cap-and-pacelc-theorems">Real-World Production Deep Dives: CAP and PACELC Theorems</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google Cloud Spanner</strong> and <strong>Amazon Dynamo / Netflix Cassandra</strong> make fundamentally opposite engineering choices under the CAP and PACELC theorems.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-spanner-chooses-cp-the-pacelc-pcec-reality">🏢 Deep Dive 1: How Google Spanner Chooses CP (The PACELC PC/EC Reality)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Cloud Spanner.</li>
+<li><strong>Mission</strong>: Global relational database backing Google AdWords, Google Play Store, and enterprise financial ledgers.</li>
+<li><strong>Design Philosophy</strong>: Zero tolerance for data inconsistencies, phantom reads, or split-brain records under any circumstances.</li>
+</ul>
+<h3 id="2-the-theoretical-tradeoff">2. The Theoretical Tradeoff</h3>
+<ul>
+<li><strong>The CAP Classification</strong>: <strong>CP (Consistency + Partition Tolerance)</strong>.
+<ul>
+<li>In the event of a network partition (e.g., transatlantic undersea fiber cable cut), Spanner chooses to <strong>reject or stall writes</strong> in the minority partition rather than serve stale or conflicting data.</li>
+</ul>
+</li>
+<li><strong>The PACELC Classification</strong>: <strong>PC / EC</strong>
+<ul>
+<li><strong>P/C</strong>: If there is a Partition, choose <strong>Consistency</strong> over Availability.</li>
+<li><strong>E/C</strong>: Else (during normal operational conditions), choose <strong>Consistency</strong> over Latency.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-spanners-architecture-under-network-partitions">3. Spanner's Architecture Under Network Partitions</h3>
+<pre><code>[ US Data Center (Leader) ] ── (Fiber Cut!) ── [ EU Data Center (Follower) ]
+            │                                             │
+      Majority Quorum (3/5)                         Minority Quorum (2/5)
+            │                                             │
+            ▼                                             ▼
+   [ Writes Accepted! ]                          [ Writes Frozen / Halted! ]
+   (Paxos consensus reached)                     (Cannot reach majority; halts
+                                                  to guarantee zero split-brain)
+</code></pre>
+<h4 id="a-the-paxos-majority-rule">A. The Paxos Majority Rule</h4>
+<ul>
+<li>Spanner partitions data across Paxos groups of size $N$ (e.g., 5 replicas).</li>
+<li>A write transaction requires a majority quorum ($\lfloor N/2 \rfloor + 1 = 3$).</li>
+<li>If a network partition isolates 2 European replicas from the 3 US replicas:
+<ul>
+<li>The US group still has 3 replicas, maintains majority quorum, and continues processing transactions normally.</li>
+<li>The EU group only has 2 replicas. It <strong>cannot form a majority</strong>. Instead of returning stale data or accepting localized writes, it <strong>halts and times out writes with an error</strong>.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-why-google-claims-spanner-is-effectively-ca-in-practice">B. Why Google Claims Spanner is &quot;Effectively CA&quot; in Practice</h4>
+<p>In 2017, Google Fellow Eric Brewer published the seminal paper: <em>&quot;Spanner: Becoming a CAP-Available System&quot;</em>:</p>
+<ul>
+<li>While Spanner is mathematically a CP system, Google built a <strong>private fiber-optic global backbone network</strong> with redundant physical paths and automated SD-WAN traffic re-routing.</li>
+<li>Google measured their private network partition rate to be virtually negligible.</li>
+<li><strong>The Insight</strong>: Because Google controls the underlying physical network and bounds partition probability to near zero, Spanner delivers <strong>five-nines (99.999%) availability</strong> to users in practice while maintaining strict mathematical consistency!</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-amazon-dynamo--netflix-cassandra-choose-ap-the-pacelc-pael-reality">📦 Deep Dive 2: How Amazon Dynamo &amp; Netflix Cassandra Choose AP (The PACELC PA/EL Reality)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Amazon Dynamo (original 2007 paper) and Apache Cassandra (utilized by Netflix).</li>
+<li><strong>Mission</strong>: The Amazon Shopping Cart and the Netflix Viewing History / Home Screen.</li>
+<li><strong>Design Philosophy</strong>: An online shopper must <strong>never be denied the ability to add an item to their cart</strong>. Dropping a write because a database node or network link is lagging directly loses sales revenue.</li>
+</ul>
+<h3 id="2-the-theoretical-tradeoff">2. The Theoretical Tradeoff</h3>
+<ul>
+<li><strong>The CAP Classification</strong>: <strong>AP (Availability + Partition Tolerance)</strong>.
+<ul>
+<li>If a network partition occurs, all nodes continue accepting writes independently, sacrificing global consistency.</li>
+</ul>
+</li>
+<li><strong>The PACELC Classification</strong>: <strong>PA / EL</strong>
+<ul>
+<li><strong>P/A</strong>: If there is a Partition, choose <strong>Availability</strong> over Consistency.</li>
+<li><strong>E/L</strong>: Else (during normal operational conditions), choose <strong>Latency</strong> over Consistency.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-architecture-under-network-partitions">3. Architecture Under Network Partitions</h3>
+<pre><code>[ Region A (Isolated) ]                  [ Region B (Isolated) ]
+          │                                        │
+          ▼                                        ▼
+[ Accepts Write: Cart=[Item 1] ]         [ Accepts Write: Cart=[Item 2] ]
+          │                                        │
+          └─────────── (Network Heals!) ───────────┘
+                               │
+                               ▼
+        [ Asynchronous Conflict Reconciliation: Merged Cart ]
+              Cart = [Item 1, Item 2] (via Vector Clocks / CRDTs)
+</code></pre>
+<h4 id="a-accepting-conflicting-writes-during-partitions">A. Accepting Conflicting Writes During Partitions</h4>
+<ul>
+<li>When Amazon's data centers experience a network partition, both sides of the network continue to accept cart updates.</li>
+<li>If a user in Region A adds a book and in Region B adds a laptop, both writes succeed instantly.</li>
+<li>When the network partition resolves, the system reconciles the divergent histories using <strong>Vector Clocks</strong> or <strong>CRDTs (Conflict-Free Replicated Data Types)</strong>, merging the carts so no items are lost.</li>
+</ul>
+<h4 id="b-normal-operations-the-el-tradeoff">B. Normal Operations (The EL Tradeoff)</h4>
+<ul>
+<li>Even when no network partition exists, Dynamo/Cassandra choose <strong>Latency (L)</strong> over Consistency (C).</li>
+<li>Rather than waiting for all replicas worldwide to confirm a write, the database accepts a write as soon as a <code>LOCAL_QUORUM</code> (or even <code>ONE</code>) node acknowledges, responding in <strong>&lt;2ms</strong>. Discrepancies are repaired asynchronously in the background.</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix-the-pacelc-landscape">⚖️ Comparative Architecture Matrix: The PACELC Landscape</h2>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>CAP Class</th>
+<th>PACELC Class</th>
+<th>Core Invariant</th>
+<th>Failure Mode Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Google Cloud Spanner</strong></td>
+<td>CP</td>
+<td><strong>PC / EC</strong></td>
+<td>Consistency is Sacred</td>
+<td>Minority partition blocks writes until network heals</td>
+</tr>
+<tr>
+<td><strong>Amazon Dynamo (Original)</strong></td>
+<td>AP</td>
+<td><strong>PA / EL</strong></td>
+<td>Availability is Sacred</td>
+<td>Accepts writes on all partitions; resolves conflicts later</td>
+</tr>
+<tr>
+<td><strong>Apache Cassandra (Netflix)</strong></td>
+<td>AP (Tunable)</td>
+<td><strong>PA / EL</strong></td>
+<td>Low Latency &amp; Availability</td>
+<td>Serves local quorum writes; background repairs</td>
+</tr>
+<tr>
+<td><strong>Apache HBase / Bigtable</strong></td>
+<td>CP</td>
+<td><strong>PC / EC</strong></td>
+<td>Single Master Consistency</td>
+<td>Tablet unavailable if region server loses ZooKeeper lock</td>
+</tr>
+<tr>
+<td><strong>Amazon DynamoDB (Default)</strong></td>
+<td>AP (Tunable)</td>
+<td><strong>PA / EL</strong></td>
+<td>High Availability &amp; Speed</td>
+<td>Eventual consistency default; strong consistency optional</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Just Say &quot;CAP Theorem&quot; — Use PACELC</strong>: Impress interviewers by analyzing normal operational states. The CAP theorem only tells you what happens <em>during a partition</em>. <strong>PACELC</strong> explains what happens 99.99% of the time during normal operations (Latency vs Consistency).</li>
+<li><strong>Business Requirements Dictate CP vs AP</strong>:
+<ul>
+<li>Recommend <strong>CP (PC/EC)</strong> for financial accounting, inventory reservation, flight bookings, and authentication state.</li>
+<li>Recommend <strong>AP (PA/EL)</strong> for social media feeds, shopping carts, video bookmarks, messaging status, and metrics.</li>
+</ul>
+</li>
+<li><strong>The Myth of CA</strong>: Explain to interviewers that a distributed system across network boundaries cannot choose &quot;CA&quot; because network partitions are physical inevitabilities (backhoes cutting fiber lines, switch failures). You must choose between C and A when P occurs.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

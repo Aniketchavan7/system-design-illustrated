@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Distributed Unique ID Generator">
+  <title>Distributed Unique ID Generator | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-distributed-unique-id-generator">Real-World Production Deep Dives: Distributed Unique ID Generator</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Twitter</strong>, and <strong>Discord</strong> generate billions of unique IDs per day, structure 64-bit bitmasks, and avoid database index fragmentation.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-generates-globally-ordered-ids-with-truetime--spanner">🌐 Deep Dive 1: How Google Generates Globally Ordered IDs with TrueTime &amp; Spanner</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<p>Google operates at planetary scale across dozens of globally distributed datacenters. Systems like Google Cloud Spanner, Google Ads, and Bigtable require globally monotonic, unique transaction IDs without a single centralized bottleneck.</p>
+<h3 id="2-googles-solution-hardware-synchronized-truetime-monotonic-ids">2. Google's Solution: Hardware-Synchronized TrueTime Monotonic IDs</h3>
+<p>Rather than relying on local machine clocks (which drift by hundreds of milliseconds), Google installed atomic clocks and GPS receivers in every datacenter to build <strong>TrueTime</strong>:</p>
+<ul>
+<li>Every Spanner transaction receives an immutable commit timestamp $t$.</li>
+<li>TrueTime exposes an API: <code>TT.now()</code> returning an interval $[t_{earliest}, t_{latest}]$ with bounded uncertainty $\epsilon \le 7\text{ ms}$.</li>
+<li>If Transaction $T_2$ is initiated after Transaction $T_1$ commits, Spanner guarantees $t(T_2) &gt; t(T_1)$ by waiting out the uncertainty window $\epsilon$ (&quot;commit wait&quot;).</li>
+<li><strong>ID Formation</strong>: Spanner transaction and entity IDs pack TrueTime nanoseconds directly into the most significant bits of 64-bit and 128-bit integers, ensuring sequential B-Tree storage and causal ordering across the entire globe without coordination.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-generates-distributed-request--session-ids">🍿 Deep Dive 2: How Netflix Generates Distributed Request &amp; Session IDs</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<p>Netflix streams billions of hours of video to over 260 million subscribers. Every playback session, diagnostic log event, and microservice call requires a unique, non-colliding identifier to enable distributed tracing and analytics across 1,000+ microservices.</p>
+<h3 id="2-netflix-zuul--edgar-distributed-tracing-ids">2. Netflix Zuul &amp; Edgar Distributed Tracing IDs</h3>
+<ul>
+<li><strong>Playback Session UUIDs</strong>: When a subscriber presses Play on a Smart TV, Netflix's client SDK initializes a cryptographically random, time-bound session ID.</li>
+<li><strong>Trace Context Propagation</strong>: At the edge API Gateway (<strong>Zuul</strong>), Netflix generates a 64-bit trace identifier using high-throughput pseudo-random sequence generators partitioned by edge worker instance ID.</li>
+<li><strong>Edgar Diagnostics</strong>: Netflix's distributed tracing system (<strong>Edgar</strong>) uses time-sortable 64-bit IDs to aggregate logs, metrics, and network call trees across Cassandra and Elasticsearch clusters, allowing engineers to diagnose playback issues for any subscriber session in milliseconds.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-3-how-twitter-invented-snowflake-overcoming-mysql-auto-increment">🐦 Deep Dive 3: How Twitter Invented Snowflake (Overcoming MySQL Auto-Increment)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Invention</strong>: Created by Twitter in 2010 to solve internal tweet ID generation.</li>
+<li><strong>Scale</strong>: Hundreds of millions of tweets, retweets, and direct messages per day.</li>
+<li><strong>Latency Requirement</strong>: Sub-millisecond generation without centralized database locking.</li>
+</ul>
+<h3 id="2-the-core-problem-at-twitter-scale">2. The Core Problem at Twitter Scale</h3>
+<p>Prior to Snowflake, Twitter stored tweets in a sharded MySQL database:</p>
+<ul>
+<li>Each shard used MySQL's <code>auto_increment_increment</code> and <code>auto_increment_offset</code>.</li>
+<li><strong>The Catastrophic Limitations</strong>:
+<ol>
+<li>Adding a new database shard required re-configuring the increment step across all existing databases.</li>
+<li>Sequential IDs provided no temporal ordering: Tweet <code>#1005</code> created on Shard 2 could have been posted <em>before</em> Tweet <code>#1004</code> on Shard 1.</li>
+<li>Sorting tweets chronologically for home timelines required reading from all shards and executing expensive in-memory merge-sorts.</li>
+</ol>
+</li>
+</ul>
+<h3 id="3-twitters-architecture-apache-thrift-snowflake-service">3. Twitter's Architecture: Apache Thrift Snowflake Service</h3>
+<ul>
+<li>1,024 distinct worker nodes coordinated by Apache ZooKeeper.</li>
+<li>Bit allocation: 1 sign bit + 41 timestamp bits + 10 worker bits + 12 sequence bits.</li>
+<li>Generates up to 4,096 unique IDs per millisecond per worker node.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-4-how-discord-uses-snowflake-ids-everywhere">🎮 Deep Dive 4: How Discord Uses Snowflake IDs Everywhere</h2>
+<ul>
+<li><strong>Design Decision</strong>: Every primary key in Discord's entire architecture is an explicit Snowflake ID (users, messages, channels, servers).</li>
+<li><strong>Client Timestamp Extraction</strong>: Because the first 41 bits represent milliseconds since Discord's epoch (January 1, 2015: <code>1420070400000</code>), Discord clients extract the exact creation timestamp of any message directly from the ID in JavaScript without querying backend databases:</li>
+</ul>
+<p>$$\text{Timestamp (ms)} = (\text{Discord_ID} \gg 22) + 1420070400000$$</p>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Spanner TrueTime</th>
+<th>Netflix Session ID</th>
+<th>Twitter Snowflake</th>
+<th>Discord Snowflake</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Ordering Guarantee</strong></td>
+<td>Strictly Linearizable Globally</td>
+<td>Causally Bounded</td>
+<td>Roughly Monotonic</td>
+<td>Roughly Monotonic</td>
+</tr>
+<tr>
+<td><strong>Bit Length</strong></td>
+<td>64-bit / 128-bit</td>
+<td>64-bit / 128-bit UUID</td>
+<td>64-bit</td>
+<td>64-bit</td>
+</tr>
+<tr>
+<td><strong>Clock Dependency</strong></td>
+<td>Atomic Clocks &amp; GPS</td>
+<td>System time + Random</td>
+<td>System NTP (pause on drift)</td>
+<td>System NTP</td>
+</tr>
+<tr>
+<td><strong>Throughput</strong></td>
+<td>Millions / sec global</td>
+<td>Tens of millions / sec</td>
+<td>4,096 / ms / node</td>
+<td>4,096 / ms / node</td>
+</tr>
+<tr>
+<td><strong>Storage Engine</strong></td>
+<td>Google Spanner / Bigtable</td>
+<td>Cassandra / Elasticsearch</td>
+<td>Manhattan / MySQL</td>
+<td>ScyllaDB / Cassandra</td>
+</tr>
+</tbody>
+</table>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

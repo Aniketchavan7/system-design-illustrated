@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Distributed In-Memory Cache (Redis Cluster)">
+  <title>System Design: Distributed In-Memory Cache (Redis Cluster) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-in-memory-cache-redis--twemproxy">Real-World Production Deep Dives: In-Memory Cache (Redis &amp; Twemproxy)</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Twitter / X</strong> and <strong>Netflix</strong> implement massive in-memory caching fleets, prevent slab fragmentation, manage connection pooling, and sustain hundreds of millions of operations per second.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-twitter--x-uses-in-memory-caching-twemproxy--pelikan">🐦 Deep Dive 1: How Twitter / X Uses In-Memory Caching (Twemproxy &amp; Pelikan)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Twitter Caching Fleet (formerly Twemproxy, now <strong>Pelikan Cache</strong>).</li>
+<li><strong>Scale</strong>: Hundreds of millions of queries per second across tens of thousands of cache instances holding terabytes of social graph, tweet metadata, and timeline states in RAM.</li>
+<li><strong>Latency Requirement</strong>: P99 latency <strong>under 1.5 milliseconds</strong>.</li>
+</ul>
+<h3 id="2-the-core-problem-at-twitter-scale">2. The Core Problem at Twitter Scale</h3>
+<ol>
+<li><strong>TCP Connection Exhaustion</strong>:
+<ul>
+<li>Thousands of frontend backend services connecting directly to hundreds of Redis/Memcached instances created millions of active TCP sockets, exhausting server file descriptors and causing CPU thrashing due to kernel context switching.</li>
+</ul>
+</li>
+<li><strong>Memory Fragmentation &amp; The &quot;Out of Memory&quot; Paradox</strong>:
+<ul>
+<li>Standard memory allocators (like <code>malloc</code>) suffer from memory fragmentation when handling millions of variable-sized tweet payloads. A cache node could report 90% memory utilization yet fail an allocation due to lack of contiguous free memory.</li>
+</ul>
+</li>
+</ol>
+<h3 id="3-twitters-architecture-twemproxy--pelikan">3. Twitter's Architecture: Twemproxy &amp; Pelikan</h3>
+<pre><code>[ Frontend API Services (Thousands of Clients) ]
+                        │
+                        ▼
+         [ Twemproxy (nutcracker) Layer ]
+  ├── Client Connection Multiplexing (1000s -&gt; 10 persistent links)
+  ├── Request Pipelining (Batches queries into single TCP packets)
+  └── Consistent Hashing (Ketama ring with Virtual Nodes)
+                        │
+      ┌─────────────────┼─────────────────┐
+      ▼                 ▼                 ▼
+[ Cache Node 1 ]  [ Cache Node 2 ]  [ Cache Node 3 ]
+  (Pelikan Segregated Slab Allocator Engine)
+</code></pre>
+<h4 id="a-connection-multiplexing-via-twemproxy">A. Connection Multiplexing via Twemproxy</h4>
+<ul>
+<li>Twitter developed and open-sourced <strong>Twemproxy</strong> (nutcracker), an ultra-fast, lightweight C proxy:
+<ul>
+<li>Sits between application servers and the cache tier.</li>
+<li>Thousands of incoming client connections are multiplexed over a tiny pool of long-lived, pre-warmed persistent connections to backend cache nodes.</li>
+<li><strong>Request Pipelining</strong>: Twemproxy buffers multiple read commands arriving within microsecond windows and packs them into a single TCP packet, drastically cutting network syscalls.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-pelikan--the-segregated-slab-allocator">B. Pelikan &amp; The Segregated Slab Allocator</h4>
+<p>To eliminate memory fragmentation permanently, Twitter designed <strong>Pelikan Cache</strong>:</p>
+<ul>
+<li><strong>Slab Allocation</strong>: Memory is pre-allocated into large 1MB chunks called <strong>Slabs</strong>.</li>
+<li>Slabs are partitioned into dedicated <strong>Slab Classes</strong> of fixed sizes (e.g., 64 bytes, 128 bytes, 256 bytes, 512 bytes).</li>
+<li>A 100-byte tweet payload is strictly assigned to a 128-byte slab chunk.</li>
+<li><strong>Zero Fragmentation</strong>: When an item expires, its chunk is returned to the slab class free-list. Memory is never freed back to the OS <code>malloc</code> pool, guaranteeing zero external memory fragmentation and eliminating memory-related server reboots.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-uses-evcache-at-scale-multi-tier-in-memory-architecture">🎬 Deep Dive 2: How Netflix Uses EVCache at Scale (Multi-Tier In-Memory Architecture)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix <strong>EVCache</strong>.</li>
+<li><strong>Scale</strong>: Thousands of AWS EC2 instances, processing tens of millions of operations per second with sub-millisecond latencies.</li>
+<li><strong>Storage Profile</strong>: Tens of terabytes of hot in-memory data replicated across multiple AWS Availability Zones.</li>
+</ul>
+<h3 id="2-the-multi-region-replication-mechanics">2. The Multi-Region Replication Mechanics</h3>
+<pre><code>[ us-east-1 Microservice ]                   [ eu-west-1 Microservice ]
+            │                                            │
+            ▼                                            ▼
+   [ EVCache Client East ]                      [ EVCache Client EU ]
+            │                                            │
+   ┌────────┴────────┐                          ┌────────┴────────┐
+   ▼                 ▼                          ▼                 ▼
+[ Node East-A ] [ Node East-B ]              [ Node EU-A ]   [ Node EU-B ]
+   └── Rend Proxy   └── Rend Proxy              └── Rend Proxy   └── Rend Proxy
+         │                 │
+         └────────┬────────┘
+                  │ (Async Replication via Kafka)
+                  ▼
+         [ Cross-Region Kafka Stream ] ──&gt; Updates EVCache in EU &amp; West
+</code></pre>
+<h4 id="a-asynchronous-multi-region-replication">A. Asynchronous Multi-Region Replication</h4>
+<ul>
+<li>When a user updates their profile in North America (<code>us-east-1</code>), writing synchronously to Europe (<code>eu-west-1</code>) would impose a 100ms latency penalty.</li>
+<li><strong>Netflix's Solution</strong>:
+<ul>
+<li>The local write commits to the <code>us-east-1</code> EVCache cluster in <strong>under 1ms</strong>.</li>
+<li>An asynchronous replication agent tails local mutations and publishes change events to an Apache Kafka topic spanning AWS regions.</li>
+<li>Kafka consumers in <code>eu-west-1</code> apply the mutations to the European EVCache cluster in the background, achieving eventual consistency within 100-200 milliseconds.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-the-rend-proxy-hybrid-storage-ram--nvme-flash">B. The Rend Proxy Hybrid Storage (RAM + NVMe Flash)</h4>
+<ul>
+<li>Pure RAM instances (AWS <code>r5</code> family) are expensive.</li>
+<li>Netflix engineered <strong>Rend</strong>, a custom C proxy placed in front of storage engines on each cache machine:
+<ul>
+<li><strong>Hot Tier (Memcached in RAM)</strong>: Items accessed within the last hour sit in RAM.</li>
+<li><strong>Warm Tier (RocksDB on NVMe SSD)</strong>: Infrequently accessed keys are offloaded to local high-speed NVMe flash drives.</li>
+<li><strong>Cost Savings</strong>: Allows Netflix to store 5x more cached data per server rack at less than half the hardware cost.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Twitter Pelikan Cache</th>
+<th>Netflix EVCache</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Core Storage Engine</strong></td>
+<td>Custom Segregated Slab Allocator in C</td>
+<td>Hybrid Memcached (RAM) + RocksDB (NVMe)</td>
+</tr>
+<tr>
+<td><strong>Proxy Layer</strong></td>
+<td>Centralized Twemproxy / Embedded Pelikan</td>
+<td>Rend proxy co-located on each cache node</td>
+</tr>
+<tr>
+<td><strong>Replication Model</strong></td>
+<td>Master-Replica with Twemproxy failover</td>
+<td>Cross-AZ synchronous + Cross-Region async via Kafka</td>
+</tr>
+<tr>
+<td><strong>Connection Strategy</strong></td>
+<td>Aggressive client multiplexing &amp; pipelining</td>
+<td>Client-side connection pooling in Java EVCache SDK</td>
+</tr>
+<tr>
+<td><strong>Memory Management</strong></td>
+<td>Slab classes; zero runtime OS malloc</td>
+<td>Slab-based Memcached memory model</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Never Allow Direct Connection Flooding</strong>: In large-scale caching designs, explain that having 10,000 microservice pods connect directly to Redis exhausts file descriptors and CPU. Recommend a <strong>connection proxy layer (like Twemproxy or Envoy)</strong> to multiplex client connections.</li>
+<li><strong>Slab Allocation vs Malloc</strong>: Impress interviewers by explaining how in-memory caches avoid memory fragmentation: <strong>Slab Allocation</strong> pre-allocates memory into fixed chunk classes, eliminating the external fragmentation caused by standard <code>malloc</code>/<code>free</code>.</li>
+<li><strong>RAM + NVMe Tiering</strong>: For multi-terabyte cache designs where RAM is cost-prohibitive, propose a <strong>hybrid storage tier (RAM for hot data + NVMe RocksDB for warm data)</strong> inspired by Netflix's Rend architecture.</li>
+</ol>
+<hr />
+<h2 id="deep-dive-3-how-google-scales-in-memory-caching-web-search-serving-tier">🏢 Deep Dive 3: How Google Scales In-Memory Caching (Web Search Serving Tier)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Search In-Memory Serving Cache.</li>
+<li><strong>Scale</strong>: Billions of searches daily; sub-100 millisecond response time SLA.</li>
+</ul>
+<h3 id="2-architecture-inverted-index-in-memory-partitioning">2. Architecture: Inverted Index In-Memory Partitioning</h3>
+<ul>
+<li>The web index is too massive to search on disk for every query.</li>
+<li>Google holds billions of hot posting lists and inverted index segments directly in distributed RAM:
+<ul>
+<li>Queries hit a front-end cache (checking if the exact query was executed seconds ago).</li>
+<li>On a miss, queries scatter across in-memory search leaf nodes holding segments of the web index in RAM, ranking documents in milliseconds before aggregating results at root mixers.</li>
+</ul>
+</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

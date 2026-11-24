@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Consistency Models: From Linearizable to Eventual">
+  <title>Consistency Models: From Linearizable to Eventual | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-consistency-models">Real-World Production Deep Dives: Consistency Models</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Amazon/Netflix</strong> navigate consistency models, contrasting strict Linearizability via TrueTime with Eventual &amp; Session Consistency in distributed applications.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-uses-linearizability-spanner-truetime--external-consistency">🏢 Deep Dive 1: How Google Uses Linearizability (Spanner TrueTime &amp; External Consistency)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Cloud Spanner.</li>
+<li><strong>Guarantee</strong>: <strong>External Consistency (Strict Serializability / Linearizability)</strong>.</li>
+<li><strong>The Real-World Requirement</strong>: In Google AdWords financial systems, if Customer A deposits money at 12:00:00.000 PM, and Customer B initiates a payment at 12:00:00.001 PM anywhere else in the world, Customer B <em>must</em> observe Customer A's deposit. Causal or eventual consistency is unacceptable.</li>
+</ul>
+<h3 id="2-the-core-problem-why-wall-clocks-break-in-distributed-systems">2. The Core Problem: Why Wall Clocks Break in Distributed Systems</h3>
+<ul>
+<li>Standard server clocks synchronize via NTP (Network Time Protocol).</li>
+<li><strong>Clock Drift</strong>: Due to CPU crystal thermal fluctuations and network jitter, standard NTP clocks drift by <strong>100ms to 250ms</strong> across data centers.</li>
+<li>If Server 1's clock is 50ms fast and Server 2's clock is 50ms slow, assigning timestamps based on local clocks reverses the perceived order of cause and effect:
+Transaction 2 can receive an earlier timestamp than Transaction 1, corrupting financial balances!</li>
+</ul>
+<h3 id="3-googles-solution-the-truetime-hardware-api">3. Google's Solution: The TrueTime Hardware API</h3>
+<pre><code>[ Google Data Center Node ]
+             │
+             ▼
+   [ TrueTime API Engine ]
+   ├── GPS Receivers (Antennas on Data Center Roofs)
+   └── Rubidium Atomic Clocks (Atomic drift is negligible)
+             │
+             ▼
+   TrueTime.now() returns time interval: [earliest, latest]
+             │
+   Uncertainty Window: ε = (latest - earliest) / 2  (ε &lt; 7ms)
+</code></pre>
+<h4 id="a-the-truetime-invariant">A. The TrueTime Invariant</h4>
+<p>Instead of returning a single discrete time, <code>TrueTime.now()</code> returns an uncertainty interval:
+$$[t.	ext{earliest}, t.	ext{latest}] \quad 	ext{where} \quad t.	ext{latest} - t.	ext{earliest} = 2\epsilon$$</p>
+<ul>
+<li>Because Google maintains atomic clocks in every data center, the maximum uncertainty $\epsilon$ is mathematically bounded to <strong>less than 7 milliseconds</strong>.</li>
+</ul>
+<h4 id="b-the-truetime-commit-wait-rule">B. The TrueTime Commit Wait Rule</h4>
+<p>To guarantee strict linearizability without cross-datacenter locking between readers and writers:</p>
+<ol>
+<li>When a transaction $T_1$ prepares to commit, the coordinator requests <code>TrueTime.now()</code>.</li>
+<li>It picks an absolute commit timestamp $s \ge t_1.	ext{latest}$.</li>
+<li><strong>The Commit Wait</strong>: The coordinator delays responding to the client until it is physically certain that the absolute real-world time has passed $s$:
+$$	ext{Wait until } TrueTime.now().	ext{earliest} &gt; s$$</li>
+<li><strong>The Mathematical Guarantee</strong>: Any subsequent transaction $T_2$ that begins anywhere on Earth will receive a timestamp $s_2 &gt; s_1$. Causality is physically preserved worldwide!</li>
+</ol>
+<hr />
+<h2 id="deep-dive-2-how-netflix--amazon-use-eventual--session-consistency">📦 Deep Dive 2: How Netflix &amp; Amazon Use Eventual &amp; Session Consistency</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Applications</strong>: Netflix User Profiles / &quot;My List&quot;, Amazon Customer Reviews.</li>
+<li><strong>Workload</strong>: Hundreds of millions of read requests per second globally.</li>
+<li><strong>The Pragmatic Choice</strong>: Sacrificing linearizability to achieve single-digit millisecond latency worldwide.</li>
+</ul>
+<h3 id="2-consistency-spectrum-in-practice">2. Consistency Spectrum in Practice</h3>
+<pre><code>[ Linearizability ]  &lt;-- Google Spanner (Strict order, high latency)
+        │
+        ▼
+[ Sequential Consistency ]
+        │
+        ▼
+[ Causal Consistency ]  &lt;-- Comment threads / reply chains
+        │
+        ▼
+[ Read-Your-Writes / Session Consistency ] &lt;-- Netflix Profiles, Shopping Carts
+        │
+        ▼
+[ Eventual Consistency ] &lt;-- Global review counters, viewer statistics
+</code></pre>
+<h4 id="a-session-consistency-read-your-writes">A. Session Consistency (Read-Your-Writes)</h4>
+<p>Under pure eventual consistency, a user might add a movie to &quot;My List&quot;, refresh the page, and not see it because their read hit a read replica that has not caught up.</p>
+<ul>
+<li><strong>Netflix's Solution</strong>:
+<ul>
+<li>When a user mutates their profile, Netflix sets an encrypted session cookie containing the transaction version or timestamp.</li>
+<li>Subsequent read requests carry this cookie. The edge proxy checks the replica's replication watermark:
+<ul>
+<li>If the replica has processed past that watermark, it serves the read locally.</li>
+<li>If the replica is lagging, the proxy routes the read directly to the primary database or waits for the local replica to catch up, guaranteeing <strong>Read-Your-Writes Consistency</strong> for the authenticated user while all other users see eventual consistency.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-monotonic-read-consistency">B. Monotonic Read Consistency</h4>
+<ul>
+<li>Prevents the &quot;time travel&quot; anomaly: a user reads from Replica A and sees comment #5. On their next click, their request hits Replica B which is lagging, and comment #5 disappears.</li>
+<li>Implemented by pinning user sessions to specific database replicas using sticky routing hashes.</li>
+</ul>
+<h4 id="c-bounded-staleness-in-viewing-history">C. Bounded Staleness in Viewing History</h4>
+<ul>
+<li>For video bookmarking, Netflix uses <strong>Bounded Staleness</strong>.</li>
+<li>The viewing position on your TV might lag your tablet by at most <strong>2 to 5 seconds</strong>. A 2-second difference in video playback offset is completely acceptable to the human eye, but eliminates the need for expensive distributed locks.</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Consistency Model</th>
+<th>Real-World System</th>
+<th>Latency Cost</th>
+<th>Disaster Behavior</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Linearizability</strong></td>
+<td>Google Spanner, etcd</td>
+<td>High (30-100ms)</td>
+<td>Halts on partition</td>
+<td>Bank balances, master election</td>
+</tr>
+<tr>
+<td><strong>Causal Consistency</strong></td>
+<td>MongoDB (Causal Sessions)</td>
+<td>Medium (10-25ms)</td>
+<td>Accepts local writes</td>
+<td>Chat replies, forum threads</td>
+</tr>
+<tr>
+<td><strong>Read-Your-Writes</strong></td>
+<td>Netflix Profile Service, Amazon</td>
+<td>Low (2-5ms)</td>
+<td>Local routing</td>
+<td>User settings, shopping cart</td>
+</tr>
+<tr>
+<td><strong>Eventual Consistency</strong></td>
+<td>DNS, Cassandra, DynamoDB</td>
+<td>Minimal (&lt;1ms)</td>
+<td>Always available</td>
+<td>View counts, analytics</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Explain the Anomaly Prevented</strong>: Never just define consistency models in the abstract. Always explain the concrete user bug it prevents:
+<ul>
+<li><em>Linearizability</em> prevents two users buying the same concert seat simultaneously.</li>
+<li><em>Read-Your-Writes</em> prevents a user updating their profile and seeing their old photo after refreshing.</li>
+<li><em>Causal Consistency</em> prevents an answer appearing before its question in a chat app.</li>
+</ul>
+</li>
+<li><strong>TrueTime Concept in Interviews</strong>: If asked how to achieve globally distributed ACID transactions without slow two-phase locking, cite Google Spanner's <strong>TrueTime commit-wait mechanism</strong>.</li>
+<li><strong>Session Consistency via Sticky Routing</strong>: Explain that you can achieve strong consistency perception for a single user using lightweight session tokens or sticky routing, without imposing global linearizability across the entire database cluster.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

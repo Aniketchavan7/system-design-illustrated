@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Search Autocomplete">
+  <title>System Design Search Autocomplete | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-search-autocomplete">Real-World Production Implementations: Search Autocomplete</h1>
+<p>This document explores how Google and Netflix build ultra-low-latency typeahead and search suggestion architectures.</p>
+<hr />
+<h2 id="1-google-google-instant--planetary-typeahead">1. Google: Google Instant &amp; Planetary Typeahead</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google's autocomplete serves queries to billions of users, returning suggestions in <strong>$&lt; 15\text{ ms}$</strong>. Google popularized this with <strong>Google Instant</strong>, completing searches before users finished typing.</p>
+<pre><code class="language-mermaid">flowchart TD
+    User[&quot;Search Bar (Mobile / Browser)&quot;] --&gt;|&quot;GET /complete/search?q=g&amp;cp=1&quot;| Edge[&quot;Google Front End (GFE) / Edge PoP&quot;]
+    Edge --&gt;|&quot;Debounced Keystroke&quot;| CompleteSvc[&quot;Google Autocomplete Microservice&quot;]
+    
+    CompleteSvc --&gt; GeoPersonalize[&quot;Personalization &amp; Geolocation Context&quot;]
+    GeoPersonalize --&gt; TrieCluster[(&quot;In-Memory Trie RAM Clusters (Borg)&quot;)]
+    
+    subgraph OfflinePipeline[&quot;Weekly MapReduce / Bigtable Pipeline&quot;]
+        QueryLogs[(&quot;Raw Search Query Logs&quot;)] --&gt; MapReduce[&quot;MapReduce Aggregator&quot;]
+        MapReduce --&gt; SafeFilter[&quot;SafeSearch &amp; Profanity Blacklist&quot;]
+        SafeFilter --&gt; TrieShards[(&quot;Serialized Trie Shards (Colossus)&quot;)]
+        TrieShards --&gt;|&quot;Atomic Snapshot Rollout&quot;| TrieCluster
+    end
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Edge-Terminated Short Prefixes</strong>:
+<ul>
+<li>Single-letter (&quot;a&quot;, &quot;b&quot;, &quot;c&quot;) and two-letter (&quot;go&quot;, &quot;am&quot;, &quot;fa&quot;) queries represent over 25% of all typeahead queries.</li>
+<li>Google caches these responses directly in Edge Google Front End (GFE) caches worldwide, serving them in $&lt; 5\text{ ms}$ without querying origin datacenters.</li>
+</ul>
+</li>
+<li><strong>Context-Aware Ranking</strong>:
+<ul>
+<li>Google re-ranks Trie suggestions based on:
+<ul>
+<li><strong>Location</strong>: Typing &quot;giants&quot; in San Francisco suggests the SF Giants baseball team; in New York, it suggests the NY Giants football team.</li>
+<li><strong>User Search History</strong>: Recently searched topics receive a higher personal score.</li>
+<li><strong>Trending Velocity</strong>: Real-time streaming signals elevate breaking news terms.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>SafeSearch &amp; Legal Compliance</strong>:
+<ul>
+<li>Automated classifiers filter out hate speech, explicit sexual queries, and copyrighted download terms before candidates enter the production Trie snapshot.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-netflix-title-search--fuzzy-actor-typeahead">2. Netflix: Title Search &amp; Fuzzy Actor Typeahead</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Netflix subscribers search for movie titles, actors, directors, and genres across smart TVs, game consoles, and mobile apps. Because typing with a TV remote is clumsy, Netflix's typeahead emphasizes <strong>Fuzzy Matching</strong> and <strong>Instant Video Artwork Previews</strong>.</p>
+<pre><code class="language-mermaid">flowchart LR
+    SmartTV[&quot;Smart TV App (Remote Typing)&quot;] --&gt; Zuul[&quot;Netflix Zuul Gateway&quot;]
+    Zuul --&gt; SearchSvc[&quot;Title Search Microservice&quot;]
+    SearchSvc --&gt; ElasticCluster[(&quot;Elasticsearch In-Memory Cluster&quot;)]
+    ElasticCluster --&gt; Enricher[&quot;Artwork &amp; Video Metadata Hydrator&quot;]
+    Enricher --&gt; SmartTV
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Edge N-Gram Tokenization</strong>:
+<ul>
+<li>Netflix uses <strong>Elasticsearch Edge N-grams</strong> on media metadata.</li>
+<li>Searching &quot;stra&quot; matches edge n-grams for &quot;Stranger Things&quot;, indexing character sequences from the beginning of words.</li>
+</ul>
+</li>
+<li><strong>Typo Tolerance with Levenshtein Automata</strong>:
+<ul>
+<li>TV remote typists frequently mistype characters. Netflix's search engine tolerates an edit distance of up to 2 characters (e.g., typing &quot;braking bad&quot; matches &quot;Breaking Bad&quot;).</li>
+</ul>
+</li>
+<li><strong>Instant Visual Box-Art Cards</strong>:
+<ul>
+<li>While Google returns plain text strings, Netflix returns rich image URLs (posters) for top candidate titles directly in the typeahead payload so the UI renders thumbnails instantly.</li>
+</ul>
+</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

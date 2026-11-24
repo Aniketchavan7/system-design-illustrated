@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="API Gateways &amp; Reverse Proxies">
+  <title>API Gateways &amp; Reverse Proxies | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-api-gateways-and-proxies">Real-World Production Deep Dives: API Gateways and Proxies</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Netflix</strong> and <strong>Google</strong> implement API Gateways and edge proxies to handle millions of concurrent connections, dynamic routing, and cross-cutting security.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-netflix-uses-api-gateways-the-evolution-of-zuul-1-to-zuul-23">🎬 Deep Dive 1: How Netflix Uses API Gateways (The Evolution of Zuul 1 to Zuul 2/3)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix Zuul (Zuul 2 and Zuul 3).</li>
+<li><strong>Scale</strong>: The single front door for all Netflix streaming devices, smart TVs, and web browsers.</li>
+<li><strong>Traffic Volume</strong>: <strong>Over 100 billion requests per day</strong>, handling peak loads exceeding <strong>2+ million concurrent persistent connections</strong>.</li>
+<li><strong>Role</strong>: Edge routing, dynamic canary routing, authentication, TLS termination, device identity decoration, request pruning, and DDoS mitigation.</li>
+</ul>
+<h3 id="2-the-core-problem-at-netflix-scale-why-zuul-1-broke-down">2. The Core Problem at Netflix Scale: Why Zuul 1 Broke Down</h3>
+<ul>
+<li><strong>Zuul 1 Architecture</strong>: Built on Apache Tomcat using standard <strong>Java Servlet 2.5 blocking I/O</strong>.
+<ul>
+<li>Every incoming connection occupied a dedicated OS thread from a fixed thread pool (e.g., 200–500 threads).</li>
+<li>The thread remained blocked while waiting for downstream microservices to respond.</li>
+</ul>
+</li>
+<li><strong>The Catastrophic Failure Mode</strong>:
+<ul>
+<li>If a single downstream microservice (e.g., Rating Service) experienced high latency (500ms -&gt; 5000ms), threads rapidly accumulated in blocked I/O wait states.</li>
+<li>Within seconds, Zuul 1 ran out of threads. Incoming requests for completely healthy services (e.g., Login or Video Playback) were rejected with <code>500 Internal Server Error</code>.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-netflixs-engineering-architecture-zuul-2--zuul-3">3. Netflix's Engineering Architecture: Zuul 2 / Zuul 3</h3>
+<pre><code>[ Inbound Client Connections (2M+ Persistent Sockets) ]
+                         │
+                         ▼
+             [ Netty Boss EventLoop ]  &lt;-- Accepts TCP sockets
+                         │
+             [ Netty Worker EventLoops ] (1 thread per CPU core)
+                         │
+      ┌──────────────────┴──────────────────┐
+      ▼                                     ▼
+[ Inbound Filters ]                 [ Outbound Filters ]
+  ├── Passport &amp; Auth Validation      ├── Gzip / Brotli Compression
+  ├── Dynamic Canary Routing Rules     ├── Set-Cookie &amp; Security Headers
+  ├── Concurrency Rate Limiter        └── Latency Metrics to Atlas
+  └── Device Fingerprint Injection          ▲
+      │                                     │
+      ▼                                     │
+[ Endpoint Filter (Netty HttpClient) ] ─────┘
+      │
+      ▼ (Non-blocking async HTTP/2)
+[ Downstream Microservice Fleet ]
+</code></pre>
+<h4 id="a-asynchronous-non-blocking-event-loops-netty">A. Asynchronous Non-Blocking Event Loops (Netty)</h4>
+<ul>
+<li>Netflix completely rebuilt Zuul on top of <strong>Netty</strong>.</li>
+<li>Instead of one thread per connection, Zuul 2 uses a small pool of event-loop threads (typically $2 	imes 	ext{CPU cores}$).</li>
+<li>When an upstream request is dispatched to a backend microservice, Zuul registers an asynchronous callback and frees the event-loop thread immediately to service other client traffic.</li>
+<li><strong>Connection Capacity</strong>: Single instances easily sustain <strong>50,000+ open idle client connections</strong> with predictable CPU utilization.</li>
+</ul>
+<h4 id="b-dynamic-filter-pipeline">B. Dynamic Filter Pipeline</h4>
+<p>Zuul structures all cross-cutting concerns as a composable chain of filters:</p>
+<ol>
+<li><strong>Inbound Filters</strong>:
+<ul>
+<li><strong>Passport Filter</strong>: Validates user HMAC tokens and mints a cryptographically signed internal <code>Netflix Passport</code> header containing user identity and account tiers. Downstream microservices never need to re-authenticate the user.</li>
+<li><strong>Canary Routing</strong>: Inspects incoming request headers. If user matches a beta cohort, dynamically routes to a canary cluster without changing DNS or load balancer configs.</li>
+</ul>
+</li>
+<li><strong>Endpoint Filter</strong>:
+<ul>
+<li>Uses an asynchronous Netty HTTP client to proxy the payload to backend clusters.</li>
+</ul>
+</li>
+<li><strong>Outbound Filters</strong>:
+<ul>
+<li>Compresses payloads, decorates tracking cookies, and flushes execution metrics to the <strong>Atlas</strong> real-time monitoring system.</li>
+</ul>
+</li>
+</ol>
+<h4 id="c-live-rule-hot-reloading-via-archaius">C. Live Rule Hot-Reloading via Archaius</h4>
+<ul>
+<li>Netflix engineers can inject routing scripts and filter logic dynamically at runtime using their configuration management library (<strong>Archaius</strong>).</li>
+<li>If a downstream service enters an outage, an engineer pushes a Groovy/Java rule to Zuul to immediately fail-open or return fallback static cached data <strong>within 5 seconds across the entire global edge fleet without restarting JVMs</strong>.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-google-uses-proxies-envoy-based-traffic-director--service-mesh">🏢 Deep Dive 2: How Google Uses Proxies (Envoy-Based Traffic Director &amp; Service Mesh)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Cloud Armor, Cloud API Gateway, and Anthos Service Mesh powered by <strong>Envoy Proxy</strong>.</li>
+<li><strong>Scale</strong>: Internal Google infrastructure handles trillions of RPCs daily across thousands of Borg containers.</li>
+<li><strong>Design Philosophy</strong>: High performance, native C++ memory safety, dynamic configuration via universal APIs (xDS), and zero-trust mTLS encryption.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ul>
+<li>Managing microservice communication across diverse programming languages (Java, Go, C++, Python) led to duplicated networking libraries:
+<ul>
+<li>Every team implemented retry policies, rate limiters, and circuit breakers differently.</li>
+<li>Updating security certificates or cipher suites required rebuilding and redeploying thousands of individual microservice binaries.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-googles-architecture-envoy-sidecar--control-plane">3. Google's Architecture: Envoy Sidecar &amp; Control Plane</h3>
+<pre><code>[ External Ingress Traffic ]
+             │
+             ▼
+[ Google Cloud API Gateway / Edge Envoy ]
+             │ (Validates JWT, Checks Cloud Armor Rate Limits)
+             ▼
+      [ Internal VPC Mesh ]
+             │
+    ┌────────┴────────┐
+    ▼                 ▼
+[ Service Pod A ]  [ Service Pod B ]
+  ├── App (Go)       ├── App (Java)
+  └── Envoy Sidecar  └── Envoy Sidecar
+            │                 ▲
+            └──── mTLS Link ──┘
+</code></pre>
+<h4 id="a-dynamic-xds-protocol">A. Dynamic xDS Protocol</h4>
+<p>Rather than using static configuration files (like legacy Nginx or HAProxy configs), Envoy is continuously programmed by a centralized <strong>Control Plane</strong> (Google Traffic Director) via gRPC streams called the <strong>xDS API</strong>:</p>
+<ul>
+<li><strong>LDS (Listener Discovery Service)</strong>: Dynamically opens and closes ports.</li>
+<li><strong>RDS (Route Discovery Service)</strong>: Updates HTTP path routing tables.</li>
+<li><strong>CDS (Cluster Discovery Service)</strong>: Updates upstream service cluster definitions.</li>
+<li><strong>EDS (Endpoint Discovery Service)</strong>: Adds/removes individual IP addresses of auto-scaled backend pods in real-time.</li>
+</ul>
+<h4 id="b-zero-trust-security-via-spiffe--mtls">B. Zero-Trust Security via Spiffe &amp; mTLS</h4>
+<ul>
+<li>Every Envoy sidecar automatically intercepts outbound and inbound traffic using Linux <code>iptables</code> redirect rules.</li>
+<li>Envoy terminates mutual TLS (mTLS) using cryptographic SPIFFE identity certificates rotated automatically every few hours. The application code communicates over plain localhost HTTP without needing to know cryptographic keys.</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Netflix Zuul 2 / Zuul 3</th>
+<th>Google / Envoy Service Mesh</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Core Technology</strong></td>
+<td>Java / Netty Asynchronous Framework</td>
+<td>Native C++ Multi-Threaded Event Loop</td>
+</tr>
+<tr>
+<td><strong>Deployment Model</strong></td>
+<td>Edge Gateway Fleet (North-South traffic)</td>
+<td>Edge Gateway + Sidecar Mesh (North-South &amp; East-West)</td>
+</tr>
+<tr>
+<td><strong>Dynamic Configuration</strong></td>
+<td>Archaius configuration polling &amp; Git-backed rules</td>
+<td>Universal gRPC xDS streaming APIs from Control Plane</td>
+</tr>
+<tr>
+<td><strong>Identity Management</strong></td>
+<td>Proprietary &quot;Netflix Passport&quot; token propagation</td>
+<td>SPIFFE / Spire mTLS X.509 Identity Certificates</td>
+</tr>
+<tr>
+<td><strong>Language Boundary</strong></td>
+<td>Java ecosystem</td>
+<td>Polyglot (language agnostic via sidecar abstraction)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>The Evolution from Thread-per-Request to Async</strong>: Always articulate why modern API Gateways must be non-blocking (Netty, Envoy, Go, Nginx). Thread-per-request architectures inevitably suffer thread pool starvation when downstream services lag.</li>
+<li><strong>Passport Pattern (Token Minting)</strong>: In microservice design interviews, recommend having the API Gateway validate client JWT/OAuth tokens once at the edge, minting an internal lightweight identity header (&quot;Passport&quot;) so internal services avoid redundant cryptographic checks.</li>
+<li><strong>Cross-Cutting Concerns Separation</strong>: An API Gateway should own: Rate limiting, SSL/TLS termination, canary routing, DDoS defense, and request correlation IDs. It should <em>not</em> contain heavy business domain logic.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

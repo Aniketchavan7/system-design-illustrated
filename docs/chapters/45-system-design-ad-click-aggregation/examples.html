@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design Ad Click Aggregation">
+  <title>System Design Ad Click Aggregation | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-ad-click-aggregation">Real-World Production Implementations: Ad Click Aggregation</h1>
+<p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, and <strong>Meta</strong> process, aggregate, and attribute trillions of streaming events daily.</p>
+<hr />
+<h2 id="1-google-google-ads--photon-real-time-streaming-architecture">1. Google: Google Ads &amp; Photon Real-Time Streaming Architecture</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Google generates over <strong>$200 Billion annually</strong> in ad revenue from Google Search, YouTube, and the Google Display Network. Because advertisers are billed per click, Google developed <strong>Photon</strong>, a globally distributed streaming system designed for continuous high-throughput event aggregation.</p>
+<pre><code class="language-mermaid">flowchart TD
+    UserSearch[&quot;Google Search User (Clicks Sponsored Ad)&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
+    GFE --&gt; AdRedirect[&quot;Ad Redirect Tracking Gateway&quot;]
+    
+    AdRedirect --&gt; PhotonIngest[&quot;Photon Streaming Ingestion&quot;]
+    
+    subgraph MultiDatacenterPhoton[&quot;Active-Active Photon Engine&quot;]
+        PhotonIngest --&gt; DatacenterA[&quot;Datacenter US-East (Paxos State)&quot;]
+        PhotonIngest --&gt; DatacenterB[&quot;Datacenter US-West (Paxos State)&quot;]
+    end
+
+    DatacenterA --&gt; DeduplicationEngine[&quot;Atomic Deduplication &amp; Fraud Classifier&quot;]
+    DatacenterB --&gt; DeduplicationEngine
+    
+    DeduplicationEngine --&gt; SpannerBilling[(&quot;Google Cloud Spanner (Billing Ledger)&quot;)]
+    DeduplicationEngine --&gt; BigtableDashboard[(&quot;Bigtable (Advertiser Analytics)&quot;)]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Photon Active-Active Multi-Datacenter Streaming</strong>:
+<ul>
+<li>Photon runs across geographically separated datacenters in parallel.</li>
+<li>Using Paxos-coordinated event tokens, Photon guarantees that even if an entire US-East datacenter goes dark mid-stream, US-West resumes processing without duplicate click billing or dropped transactions.</li>
+</ul>
+</li>
+<li><strong>Real-Time Click-Fraud Detection (Spider &amp; Botnet Filters)</strong>:
+<ul>
+<li>Google analyzes hundreds of features per click: IP address reputation, mouse-movement velocity, screen touch cadence, and referrer patterns.</li>
+<li>Fraudulent clicks are filtered in real-time; the click is logged for machine learning analysis, but the advertiser's budget is never debited.</li>
+</ul>
+</li>
+<li><strong>Hourly &amp; Daily MapReduce Reconciliation</strong>:
+<ul>
+<li>Google pairs Photon's real-time streaming layer with batch MapReduce jobs that audit raw logs overnight, correcting any discrepancies caused by extreme multi-hour mobile network disconnects.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="2-netflix-keystone-real-time-event-streaming-pipeline">2. Netflix: Keystone Real-Time Event Streaming Pipeline</h2>
+<h3 id="the-architecture">The Architecture</h3>
+<p>Netflix's streaming infrastructure relies on <strong>Keystone</strong>, a real-time event streaming pipeline processing over <strong>1.5 Trillion events per day</strong> (tens of petabytes daily), supporting telemetry, user interaction analytics, and personalized recommendation updates.</p>
+<pre><code class="language-mermaid">flowchart TD
+    ClientApp[&quot;Netflix Client (TV / Phone / Web)&quot;] --&gt; Zuul[&quot;Netflix Zuul 2 Gateway&quot;]
+    Zuul --&gt; KeystoneFront[&quot;Keystone Edge Proxy (Netty)&quot;]
+    
+    KeystoneFront --&gt; KafkaCluster[(&quot;Kafka Event Streaming Clusters (1.5T events/day)&quot;)]
+    
+    KafkaCluster --&gt; FlinkEngine[&quot;Apache Flink Stream Processing Cluster&quot;]
+    FlinkEngine --&gt; TimeWindows[&quot;Tumbling &amp; Sliding Window Aggregation&quot;]
+    
+    TimeWindows --&gt; Elasticsearch[(&quot;Elasticsearch (Real-Time Dashboards)&quot;)]
+    TimeWindows --&gt; IcebergWarehouse[(&quot;Apache Iceberg / S3 Data Lake&quot;)]
+</code></pre>
+<h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
+<ol>
+<li><strong>Apache Flink Stream Aggregation</strong>:
+<ul>
+<li>Netflix uses <strong>Apache Flink</strong> to aggregate subscriber interactions (playback pauses, bitrate fluctuations, title impressions) into 1-minute and 5-minute tumbling windows.</li>
+</ul>
+</li>
+<li><strong>Watermarking with Event-Time Alignment</strong>:
+<ul>
+<li>Cellular devices streaming movies frequently lose connectivity when passing through dead zones. Keystone uses bounded-lateness watermarks to attribute playback diagnostic events to the exact moment playback stalled, rather than when the phone reconnected to LTE.</li>
+</ul>
+</li>
+<li><strong>Dynamic Stream Routing with Apache Iceberg</strong>:
+<ul>
+<li>Aggregated metrics are written in parallel to <strong>Elasticsearch</strong> (for live real-time SRE dashboards) and <strong>Apache Iceberg</strong> table format on Amazon S3 (for long-term historical machine learning and business intelligence).</li>
+</ul>
+</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

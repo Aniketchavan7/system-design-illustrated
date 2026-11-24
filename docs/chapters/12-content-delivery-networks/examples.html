@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Content Delivery Networks (CDNs) &amp; Edge Caching">
+  <title>Content Delivery Networks (CDNs) &amp; Edge Caching | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-content-delivery-networks-cdns">Real-World Production Deep Dives: Content Delivery Networks (CDNs)</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Netflix</strong> and <strong>Cloudflare/Google</strong> deliver massive digital media at global scale, comparing Netflix's bespoke Open Connect ISP hardware network with Anycast cloud edge CDNs.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-netflix-uses-cdns-open-connect-custom-hardware-inside-isps">🎬 Deep Dive 1: How Netflix Uses CDNs (Open Connect: Custom Hardware Inside ISPs)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Netflix <strong>Open Connect</strong>.</li>
+<li><strong>Traffic Volume</strong>: Delivers over <strong>15% of all downstream internet traffic globally</strong>; peak traffic exceeds <strong>100+ Terabits per second</strong>.</li>
+<li><strong>The Decision</strong>: Netflix completely phased out commercial third-party CDNs (Akamai, Limelight, Level 3) in 2012 to build its own dedicated hardware CDN.</li>
+</ul>
+<h3 id="2-the-core-problem-at-netflix-scale-why-commercial-cdns-failed">2. The Core Problem at Netflix Scale: Why Commercial CDNs Failed</h3>
+<ol>
+<li><strong>Financial Ruin</strong>: Paying commercial CDNs per-gigabyte bandwidth fees for high-definition and 4K video streams would cost hundreds of millions of dollars annually.</li>
+<li><strong>Backbone Congestion</strong>: Transit links between commercial CDN data centers and local residential Internet Service Providers (Comcast, Verizon, Deutsche Telekom, Airtel) frequently suffered peering congestion, leading to video rebuffering during prime time.</li>
+</ol>
+<h3 id="3-netflixs-architecture-custom-open-connect-appliances-ocas">3. Netflix's Architecture: Custom Open Connect Appliances (OCAs)</h3>
+<pre><code>[ Central Netflix Control Plane (AWS Cloud) ]
+                 │
+  BGP Steering &amp; Predictive Pre-Positioning
+                 │
+                 ▼
+[ Local Internet Service Provider (e.g., Comcast / Orange) ]
+  ┌─────────────────────────────────────────────────────────┐
+  │ Local ISP Data Center                                   │
+  │                                                         │
+  │  [ Netflix Open Connect Appliance (OCA) Rack ]          │
+  │     ├── Custom FreeBSD OS                               │
+  │     ├── 200TB+ NVMe Flash Storage                       │
+  │     ├── 100Gbps Direct Network Interface Cards (NIC)    │
+  │     └── Zero-Copy Kernel Disk-to-Socket Streaming       │
+  │                           │                             │
+  │                           │ Local Fiber Loop (&lt;5ms RTT) │
+  │                           ▼                             │
+  │  [ Subscriber Living Room (Smart TV 4K Stream) ]        │
+  └─────────────────────────────────────────────────────────┘
+</code></pre>
+<h4 id="a-free-hardware-provided-to-isps">A. Free Hardware Provided to ISPs</h4>
+<ul>
+<li>Netflix manufactures custom, purpose-built storage appliances called <strong>Open Connect Appliances (OCAs)</strong> and ships them <strong>free of charge</strong> directly to qualifying ISPs and Internet Exchange Points (IXPs) worldwide.</li>
+<li><strong>Why ISPs Love It</strong>: By serving 95%+ of Netflix video traffic directly from an OCA inside the ISP's local data center, the ISP saves millions of dollars in upstream internet transit bandwidth fees.</li>
+</ul>
+<h4 id="b-overnight-predictive-pre-positioning">B. Overnight Predictive Pre-Positioning</h4>
+<ul>
+<li>Video traffic is heavily cyclical: peak usage occurs between 8:00 PM and 11:00 PM, while networks sit virtually idle between 2:00 AM and 5:00 AM.</li>
+<li><strong>The Pre-Positioning Pipeline</strong>:
+<ul>
+<li>Machine learning models in AWS analyze viewing patterns and predict which titles (e.g., the new season of <em>Stranger Things</em>) will be watched tomorrow in each metropolitan area.</li>
+<li>During the early morning hours, the AWS control plane streams new titles over reserved backbone lines to local OCAs.</li>
+<li>By prime time, the video chunks are already sitting on the local OCA's flash drives. <strong>No internet backbone traffic is consumed during peak viewing hours!</strong></li>
+</ul>
+</li>
+</ul>
+<h4 id="c-custom-freebsd-zero-copy-streaming">C. Custom FreeBSD Zero-Copy Streaming</h4>
+<ul>
+<li>OCAs run an optimized flavor of <strong>FreeBSD</strong> with custom Nginx forks.</li>
+<li>Video delivery uses the Linux/FreeBSD zero-copy system call (<code>sendfile</code> / asynchronous TLS in kernel space):
+<ul>
+<li>Video bytes are transferred directly from NVMe storage controllers to the 100Gbps network interface card buffer without copying bytes into CPU user-space memory, allowing a single 2U server rack to stream over <strong>100 Gbps</strong> continuously.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-cloudflare--google-use-cdns-global-anycast-edge-networks">🌐 Deep Dive 2: How Cloudflare &amp; Google Use CDNs (Global Anycast Edge Networks)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>Cloudflare</strong>: Operates an Anycast edge network spanning over <strong>330 cities across 120+ countries</strong>, handling &gt;55 million HTTP requests per second.</li>
+<li><strong>Google Global Cache (GGC)</strong>: Deploys edge caching nodes inside residential ISPs for YouTube, Google Play Store updates, and web assets.</li>
+</ul>
+<h3 id="2-the-core-problem">2. The Core Problem</h3>
+<ul>
+<li>Unlike Netflix (which delivers large, predictable, immutable multi-megabyte video files), general-purpose CDNs must deliver <strong>millions of tiny, dynamic, volatile web assets</strong> (HTML, API JSON responses, JavaScript bundles, CSS).</li>
+<li>Dynamic API requests cannot be statically cached and must traverse to the origin server as quickly as possible.</li>
+</ul>
+<h3 id="3-cloudflares-architecture-anycast-edge--tiered-caching">3. Cloudflare's Architecture: Anycast Edge &amp; Tiered Caching</h3>
+<pre><code>[ User in Sydney ]
+        │
+   Anycast DNS / BGP Routing
+        │
+        ▼
+[ Cloudflare Sydney Edge PoP ]
+   ├── Edge Cache (SSD / NVMe) ── (Hit? Serve in 2ms!)
+   └── Workers (V8 JavaScript Runtime at the Edge)
+        │ (Miss)
+        ▼
+[ Tiered Cache: Regional Hub (Tokyo/Singapore) ]
+        │ (Miss)
+        ▼
+   [ Argo Smart Routing ]  &lt;-- Bypasses public internet congestion
+        │
+        ▼
+[ Origin Server (AWS us-east-1) ]
+</code></pre>
+<h4 id="a-anycast-bgp-routing">A. Anycast BGP Routing</h4>
+<ul>
+<li>All Cloudflare edge servers advertise the exact same IP addresses via Border Gateway Protocol (BGP).</li>
+<li>The internet's routing infrastructure directs user packets to the nearest operational Cloudflare Point of Presence (PoP) in their local city, terminating TCP and TLS handshakes within single-digit milliseconds.</li>
+</ul>
+<h4 id="b-tiered-caching">B. Tiered Caching</h4>
+<ul>
+<li>If an edge server in a smaller city experiences a cache miss, asking the origin server directly across the Pacific Ocean wastes bandwidth and adds 200ms latency.</li>
+<li>Cloudflare uses <strong>Tiered Caching</strong>: edge nodes query larger centralized <strong>Regional Tiered Caches</strong> located at major internet hubs before querying the origin, dramatically increasing overall cache hit ratios.</li>
+</ul>
+<h4 id="c-argo-smart-routing-the-waze-for-the-internet">C. Argo Smart Routing (The Waze for the Internet)</h4>
+<ul>
+<li>The public internet is prone to packet loss, fiber cuts, and routing inefficiencies.</li>
+<li>Cloudflare continuously routes millions of synthetic probes across its internal private backbone.</li>
+<li>If the public route between Sydney and Virginia is experiencing packet drops, <strong>Argo Smart Routing</strong> dynamically routes traffic through alternative uncongested Cloudflare data centers, cutting origin fetch latency by <strong>over 30%</strong>.</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Netflix Open Connect</th>
+<th>Cloudflare / Google Edge CDN</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Primary Workload</strong></td>
+<td>Massive, immutable video media files (MBs to GBs)</td>
+<td>Small static assets + dynamic API reverse proxying</td>
+</tr>
+<tr>
+<td><strong>Physical Deployment</strong></td>
+<td>Custom hardware installed directly inside ISP racks</td>
+<td>Centralized Edge PoPs connected to IXPs via BGP</td>
+</tr>
+<tr>
+<td><strong>Pre-Warming Strategy</strong></td>
+<td>Predictive off-peak overnight pre-positioning</td>
+<td>Reactive on-demand cache population + Tiered Cache</td>
+</tr>
+<tr>
+<td><strong>Edge Compute</strong></td>
+<td>None (Dedicated to zero-copy raw byte delivery)</td>
+<td>Rich (Cloudflare Workers / V8 Isolate edge execution)</td>
+</tr>
+<tr>
+<td><strong>Bandwidth Cost Structure</strong></td>
+<td>CapEx on hardware; zero ISP transit fees</td>
+<td>OpEx on network bandwidth and transit contracts</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Propose ISP Colocation for Video/Gaming</strong>: When designing video streaming (YouTube/Netflix) or game patch download systems (Steam/Epic), suggest placing caching appliances directly within partner ISP networks rather than relying solely on cloud regions.</li>
+<li><strong>Explain Predictive Pre-Positioning</strong>: Mention off-peak pre-warming. Pushing content to edge caches during the night flattens the network utilization curve and eliminates daytime backbone spikes.</li>
+<li><strong>Dynamic Content Acceleration</strong>: If asked how CDNs speed up non-cacheable API calls, explain that CDNs accelerate dynamic requests by terminating TCP/TLS at the edge near the user and maintaining pre-warmed persistent connections to the origin over optimized routing paths (Argo Smart Routing).</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

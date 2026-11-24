@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import escape
 import json
+import re
 from pathlib import Path, PurePosixPath
 from posixpath import normpath
 from string import Template
@@ -186,8 +187,11 @@ def lesson_page(index, lesson):
         sections.append(f'<p><a href="{REPO}/tree/main/labs/order-processing">Try the order-processing lab</a></p>')
     if lesson.id == "regional-recovery":
         sections.append(f'<p><a href="{REPO}/blob/main/STUDY_GUIDE.md#timed-mock-interviews">Try a timed design interview</a></p>')
+    folder = PurePosixPath(lesson.source).parent
+    full_chapter = (f"../chapters/{folder}/index.html" if lesson.source.endswith("/README.md")
+                    else f"{REPO}/blob/main/{lesson.source}")
     sections.append(
-        f'<p class="reference-link"><a href="{REPO}/blob/main/{lesson.source}">Read the full technical chapter</a></p>'
+        f'<p class="reference-link"><a href="{full_chapter}">Read the full technical chapter</a></p>'
     )
     return Template((COURSE / "lesson.html").read_text(encoding="utf-8")).substitute(
         navigation=site_navigation("../"),
@@ -225,17 +229,20 @@ def tool_page(title, description, prefix, script, content, current=None, before=
     return template.substitute(
         title=escape(title), description=escape(description), prefix=prefix,
         scripts="\n".join(f'  <script src="{prefix}course/{item}" defer></script>'
-                          for item in (*before, script)),
+                          for item in (*before, script) if item),
         navigation=site_navigation(prefix, current), content=content,
     )
 
 
-def library_page():
+def catalog_rows():
     source = (PAGES / "cards-data.js").read_text(encoding="utf-8")
     _, separator, payload = source.partition("window.SYSTEM_DESIGN_FLASHCARDS = ")
     if not separator:
         raise ValueError("Missing flashcard dataset")
-    rows = json.loads(payload.strip().removesuffix(";"))
+    return json.loads(payload.strip().removesuffix(";"))
+
+
+def library_page(rows):
     groups = {}
     labels = {}
     for row in rows:
@@ -252,7 +259,7 @@ def library_page():
         for row in groups[key]:
             folder = row["folder"]
             guided = LOCAL_TARGETS.get(folder)
-            href = f"learn/{guided}" if guided else f"{REPO}/blob/main/{quote(folder)}/README.md"
+            href = f"learn/{guided}" if guided else f"chapters/{folder}/index.html"
             badge = '<span class="catalog-kind">Guided lesson</span>' if guided else ""
             search = " ".join((row["number"], row["title"], row["category"], folder))
             items.append(
@@ -273,6 +280,47 @@ def library_page():
     )
     return tool_page("Topic library", "Search the system design curriculum by topic or category.",
                      "./", "library.js", content, "library")
+
+
+def chapter_outputs(rows):
+    folders = {row["folder"] for row in rows}
+    md = MarkdownIt("commonmark", {"html": True}).enable("table")
+    for row in rows:
+        folder = row["folder"]
+        destination = PAGES / "chapters" / folder
+        for source in ("README.md", "REAL_WORLD_EXAMPLES.md"):
+            tokens = md.parse((ROOT / folder / source).read_text(encoding="utf-8"))
+            for index, token in enumerate(tokens):
+                if token.type == "heading_open":
+                    slug = re.sub(r"[^\w -]", "", tokens[index + 1].content.lower()).strip().replace(" ", "-")
+                    token.attrSet("id", slug)
+                for child in token.children or ():
+                    if child.type != "link_open":
+                        continue
+                    href = child.attrGet("href")
+                    url = urlsplit(href)
+                    if url.scheme or url.netloc or not url.path:
+                        continue
+                    target = PurePosixPath(normpath(str(PurePosixPath(folder) / unquote(url.path))))
+                    if str(target) in folders:
+                        target /= "README.md"
+                    names = {"README.md": "index.html", "REAL_WORLD_EXAMPLES.md": "examples.html"}
+                    if str(target.parent) in folders and target.name in names:
+                        link = f"../{target.parent}/{names[target.name]}"
+                    else:
+                        link = f"{REPO}/blob/main/{quote(str(target))}"
+                    child.attrSet("href", link + (f"#{url.fragment}" if url.fragment else ""))
+            article = md.renderer.render(tokens, md.options, {})
+            content = ('<main id="main" class="container chapter-reader">'
+                       '<a href="../../library.html">Back to topic library</a>'
+                       f'<article>{article}</article></main>')
+            filename = "index.html" if source == "README.md" else "examples.html"
+            yield destination / filename, tool_page(
+                row["title"], row["title"], "../../", None, content,
+            ).encode()
+        for asset in sorted((ROOT / folder / "assets").glob("*")):
+            if asset.is_file():
+                yield destination / "assets" / asset.name, asset.read_bytes()
 
 
 def capstone_page():
@@ -321,7 +369,9 @@ def outputs():
     yield PAGES / "index.html", (banner + home).encode()
     for index, lesson in enumerate(LESSONS):
         yield PAGES / "learn" / f"{lesson.id}.html", (banner + lesson_page(index, lesson)).encode()
-    yield PAGES / "library.html", (banner + library_page()).encode()
+    rows = catalog_rows()
+    yield PAGES / "library.html", (banner + library_page(rows)).encode()
+    yield from chapter_outputs(rows)
     yield PAGES / "learn/capstone.html", (banner + capstone_page()).encode()
     simulator = (COURSE / "simulator.html").read_text(encoding="utf-8")
     yield PAGES / "learn/simulator.html", (banner + tool_page(

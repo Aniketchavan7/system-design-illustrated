@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Scalable URL Shortener (TinyURL / Bitly)">
+  <title>System Design: Scalable URL Shortener (TinyURL / Bitly) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="21---system-design-scalable-url-shortener-tinyurl--bitly">21 - System Design: Scalable URL Shortener (TinyURL / Bitly)</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> Designing a global URL shortener (like TinyURL or Bitly) is the quintessential system design interview question because it covers the end-to-end gamut: back-of-the-envelope capacity planning, mathematical encoding (Base62 vs. MD5), distributed unique key generation (KGS), 100:1 read-heavy caching, HTTP redirect status code trade-offs (301 vs. 302), and asynchronous analytics pipelines.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../21-system-design-url-shortener/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP status codes (<code>301 Moved Permanently</code> vs <code>302 Found</code>).</li>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value stores vs relational schemas for $O(1)$ lookups.</li>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy workloads.</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Sharding database partitions by short hash.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine you go to a theatre with a huge, heavy winter coat:</p>
+<ul>
+<li>The coat check attendant takes your bulky jacket and hands you a tiny plastic token with a number on it: <code>&quot;#42&quot;</code>.</li>
+<li>When the show ends, you hand the attendant plastic token <code>&quot;#42&quot;</code>. They instantly retrieve your heavy jacket from the rack and return it to you.</li>
+<li>You don't carry the bulky jacket around the crowded lobby; you only carry the tiny token!</li>
+<li>In computer terms: The bulky jacket is a massive 500-character URL (<code>https://example.com/products/deals/item?category=electronics&amp;ref=affiliate_99824</code>), the plastic token is the short URL (<code>https://tiny.url/7bX9qK</code>), and the coat rack is a distributed Redis and NoSQL database.</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">System Component</th>
+<th style="text-align:left">Coat Check Analogy</th>
+<th style="text-align:left">Technical Reality in TinyURL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Long URL</strong></td>
+<td style="text-align:left">Bulky, 10-pound winter coat</td>
+<td style="text-align:left">Full 2,048-character destination URL</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Short Code</strong></td>
+<td style="text-align:left">Tiny plastic numbered token (<code>#42</code>)</td>
+<td style="text-align:left">7-character Base62 string (<code>7bX9qK</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Token Dispenser</strong></td>
+<td style="text-align:left">Roll of pre-printed ticket stubs</td>
+<td style="text-align:left">Key Generation Service (KGS) with ZooKeeper ranges</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Coat Storage Rack</strong></td>
+<td style="text-align:left">Huge basement storage shelves</td>
+<td style="text-align:left">Distributed NoSQL database (DynamoDB / Cassandra)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Fast Pickup Desk</strong></td>
+<td style="text-align:left">Front counter holding the 50 most popular coats</td>
+<td style="text-align:left">In-memory Redis cache cluster (0.5 ms lookups)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Visitor Counter</strong></td>
+<td style="text-align:left">Tally clicker counting every coat retrieved</td>
+<td style="text-align:left">Asynchronous Kafka event stream for click analytics</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="why-url-shortening-is-hard-at-scale">Why URL Shortening is Hard at Scale</h3>
+<p>At small scale, creating a short URL is trivial: <code>SELECT id FROM urls</code> and return <code>tiny.url/id</code>.
+However, at <strong>production internet scale</strong>:</p>
+<ol>
+<li><strong>Capacity &amp; Collision Free</strong>: The service must support billions of URLs without running out of combinations and without two servers generating the same short code.</li>
+<li><strong>Extreme Read Asymmetry</strong>: 100:1 read-to-write ratio (11,600 reads/sec vs 116 writes/sec). Database disks cannot handle direct read traffic without collapsing.</li>
+<li><strong>Sub-Millisecond Redirection</strong>: Users clicking links expect instantaneous redirects (&lt;10 ms total network turnaround).</li>
+<li><strong>Security &amp; Anti-Scraping</strong>: Auto-incrementing integers (<code>tiny.url/1</code>, <code>tiny.url/2</code>) allow competitors to scrape the entire database simply by iterating $id+1$.</li>
+</ol>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-url-shortener-animation">High-Resolution URL Shortener Animation</h3>
+<p>Below is an animated trace of the Write Path (KGS token claim) and Read Path (Redis Cache HIT with 302 Redirect):</p>
+<p><img src="./assets/url_shortener.gif" alt="URL Shortener Architecture" /></p>
+<hr />
+<h3 id="high-level-architecture-diagram">High-Level Architecture Diagram</h3>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Clients[&quot;Clients &amp; Edge Tier&quot;]
+        User[&quot;👤 Mobile / Web User&quot;]
+        Edge[&quot;🌐 Cloudflare CDN Edge&quot;]
+        User --&gt;|1. GET /7bX9qK| Edge
+    end
+
+    subgraph AppTier[&quot;Application Tier&quot;]
+        LB[&quot;⚖️ L7 Load Balancer&quot;]
+        Edge --&gt;|Cache Miss| LB
+        S1[&quot;App Server 1&quot;]
+        S2[&quot;App Server 2&quot;]
+        LB --&gt; S1
+        LB --&gt; S2
+    end
+
+    subgraph DataTier[&quot;Data &amp; Cache Tier&quot;]
+        Redis[(&quot;⚡ Redis Cluster (LRU)&lt;br/&gt;Stores top 20% hot URLs (0.5ms)&quot;)]
+        DB[(&quot;🗄️ DynamoDB / Cassandra&lt;br/&gt;PK: short_hash&lt;br/&gt;Val: long_url, user_id, created_at&quot;)]
+        S1 --&gt;|Check Cache| Redis
+        Redis -.-&gt;|Miss: Read DB| DB
+    end
+
+    subgraph KGSCluster[&quot;Key Generation Tier&quot;]
+        ZK[&quot;🐘 ZooKeeper / etcd&lt;br/&gt;(Allocates token ranges)&quot;]
+        KGS[&quot;🔑 KGS (Key Gen Service)&lt;br/&gt;Pre-generates Base62 tokens&quot;]
+        ZK --&gt; KGS
+        KGS --&gt;|Pre-allocated Block| S1
+        KGS --&gt;|Pre-allocated Block| S2
+    end
+
+    subgraph AnalyticsTier[&quot;Asynchronous Analytics&quot;]
+        Kafka[&quot;📜 Kafka Topic: 'url-clicks'&quot;]
+        S1 -.-&gt;|Async Fire &amp; Forget| Kafka
+        AnalyticsWorker[&quot;📊 Analytics Consumer -&gt; ClickHouse DB&quot;]
+        Kafka --&gt; AnalyticsWorker
+    end
+
+    style Edge fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style Redis fill:#161b22,stroke:#3fb950,stroke-width:2px;
+    style DB fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style KGS fill:#161b22,stroke:#a371f7,stroke-width:2px;
+    style Kafka fill:#161b22,stroke:#f85149,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's execute a formal back-of-the-envelope estimation for a global system:</p>
+<h3 id="1-traffic-estimations">1. Traffic Estimations</h3>
+<ul>
+<li><strong>New Shortened URLs Created (Writes)</strong>: $100\text{ Million / month}$</li>
+<li><strong>URL Redirections (Reads)</strong>: $100:1\text{ ratio} \implies 10\text{ Billion / month}$</li>
+<li><strong>Writes per second (WPS)</strong>:
+$$\text{WPS} = \frac{100,000,000}{30 \times 24 \times 3600} \approx \frac{100,000,000}{2,592,000} \approx \mathbf{38.5\text{ writes/sec}}$$
+$$\text{Peak WPS (2x)} \approx \mathbf{80\text{ writes/sec}}$$</li>
+<li><strong>Reads per second (RPS)</strong>:
+$$\text{RPS} = \frac{10,000,000,000}{2,592,000} \approx \mathbf{3,858\text{ reads/sec}}$$
+$$\text{Peak RPS (2x)} \approx \mathbf{8,000\text{ reads/sec}}$$</li>
+</ul>
+<h3 id="2-storage-estimations-10-year-horizon">2. Storage Estimations (10-Year Horizon)</h3>
+<ul>
+<li>Assume average URL record size = $500\text{ bytes}$ (<code>short_code: 7B</code>, <code>long_url: 400B</code>, <code>created_at: 8B</code>, <code>user_id: 16B</code>, <code>metadata: 69B</code>).</li>
+<li>Total records in 10 years: $100\text{M/month} \times 12\text{ months} \times 10\text{ years} = 12\text{ Billion records}$.
+$$\text{Total Storage} = 12,000,000,000 \times 500\text{ bytes} = 6,000,000,000,000\text{ bytes} \approx \mathbf{6\text{ Terabytes}}$$
+6 TB of data over 10 years easily fits in a partitioned NoSQL database.</li>
+</ul>
+<h3 id="3-memory--caching-estimations-pareto-8020-rule">3. Memory &amp; Caching Estimations (Pareto 80/20 Rule)</h3>
+<ul>
+<li>20% of the URLs generate 80% of daily traffic.</li>
+<li>Daily read requests: $10\text{ Billion} / 30 \approx 330\text{ Million requests/day}$.</li>
+<li>Total data requested daily: $330\text{M} \times 500\text{ bytes} \approx 165\text{ GB/day}$.</li>
+<li>To cache 20% of daily requests:
+$$\text{Cache RAM} = 165\text{ GB} \times 0.20 \approx \mathbf{33\text{ GB of RAM}}$$
+A small 3-node Redis cluster with 32 GB RAM each easily holds the entire hot working set in memory!</li>
+</ul>
+<h3 id="4-base62-capacity-math">4. Base62 Capacity Math</h3>
+<p>Using alphanumeric characters <code>[0-9a-zA-Z]</code> (62 unique characters):</p>
+<ul>
+<li>With a 6-character short URL: $62^6 \approx 56.8\text{ Billion unique URLs}$.</li>
+<li>With a 7-character short URL:
+$$62^7 = \mathbf{3,521,614,606,208\text{ unique URLs (3.52 Trillion!)}}$$
+At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong></li>
+</ul>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-token-generation-base62-vs-md5-hash-collisions">1. Token Generation: Base62 vs. MD5 Hash Collisions</h3>
+<h4 id="approach-1-md5--sha-256-hashing-flawed">Approach 1: MD5 / SHA-256 Hashing (Flawed)</h4>
+<ul>
+<li>Hash long URL: $\text{MD5}(\text{url}) \implies 128\text{-bit hex string}$.</li>
+<li>Take first 7 characters: <code>d41d8cd</code>.</li>
+<li><em>Fatal Flaw</em>: Hash collisions! Two completely different URLs can produce the same first 7 characters. You must query the database to detect collisions and append salt (<code>url + salt</code>), triggering expensive database round-trips on every single write.</li>
+</ul>
+<h4 id="approach-2-base62-encoding-of-distributed-sequence-ids-production-gold-standard">Approach 2: Base62 Encoding of Distributed Sequence IDs (Production Gold Standard)</h4>
+<ul>
+<li>Maintain a 64-bit unique integer ID generator.</li>
+<li>Convert the integer directly to Base62:
+<ul>
+<li>$\text{ID } 100,000,000 \implies \text{&quot;006LAze&quot;}$</li>
+<li>$\text{ID } 100,000,001 \implies \text{&quot;006LAzf&quot;}$</li>
+</ul>
+</li>
+<li><strong>Mathematical Guarantee</strong>: Because integers are unique, <strong>Base62 strings are 100% collision-free by definition!</strong> Zero database collision checks required.</li>
+</ul>
+<hr />
+<h3 id="2-the-key-generation-service-kgs">2. The Key Generation Service (KGS)</h3>
+<p>How do multiple application servers generate unique 64-bit integers without locking a central database sequence?</p>
+<ul>
+<li>We deploy a dedicated <strong>Key Generation Service (KGS)</strong> backed by <strong>ZooKeeper or etcd</strong>.</li>
+<li>ZooKeeper allocates discrete <strong>Token Ranges</strong> to each application server:
+<ul>
+<li>Server 1 is assigned IDs: <code>[1,000,000 to 1,999,999]</code></li>
+<li>Server 2 is assigned IDs: <code>[2,000,000 to 2,999,999]</code></li>
+</ul>
+</li>
+<li>Each server maintains its counter entirely in local memory with <strong>zero network communication</strong>!</li>
+<li>If Server 1 restarts, it simply requests a fresh range from ZooKeeper. The skipped IDs in the old range are harmless because 3.52 Trillion keys are available.</li>
+</ul>
+<hr />
+<h3 id="3-http-301-vs-http-302-redirection">3. HTTP 301 vs. HTTP 302 Redirection</h3>
+<p>When a user requests <code>https://tiny.url/7bX9qK</code>, the server responds with an HTTP redirect:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">HTTP Status Code</th>
+<th style="text-align:left">Meaning</th>
+<th style="text-align:left">Browser Behavior</th>
+<th style="text-align:left">Impact on Analytics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong><code>301 Moved Permanently</code></strong></td>
+<td style="text-align:left">URL is permanently at new destination</td>
+<td style="text-align:left">Browser caches redirect locally; <strong>never contacts TinyURL server again!</strong></td>
+<td style="text-align:left">❌ Destroys click analytics; cannot count future clicks</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong><code>302 Found</code> (Recommended)</strong></td>
+<td style="text-align:left">Temporary redirect</td>
+<td style="text-align:left">Browser <strong>always contacts TinyURL server</strong> on every single click</td>
+<td style="text-align:left">✅ Captures 100% of click analytics, referrer, and user-agent</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Relational DB (PostgreSQL)</th>
+<th style="text-align:left">NoSQL Key-Value (DynamoDB / Cassandra)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Lookup Performance</strong></td>
+<td style="text-align:left">Fast with B-tree index on <code>short_code</code> ($O(\log N)$)</td>
+<td style="text-align:left">Ultra-Fast primary key point lookup ($O(1)$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Horizontal Scalability</strong></td>
+<td style="text-align:left">Requires complex manual sharding schemes</td>
+<td style="text-align:left">Seamless native hash ring partitioning</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Operational Overhead</strong></td>
+<td style="text-align:left">High at 10 TB scale</td>
+<td style="text-align:left">Managed serverless (zero maintenance)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Recommendation</strong></td>
+<td style="text-align:left">Good for MVP (&lt;10M records)</td>
+<td style="text-align:left"><strong>Industry Standard for Global Scale</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Using 301 Redirects when Click Tracking is Required</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Returning <code>301 Moved Permanently</code>.</li>
+<li><em>Result</em>: The user's browser permanently caches the redirect. Every subsequent click goes straight to the destination website without ever hitting TinyURL servers, cutting click analytics revenue to zero. Always use <code>302 Found</code> (or <code>307 Temporary Redirect</code>) if analytics are monetized.</li>
+</ul>
+</li>
+<li>
+<p><strong>Predictable Sequential IDs (Scraping Vulnerability)</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Incrementing token IDs strictly by $+1$ without shuffling: <code>0000001</code>, <code>0000002</code>.</li>
+<li><em>Result</em>: Competitors can easily write a bot that iterates from 1 to 1,000,000, scraping every secret internal document, unlisted Zoom link, and private Google Doc ever shortened by users.</li>
+<li><em>Fix</em>: Use a simple Feistel cipher or token shuffling bit-mask to pseudo-randomize integer output before Base62 encoding.</li>
+</ul>
+</li>
+<li>
+<p><strong>Synchronous Analytics Logging</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Writing an analytics record to Postgres (<code>INSERT INTO clicks (url_id, ip, timestamp)...</code>) inside the user redirection request thread.</li>
+<li><em>Result</em>: Increases redirect latency from 1 ms to 25 ms, creating database write lock contention.</li>
+<li><em>Fix</em>: Emit click events asynchronously to an Apache Kafka topic; background workers batch-insert analytics into ClickHouse or BigQuery.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/21-system-design-url-shortener/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>Base62 encoding/decoding of 64-bit sequence IDs into 7-character tokens.</li>
+<li>A simulated Key Generation Service (KGS) managing token block allocations.</li>
+<li>Cache-Aside Redis simulation demonstrating latency drop from <strong>5.28 ms down to 0.001 ms</strong>.</li>
+<li>1,000-request high-throughput benchmark demonstrating 100% cache hit rates and asynchronous click tracking.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Bitly</strong>: Manages over 10 billion clicks per month across hundreds of millions of branded short links. Uses distributed caching and Apache Cassandra storage.</li>
+<li><strong>Twitter / X (<code>t.co</code>)</strong>: Automatically wraps every link posted on X inside a <code>t.co</code> short URL to perform malicious phishing scanning, malware detection, and engagement analytics.</li>
+<li><strong>LinkedIn (<code>lnkd.in</code>)</strong>: Shortens links shared in feeds to monitor traffic sources and protect users from fraud.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-why-is-base62-chosen-for-url-shorteners-instead-of-base64-or-base16-hex">Q1: &quot;Why is Base62 chosen for URL shorteners instead of Base64 or Base16 (Hex)?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing encoding knowledge and web URL standard compliance.</p>
+<p><strong>Model Answer</strong>:
+&quot;Base62 uses precisely the 62 alphanumeric characters: <code>[0-9]</code>, <code>[a-z]</code>, and <code>[A-Z]</code>:</p>
+<ol>
+<li><strong>URL Safety</strong>: Standard Base64 introduces <code>+</code> and <code>/</code> (and padding <code>=</code>), which are reserved characters in HTTP URLs. In standard URL queries, <code>+</code> is interpreted as a space, and <code>/</code> is interpreted as a path delimiter. While URL-safe Base64 exists (substituting <code>-</code> and <code>_</code>), Base62 consists strictly of pure alphanumeric characters that never require URL encoding or escaping in any browser, SMS, or QR code.</li>
+<li><strong>Compact Density</strong>: Compared to Base16 (Hexadecimal: <code>0–9, a–f</code>), Base62 packs vastly more entropy per character: $62^7 \approx 3.52\text{ Trillion}$ combinations vs. $16^7 \approx 268\text{ Million}$ combinations. Base62 keeps short URLs compact.&quot;</li>
+</ol>
+<hr />
+<h3 id="q2-how-do-you-handle-custom-alias-urls-eg-tinyurlmy-custom-vanity-name">Q2: &quot;How do you handle custom alias URLs (e.g., <code>tiny.url/my-custom-vanity-name</code>)?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Checking database schema design and edge-case handling.</p>
+<p><strong>Model Answer</strong>:
+&quot;When users request a custom alias:</p>
+<ol>
+<li><strong>Schema Check</strong>: We query the database to verify if <code>custom_alias</code> already exists.</li>
+<li><strong>Collision Prevention</strong>: In a relational or NoSQL database, <code>short_code</code> is the primary key or unique index. We execute an atomic conditional write:
+<ul>
+<li>In DynamoDB: <code>attribute_not_exists(short_hash)</code></li>
+<li>In SQL: <code>INSERT INTO urls (short_code, long_url) VALUES ('my-custom-vanity-name', ...) ON CONFLICT DO NOTHING</code></li>
+</ul>
+</li>
+<li><strong>If collision occurs</strong>: Return HTTP <code>409 Conflict</code> with a user-friendly error message: <em>'Alias already taken, please choose another.'</em></li>
+<li><strong>Reserved Names</strong>: Enforce an application-level blocklist preventing users from claiming reserved routes like <code>/api</code>, <code>/admin</code>, <code>/login</code>, or <code>/terms</code>.&quot;</li>
+</ol>
+<hr />
+<h3 id="q3-what-happens-when-the-redis-cache-becomes-full-in-a-url-shortener">Q3: &quot;What happens when the Redis cache becomes full in a URL shortener?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing cache eviction policies under read-heavy skew.</p>
+<p><strong>Model Answer</strong>:
+&quot;Because URL redirection follows the Pareto principle (the top 20% of URLs drive 80% of traffic), we configure the Redis cluster with an explicit memory limit and eviction policy:</p>
+<ul>
+<li><code>maxmemory 32gb</code></li>
+<li><code>maxmemory-policy allkeys-lru</code> (Least Recently Used)
+When memory is saturated, Redis automatically evicts URLs that haven't been accessed for the longest time.
+If an evicted short URL is clicked a month later:</li>
+</ul>
+<ol>
+<li>Application suffers a Cache Miss.</li>
+<li>Application queries the persistent NoSQL database in 5 ms.</li>
+<li>Application writes the record back into Redis and serves the redirect.
+The system gracefully degrades without dropping any requests or crashing.&quot;</li>
+</ol>
+<hr />
+<h3 id="q4-how-do-you-implement-url-expiration-ttls-at-scale">Q4: &quot;How do you implement URL expiration (TTLs) at scale?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Evaluating background storage maintenance strategies.</p>
+<p><strong>Model Answer</strong>:
+&quot;If URLs have optional expiration dates (e.g. valid for 30 days):</p>
+<ol>
+<li><strong>Passive Expiration (Lazy Check)</strong>:
+<ul>
+<li>When a user clicks a short URL, the application checks <code>IF NOW() &gt; expires_at</code>.</li>
+<li>If expired, return HTTP <code>404 Not Found</code> immediately, and trigger an asynchronous message to delete the row.</li>
+</ul>
+</li>
+<li><strong>Active Sweeping (Background Cleanup)</strong>:
+<ul>
+<li>Continuously scanning billions of records with <code>DELETE WHERE expires_at &lt; NOW()</code> is too heavy for database performance.</li>
+<li>Instead, we leverage <strong>native database TTLs</strong>: DynamoDB and Cassandra support automatic background TTL eviction natively without consuming application CPU or IOPS.</li>
+<li>Alternatively, partition database tables by month (<code>urls_2026_01</code>, <code>urls_2026_02</code>), and drop old monthly tables entirely in a single $O(1)$ DDL drop operation.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q5-how-do-you-protect-a-public-url-shortener-from-malicious-links-and-spam-abuse">Q5: &quot;How do you protect a public URL shortener from malicious links and spam abuse?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing production security, compliance, and abuse prevention.</p>
+<p><strong>Model Answer</strong>:
+&quot;Public URL shorteners are prime targets for phishing, malware, and spam. Production platforms enforce multi-layered defenses:</p>
+<ol>
+<li><strong>Rate Limiting</strong>: Enforce token-bucket rate limits per IP address and authenticated user account (e.g., max 10 URL creations per minute).</li>
+<li><strong>Malicious Domain Blacklisting</strong>: During the write path, check the destination domain against Google Safe Browsing API, Spamhaus, and internal phishing blocklists before accepting the write.</li>
+<li><strong>Async Malware Scanner</strong>: Push newly submitted URLs to a Kafka scanning pipeline where headless browser workers fetch the target site and analyze page content for malware signatures. If malicious, flag the record in Redis/DB to display a warning splash screen rather than immediate redirection.</li>
+<li><strong>Spam Honeytraps</strong>: Deploy CAPTCHAs upon detecting abnormal automated creation spikes.&quot;</li>
+</ol>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. Why does Base62 with 7 characters provide 3.52 Trillion combinations while Base16 with 7 characters only provides 268 Million?</b></summary>
+<br>
+Because the radix (base) is exponentially multiplied by the length: $62^7 \approx 3.52 \times 10^{12}$, whereas $16^7 \approx 2.68 \times 10^8$. Base62 has 62 available alphanumeric options per slot (`[0-9a-zA-Z]`), giving it over <b>13,000 times more combinations</b> than hexadecimal.
+</details>
+<details>
+<summary><b>2. Why should an analytics-focused URL shortener return HTTP 302 Found instead of HTTP 301 Moved Permanently?</b></summary>
+<br>
+Because browsers permanently cache HTTP 301 redirects on the client machine and will <b>never contact the shortener server again</b> for subsequent clicks. HTTP 302 forces browsers to contact the shortener on every visit, allowing 100% accurate tracking of clicks, referrers, devices, and countries.
+</details>
+<details>
+<summary><b>3. How does the Key Generation Service (KGS) prevent duplicate short codes without acquiring database locks?</b></summary>
+<br>
+By allocating <b>pre-reserved token blocks</b> (e.g., Server 1 gets 100,000 to 199,999; Server 2 gets 200,000 to 299,999) using ZooKeeper or etcd. Each server increments its counter purely in local memory with zero cross-server locking or network collisions.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>System Design Interview – An Insider's Guide (Volume 1)</strong> by Alex Xu — <em>Chapter 8: Design a URL Shortener</em>.</li>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 1: Reliability, Scalability, and Maintainability</em>.</li>
+<li><strong>Ilya Grigorik's High Performance Browser Networking</strong> — <em>HTTP Redirects and Latency Impact</em>.</li>
+<li><strong>Bitly Engineering Blog</strong>: <em>How Bitly Scales High-Volume Redirections</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP 301 vs 302 redirect protocol mechanics.</li>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value storage models.</li>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy scale.</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Distributing URL partitions across database clusters.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

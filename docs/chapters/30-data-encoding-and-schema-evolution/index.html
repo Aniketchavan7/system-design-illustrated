@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Data Encoding &amp; Schema Evolution">
+  <title>Data Encoding &amp; Schema Evolution | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="30--data-encoding--schema-evolution">30 · Data Encoding &amp; Schema Evolution</h1>
+<blockquote>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Protocol Buffers standard across Borg RPCs) and <strong>LinkedIn / Netflix</strong> (Apache Avro Schema Registries) manage schema evolution are documented in <a href="../30-data-encoding-and-schema-evolution/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<hr />
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Programs keep data in memory as objects, structs, or arrays (optimized for CPU pointers). When you want to send that data over the network or save it to disk, you must convert it into a byte sequence. This process is called <strong>Serialization / Encoding</strong>.</p>
+<ul>
+<li><strong>Text Formats (JSON, XML)</strong>: Human-readable, easy to debug, but slow to parse and bulky over the wire because field names are repeated in every single message.</li>
+<li><strong>Binary Formats (Protocol Buffers, Apache Thrift, Apache Avro)</strong>: Ultra-compact, fast to serialize, and use <strong>numeric field tags</strong> instead of text keys.</li>
+<li><strong>Schema Evolution</strong>: Code changes constantly in large organizations. Rolling updates mean old servers and new servers run concurrently. <strong>Backward Compatibility</strong> ensures new code can read old data. <strong>Forward Compatibility</strong> ensures old code can read new data without crashing.</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy-the-government-application-form">🍕 Everyday analogy: The Government Application Form</h2>
+<p>Imagine a printed paper form for renewing a passport:</p>
+<ul>
+<li><strong>JSON (Verbosely Labeling Every Box)</strong>: Every citizen submits a blank sheet of paper writing: <code>&quot;First Name: Alice, Last Name: Smith, Age: 30&quot;</code>. Printing the labels <code>&quot;First Name&quot;</code> over and over wastes ink and envelope weight.</li>
+<li><strong>Protocol Buffers (Numbered Boxes)</strong>: The government issues a standardized template: Box 1 = First Name, Box 2 = Last Name, Box 3 = Age. The citizen only submits: <code>1: Alice, 2: Smith, 3: 30</code>.</li>
+<li><strong>Schema Evolution (Adding a New Box)</strong>:
+<ul>
+<li>Next year, the government adds Box 4: <code>&quot;Middle Name (Optional)&quot;</code>.</li>
+<li>An old citizen who uses the previous year's form omits Box 4. The new officer accepts it safely (<strong>Backward Compatibility</strong>).</li>
+<li>A citizen who uses the new form submits Box 4 to an old officer. The old officer simply ignores Box 4 and processes Boxes 1, 2, and 3 (<strong>Forward Compatibility</strong>).</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<p>In production distributed systems with thousands of microservices:</p>
+<ol>
+<li><strong>You Cannot Deploy Everything Simultaneously</strong>: Large systems rely on <strong>Rolling Upgrades</strong> (updating 5% of servers at a time over hours). During this window, <code>v1</code> services talk to <code>v2</code> services.</li>
+<li><strong>Database Longevity</strong>: A record written to disk 5 years ago by <code>v1</code> code must still be readable by today's <code>v5</code> code.</li>
+<li><strong>Bandwidth &amp; CPU Waste</strong>: Parsing text JSON strings consumes massive CPU cycles and inflates network bandwidth. Binary serialization reduces payload size by <strong>60% to 80%</strong> and cuts serialization CPU time by up to <strong>$10	imes$</strong>.</li>
+</ol>
+<hr />
+<h2 id="picture-it-json-vs-protocol-buffers-binary-encoding">🖼️ Picture It: JSON vs Protocol Buffers Binary Encoding</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph JSON[&quot;JSON Format (Bulky Text with Repeated Keys: 58 Bytes)&quot;]
+        J1[&quot;{'user_id': 1001, 'user_name': 'Alice', 'is_active': true}&quot;]
+    end
+
+    subgraph Protobuf[&quot;Protocol Buffers (Compact Binary with Varints &amp; Tags: 12 Bytes)&quot;]
+        P1[&quot;[08][E9 07] [12 05 'Alice'] [18 01]&quot;]
+        P2[&quot;Tag 1 (Varint) + Tag 2 (String) + Tag 3 (Boolean)&quot;]
+    end
+    
+    JSON --&gt;|60-80% Size Reduction| Protobuf
+    
+    style JSON fill:#161b22,stroke:#f85149,stroke-width:2px;
+    style Protobuf fill:#161b22,stroke:#3fb950,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="the-binary-varint-encoding-mechanics">🔢 The Binary Varint Encoding Mechanics</h2>
+<p>How does Protocol Buffers store an integer like <code>300</code> in just 2 bytes instead of 4 or 8 bytes? Using <strong>Varints (Variable-Length Quantities)</strong>:</p>
+<ul>
+<li>Standard 32-bit integer always takes <strong>4 bytes (32 bits)</strong> even for the number <code>1</code>.</li>
+<li>Varints use the most significant bit (MSB) as a <strong>continuation bit</strong>:
+<ul>
+<li><code>MSB = 1</code>: More bytes follow.</li>
+<li><code>MSB = 0</code>: Last byte of the number.</li>
+</ul>
+</li>
+<li>Small numbers (0 to 127) take only <strong>1 single byte</strong>!</li>
+</ul>
+<hr />
+<h2 id="how-schema-evolution-works-in-production">⚙️ How Schema Evolution Works in Production</h2>
+<h3 id="the-4-golden-rules-of-protobuf--avro-compatibility">The 4 Golden Rules of Protobuf / Avro Compatibility:</h3>
+<ol>
+<li><strong>Never Change an Existing Field's Tag Number</strong>: The tag number <em>is</em> the field's identity over the wire. Changing Tag 2 from <code>name</code> to <code>email</code> corrupts all existing data.</li>
+<li><strong>Never Make a New Field Required</strong>: If you add a required field, old code emitting messages without that field will cause new code to fail validation. Always make new fields optional or provide default values.</li>
+<li><strong>Never Reuse a Deleted Tag Number</strong>: When removing a field, mark its tag number as <code>reserved</code> in the <code>.proto</code> file so future developers don't reuse it.</li>
+<li><strong>Unknown Fields Preservation</strong>: When older code reads data with new tag numbers, it preserves those unknown bytes in memory and re-emits them if forwarding the message.</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Serialization Format</th>
+<th style="text-align:center">Human Readable</th>
+<th style="text-align:center">Performance &amp; Size</th>
+<th style="text-align:center">Schema Required</th>
+<th style="text-align:left">Best Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>JSON</strong></td>
+<td style="text-align:center">✅ Yes</td>
+<td style="text-align:center">Slow / Large (100%)</td>
+<td style="text-align:center">❌ No</td>
+<td style="text-align:left">Public-facing REST APIs, web UIs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Protocol Buffers</strong></td>
+<td style="text-align:center">❌ No (Binary)</td>
+<td style="text-align:center">Ultra-Fast / Small (20–30%)</td>
+<td style="text-align:center">✅ Yes (<code>.proto</code>)</td>
+<td style="text-align:left">Internal inter-service gRPC RPCs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Apache Avro</strong></td>
+<td style="text-align:center">❌ No (Binary)</td>
+<td style="text-align:center">Ultra-Fast / Smallest</td>
+<td style="text-align:center">✅ Yes (Schema Registry)</td>
+<td style="text-align:left">Kafka event streams &amp; Big Data lakes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>FlatBuffers</strong></td>
+<td style="text-align:center">❌ No (Binary)</td>
+<td style="text-align:center">Zero-copy access</td>
+<td style="text-align:center">✅ Yes</td>
+<td style="text-align:left">Gaming, mobile, real-time graphics</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li><strong>Renaming or Reordering Numeric Tags in Protobuf</strong>:
+<ul>
+<li><em>Pitfall</em>: Changing <code>string email = 3;</code> to <code>string email = 4;</code>.</li>
+<li><em>Result</em>: Instant serialization corruption and runtime exceptions in production.</li>
+</ul>
+</li>
+<li><strong>Sending Large JSON Payloads Inside Internal RPC Call Trees</strong>:
+<ul>
+<li><em>Pitfall</em>: Microservice A calls B calls C, each converting 1MB JSON back and forth.</li>
+<li><em>Result</em>: Enormous CPU garbage collection spikes from JSON string parsing. Use binary gRPC/Protobuf for internal east-west traffic.</li>
+</ul>
+</li>
+<li><strong>Missing Schema Registry for Kafka</strong>:
+<ul>
+<li><em>Pitfall</em>: Emitting Avro binary events into Kafka without a centralized Confluent Schema Registry.</li>
+<li><em>Result</em>: Consumers crash because they cannot fetch the writer schema needed to decode binary bytes.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try It Yourself</h2>
+<p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/30-data-encoding-and-schema-evolution/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>A binary varint serializer and tag packer demonstrating the exact byte layout of Protocol Buffers.</li>
+<li>A side-by-side payload size benchmark: JSON vs Binary Serialization.</li>
+<li>A live Schema Evolution test proving forward and backward compatibility when adding new optional fields.</li>
+</ol>
+<p>Run it directly in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Google</strong>: Every internal RPC across all Google services runs exclusively on <strong>Protocol Buffers</strong> and gRPC.</li>
+<li><strong>Netflix &amp; Uber</strong>: Ingest trillions of daily events into Apache Kafka formatted as <strong>Apache Avro</strong> managed by centralized schema registries.</li>
+<li><strong>Apple</strong>: Uses binary serialization for push notifications (APNs) to maximize mobile radio efficiency.</li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions--deep-answers">🎯 Top 5 Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-the-difference-between-backward-compatibility-and-forward-compatibility">Q1: &quot;What is the difference between Backward Compatibility and Forward Compatibility?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Backward Compatibility</strong>: New code can read data that was generated by older code (essential when loading historical records from a database or storage).</li>
+<li><strong>Forward Compatibility</strong>: Old code can read data that was generated by newer code (essential during rolling server updates where old servers receive requests from new canary instances).
+Systems that support both are <strong>Fully Compatible</strong>.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-why-is-protocol-buffers-so-much-smaller-and-faster-than-json">Q2: &quot;Why is Protocol Buffers so much smaller and faster than JSON?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ol>
+<li><strong>Numeric Tags Instead of Strings</strong>: Protobuf replaces text field names (<code>&quot;user_id&quot;</code>) with 1-byte numeric tags (<code>1</code>), saving dozens of bytes per field.</li>
+<li><strong>Varint Encoding</strong>: Integers are stored using variable-length quantities rather than fixed 4/8 bytes or ASCII digit strings.</li>
+<li><strong>No String Parsing Delimiters</strong>: JSON requires scanning for quotes, colons, braces, and commas. Protobuf stores length-prefixed strings, enabling fast memory copies without string tokenization.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-how-does-apache-avro-handle-schema-evolution-differently-from-protocol-buffers">Q3: &quot;How does Apache Avro handle schema evolution differently from Protocol Buffers?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Protocol Buffers encodes field tag numbers directly inside the binary message payload.
+Apache Avro does <strong>not</strong> include tag numbers or field names in the message payload. Instead:</p>
+<ul>
+<li>It relies on two schemas: the <strong>Writer's Schema</strong> (used to serialize the message) and the <strong>Reader's Schema</strong> (used to deserialize it).</li>
+<li>In streaming pipelines (Kafka), messages carry only a 4-byte Schema ID pointing to a centralized <strong>Schema Registry</strong>. The reader fetches the schema once, compares schemas, and decodes the payload, producing the most compact byte representation possible.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-what-happens-if-an-older-service-receives-a-protobuf-message-containing-a-newly-added-field">Q4: &quot;What happens if an older service receives a Protobuf message containing a newly added field?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>The older service's Protobuf parser inspects the tag number, realizes it does not recognize the tag, and skips over the field using the wire-type length header. In modern Protobuf (proto3), the parser preserves the unknown field bytes in memory so that if the service forwards the message to another service, the new field is not lost!</p>
+</details>
+<hr />
+<h3 id="q5-when-should-you-still-use-json-instead-of-binary-protocols">Q5: &quot;When should you still use JSON instead of binary protocols?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ol>
+<li><strong>Public APIs</strong>: External third-party developers expect standard JSON over HTTP without having to compile <code>.proto</code> files into their language SDKs.</li>
+<li><strong>Browser Frontend Clients</strong>: Browsers have native, highly optimized C++ JSON parsers (<code>JSON.parse()</code>).</li>
+<li><strong>Debugging and Ad-Hoc Inspection</strong>: JSON can be inspected in curl, Postman, and raw logs without specialized decoding tools.</li>
+</ol>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go Deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann: Chapter 4 (<em>Encoding and Evolution</em>).</li>
+<li><strong>Google Protocol Buffers Documentation</strong>: <em>Encoding Specification</em> (protobuf.dev).</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

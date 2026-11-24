@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Microservices And Service Mesh">
+  <title>Microservices And Service Mesh | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-33-microservices--service-mesh">Module 33: Microservices &amp; Service Mesh</h1>
+<blockquote>
+<p>Deep-dive architectural guide covering microservices decomposition, service discovery, sidecar proxies, distributed tracing, and service mesh data/control planes (Envoy &amp; Istio).</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before diving into microservices and service meshes, you should be familiar with:</p>
+<ul>
+<li><a href="../03-load-balancing/index.html">03 - Load Balancing</a> (Client-side vs server-side load balancing)</li>
+<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Edge routing vs east-west internal traffic)</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Circuit breakers, deadlines, and fallback strategies)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine a giant restaurant with 100 specialized chefs (one chops onions, one makes pasta, one plates desserts). In a traditional monolith, all 100 chefs share one giant kitchen table; if one chef spills soup on the floor, the entire kitchen halts.</p>
+<p>In a <strong>Microservices Architecture</strong>, each chef has their own independent mini-kitchen with separate utensils, ingredients, and electrical breakers.
+However, having 100 independent kitchens creates chaos: how do chefs talk to each other? What if the sauce chef doesn't speak the dessert chef's language? What if the pasta chef gets overloaded?</p>
+<p>A <strong>Service Mesh</strong> gives every chef a dedicated personal assistant (a <strong>Sidecar Proxy</strong>). Whenever Chef A wants to send ingredients to Chef B, Chef A hands it to their assistant. The assistants automatically find Chef B's room, check Chef B's health, encrypt the transport, handle retries if Chef B drops a spoon, and log the delivery time—allowing the chefs to focus 100% on cooking!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Diplomatic Embassy Corps with Dedicated Interpreters</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Embassy Analogy</th>
+<th style="text-align:left">Microservices &amp; Service Mesh Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Individual Diplomats</strong></td>
+<td style="text-align:left">Microservice Instances</td>
+<td style="text-align:left">Single-purpose application code (Payments, Catalog, Inventory).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Personal Interpreters / Security Detail</strong></td>
+<td style="text-align:left">Sidecar Proxy (Envoy)</td>
+<td style="text-align:left">Co-located process intercepting all inbound and outbound network traffic.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Ministry of Foreign Affairs</strong></td>
+<td style="text-align:left">Service Mesh Control Plane (Istio)</td>
+<td style="text-align:left">Central controller broadcasting routing rules, mTLS certs, and configurations.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Diplomatic Phone Directory</strong></td>
+<td style="text-align:left">Service Registry (Consul / Eureka)</td>
+<td style="text-align:left">Dynamic lookup of healthy instance IP addresses and ports.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Sealed Diplomatic Pouch</strong></td>
+<td style="text-align:left">Mutual TLS (mTLS)</td>
+<td style="text-align:left">Hardware-backed, zero-trust end-to-end encryption between services.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Numbered Diplomatic Dispatch Stamp</strong></td>
+<td style="text-align:left">Distributed Tracing (<code>traceparent</code>)</td>
+<td style="text-align:left">W3C standardized header tracing a request across 20 hops.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>As organizations scale beyond hundreds of developers, monolithic applications suffer from:</p>
+<ol>
+<li><strong>Deployment Lockstep</strong>: A one-line bug in the recommendation engine blocks the critical checkout service deployment.</li>
+<li><strong>Coupled Failures</strong>: A memory leak in one component crashes the entire process for all features.</li>
+<li><strong>Library Fatigue (&quot;SDK Hell&quot;)</strong>: In early microservices, every language (Java, Go, Node.js, Python) needed separate client libraries for retry logic, circuit breaking, distributed tracing, and mTLS. When a security patch or retry policy changed, thousands of codebases required recompilation and redeployment.</li>
+</ol>
+<p>A <strong>Service Mesh</strong> extracts all networking, observability, security, and traffic control out of application code into the infrastructure layer via <strong>Sidecar Proxies</strong>.</p>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph ControlPlane[&quot;Service Mesh Control Plane (e.g., Istio)&quot;]
+        Pilot[&quot;Traffic Controller &amp; Routing Rules&quot;]
+        Citadel[&quot;CA / mTLS Certificate Manager&quot;]
+    end
+
+    subgraph PodA[&quot;Service A (Orders)&quot;]
+        AppA[&quot;Business App (Orders)&quot;]
+        SidecarA[&quot;Envoy Sidecar Proxy A&quot;]
+        AppA &lt;--&gt;|&quot;localhost (plaintext)&quot;| SidecarA
+    end
+
+    subgraph PodB[&quot;Service B (Payments)&quot;]
+        SidecarB[&quot;Envoy Sidecar Proxy B&quot;]
+        AppB[&quot;Business App (Payments)&quot;]
+        SidecarB &lt;--&gt;|&quot;localhost (plaintext)&quot;| AppB
+    end
+
+    SidecarA ==&gt;|&quot;Mutual TLS (mTLS) + W3C Traceparent&quot;| SidecarB
+    Pilot -.-&gt;|&quot;Push Config via xDS (gRPC)&quot;| SidecarA
+    Pilot -.-&gt;|&quot;Push Config via xDS (gRPC)&quot;| SidecarB
+    Citadel -.-&gt;|&quot;Issue &amp; Rotate x509 Certs&quot;| SidecarA
+    Citadel -.-&gt;|&quot;Issue &amp; Rotate x509 Certs&quot;| SidecarB
+</code></pre>
+<hr />
+<h2 id="real-numbers--latency-overhead">Real Numbers &amp; Latency Overhead</h2>
+<p>Adding a sidecar proxy introduces two extra network hops on <code>localhost</code> per inter-service call:</p>
+<ul>
+<li><strong>Proxy Latency Overhead</strong>: A modern Envoy sidecar proxy adds <strong>$\approx 0.8\text{ ms}$ to $1.8\text{ ms}$</strong> of p99 latency per hop under high load.</li>
+<li><strong>CPU &amp; Memory Footprint</strong>: Envoy typically requires $50\text{ MB} - 120\text{ MB}$ of RAM per container pod and $0.1$ to $0.25$ vCPU cores.</li>
+<li><strong>Scale Consideration</strong>: In an enterprise cluster with 2,000 microservice pods, 2,000 sidecar proxies consume $\approx 200\text{ GB}$ of RAM and hundreds of CPU cores purely for traffic mediation.</li>
+<li><strong>Decision Rule</strong>: Adopt a full service mesh only when microservice count exceeds 20-30 services and multi-language polyglot routing, mTLS, or canary releases become unmanageable with centralized API gateways.</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-the-data-plane-vs-the-control-plane">1. The Data Plane vs. The Control Plane</h3>
+<ul>
+<li><strong>Data Plane</strong>: Composed of high-performance proxies (primarily <strong>Envoy</strong>) deployed as sidecars alongside every service instance. It intercepts every inbound and outbound TCP/HTTP packet, performing:
+<ul>
+<li>Dynamic service discovery and client-side load balancing.</li>
+<li>Health checks and outlier detection (ejection of failing nodes).</li>
+<li>Mutual TLS (mTLS) encryption and certificate verification.</li>
+<li>Telemetry collection (metrics, logs, distributed trace spans).</li>
+</ul>
+</li>
+<li><strong>Control Plane</strong> (e.g., <strong>Istio Pilot/Istiod</strong>): Translates human-readable routing configurations (e.g., &quot;Route 10% of traffic to Payments v2&quot;) into machine-readable configs and streams them dynamically to thousands of Envoy proxies using the <strong>xDS protocol</strong> (gRPC stream) without restarting proxies.</li>
+</ul>
+<h3 id="2-distributed-tracing-mechanics">2. Distributed Tracing Mechanics</h3>
+<p>When a user clicks &quot;Checkout&quot;, a single user action may traverse 15 downstream microservices. To debug a slow request, distributed tracing attaches standardized W3C trace headers:</p>
+<ul>
+<li><code>traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01</code>
+<ul>
+<li><code>00</code>: Protocol version.</li>
+<li><code>4bf92f35...</code>: 16-byte global <strong>Trace ID</strong> (shared across all hops).</li>
+<li><code>00f067aa...</code>: 8-byte <strong>Span ID</strong> (unique identifier for this specific hop).</li>
+<li><code>01</code>: Trace flags (sampled / recorded).</li>
+</ul>
+</li>
+</ul>
+<p>Every microservice or sidecar proxy logs the start and finish timestamp of its Span, reporting them to a collector (Jaeger, Zipkin, OpenTelemetry).</p>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Monolithic Architecture</th>
+<th style="text-align:left">Traditional Microservices (SDKs)</th>
+<th style="text-align:left">Service Mesh (Envoy/Istio)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Network Overhead</strong></td>
+<td style="text-align:left">In-memory function call ($&lt; 1\text{ µs}$)</td>
+<td style="text-align:left">1 network hop ($2-5\text{ ms}$)</td>
+<td style="text-align:left">3 hops: App $\rightarrow$ Sidecar $\rightarrow$ Sidecar $\rightarrow$ App ($4-8\text{ ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Polyglot Support</strong></td>
+<td style="text-align:left">Single language / runtime</td>
+<td style="text-align:left">Painful (must build libraries in Go, Java, Python)</td>
+<td style="text-align:left">Universal (language-agnostic proxy operates at L4/L7)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Operational Complexity</strong></td>
+<td style="text-align:left">Low (single build/deploy unit)</td>
+<td style="text-align:left">Medium (separate deployments, service discovery)</td>
+<td style="text-align:left">High (requires Kubernetes, control plane, telemetry pipelines)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Blast Radius</strong></td>
+<td style="text-align:left">High (single crash brings down whole app)</td>
+<td style="text-align:left">Low (isolated processes)</td>
+<td style="text-align:left">Minimal (isolated processes with circuit breaking)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Distributed Monolith</strong>: Decomposing a monolith into 50 microservices that all share the exact same PostgreSQL database. Any schema change still requires synchronous coordinated deployments, and DB locks cascade across all services! <em>Rule: Each microservice must own its own private database.</em></li>
+<li><strong>Deep Synchronous Call Chains (Death Cascades)</strong>: Service A calls B, which calls C, which calls D, which calls E. If Service E slows down by 2 seconds, all 5 services hold open connections, running out of thread pools and collapsing the entire stack. <em>Fix: Use asynchronous event-driven messaging (Kafka/RabbitMQ) for non-critical paths.</em></li>
+<li><strong>Adopting Service Mesh Too Early</strong>: Installing Istio on a 4-service startup application adds massive operational complexity, debugging pain, and latency overhead without solving any real business bottleneck.</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating microservices orchestration, dynamic service registration, client-side load balancing, distributed tracing propagation, and circuit breaker tripping is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/arch_overview">Envoy Proxy Architecture &amp; Threading Model</a></li>
+<li><a href="https://istio.io/latest/docs/concepts/what-is-istio/">Istio Service Mesh Architecture Guide</a></li>
+<li><a href="https://martinfowler.com/articles/microservices.html">Martin Fowler: Microservices Definition and Trade-offs</a></li>
+<li><a href="https://www.w3.org/TR/trace-context/">W3C Recommendation: Trace Context Specification</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-what-is-the-difference-between-an-api-gateway-and-a-service-mesh">Q1: What is the difference between an API Gateway and a Service Mesh?</h3>
+<p><strong>Model Answer</strong>: An <strong>API Gateway</strong> manages North-South traffic (traffic originating from external clients such as web browsers and mobile apps entering the cluster). It handles public authentication, rate limiting, SSL termination, and API monetization. A <strong>Service Mesh</strong> manages East-West traffic (internal service-to-service communication within the data center). It operates via sidecar proxies deployed alongside containers to handle mTLS encryption, internal retries, circuit breaking, and distributed tracing transparently without application code changes.</p>
+<h3 id="q2-how-does-a-service-mesh-implement-mutual-tls-mtls-without-application-changes">Q2: How does a Service Mesh implement Mutual TLS (mTLS) without application changes?</h3>
+<p><strong>Model Answer</strong>: When Service A sends an HTTP request to Service B, Service A's application code opens a plaintext connection to its local sidecar proxy on <code>localhost</code>. The local sidecar intercepts the packet, wraps it in an encrypted TLS tunnel with an x509 client certificate issued by the mesh Control Plane (e.g., Istio Citadel), and sends it across the network to Service B's pod. Service B's sidecar proxy terminates the TLS connection, validates Service A's identity and certificate, and forwards the decrypted plaintext request to Service B's application container on <code>localhost</code>.</p>
+<h3 id="q3-what-is-the-database-per-service-pattern-and-why-is-it-mandatory-in-microservices">Q3: What is the &quot;Database-per-Service&quot; pattern and why is it mandatory in microservices?</h3>
+<p><strong>Model Answer</strong>: The Database-per-Service pattern dictates that each microservice must have its own private, dedicated datastore inaccessible to other services. Other services can only read or mutate that data by calling the service's public API. This ensures:</p>
+<ol>
+<li>Loose coupling: Internal schema changes do not break external consumers.</li>
+<li>Independent scaling: Read-heavy services can use Elasticsearch or Redis while transaction-heavy services use PostgreSQL.</li>
+<li>Resilience: A failure, deadlock, or slow query in one service cannot exhaust connection pools or crash the databases of other microservices.</li>
+</ol>
+<h3 id="q4-how-do-you-maintain-data-consistency-across-multiple-microservices-without-2-phase-commit-2pc">Q4: How do you maintain data consistency across multiple microservices without 2-Phase Commit (2PC)?</h3>
+<p><strong>Model Answer</strong>: In microservices, distributed 2-Phase Commit (2PC) is an anti-pattern because it holds database locks across network boundaries, severely degrading availability and throughput (CAP theorem). Instead, modern architectures use the <strong>Saga Pattern</strong>:</p>
+<ul>
+<li>A sequence of local ACID transactions.</li>
+<li>Each transaction updates data within a single service and publishes an event or message.</li>
+<li>If a subsequent step fails (e.g., payment rejected), the Saga orchestrator or event bus triggers <strong>Compensating Transactions</strong> that undo preceding steps (e.g., releasing reserved inventory).</li>
+</ul>
+<h3 id="q5-how-does-the-circuit-breaker-pattern-prevent-cascading-failures-in-a-microservice-mesh">Q5: How does the Circuit Breaker pattern prevent cascading failures in a microservice mesh?</h3>
+<p><strong>Model Answer</strong>: A Circuit Breaker monitors the failure rate and latency of downstream calls. It operates in three states:</p>
+<ol>
+<li><strong>Closed</strong>: Normal operation; requests pass through. If error rate exceeds a threshold (e.g., 50% failures over 10 seconds), the circuit trips to <strong>Open</strong>.</li>
+<li><strong>Open</strong>: The proxy fails fast immediately without making the network call, returning a cached response, fallback, or 503 error, saving CPU and thread pools.</li>
+<li><strong>Half-Open</strong>: After a cooldown period (e.g., 15s), the breaker allows a small probe percentage of requests through. If they succeed, the circuit returns to <strong>Closed</strong>; if they fail, it returns to <strong>Open</strong>.</li>
+</ol>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. What is the primary role of the Data Plane in a Service Mesh?</b></summary>
+A) Store persistent customer database tables.<br/>
+B) Intercept, route, encrypt, and measure network traffic at every pod via sidecar proxies.<br/>
+C) Compile Go and Java code into binaries.<br/>
+D) Issue developer access tokens.<br/><br/>
+<b>Answer: B</b>. The Data Plane (typically Envoy) intercepts and processes all network packets directly in the data path.
+</details>
+<details>
+<summary><b>2. In distributed tracing, what is the difference between a Trace ID and a Span ID?</b></summary>
+A) Trace ID is for SQL queries; Span ID is for HTTP.<br/>
+B) Trace ID identifies the entire end-to-end user request across all services; Span ID identifies a single operation within a specific service.<br/>
+C) They are identical interchangeable strings.<br/>
+D) Span ID identifies the database version.<br/><br/>
+<b>Answer: B</b>. A Trace ID connects the entire distributed graph of calls, while each individual hop or sub-operation gets a distinct Span ID.
+</details>
+<details>
+<summary><b>3. Why is 2-Phase Commit (2PC) rarely used for inter-microservice transactions?</b></summary>
+A) Because 2PC is not supported on Linux.<br/>
+B) Because 2PC is a blocking protocol that holds locks across network partitions, destroying system availability and latency.<br/>
+C) Because 2PC requires SSL encryption.<br/>
+D) Because microservices do not use SQL.<br/><br/>
+<b>Answer: B</b>. 2PC holds locks until all nodes vote, meaning any network partition or slow node locks all participants indefinitely. Sagas with compensating transactions are preferred.
+</details>
+<details>
+<summary><b>4. What protocol does Istio's Control Plane use to push dynamic route configurations to Envoy proxies?</b></summary>
+A) FTP<br/>
+B) xDS APIs over gRPC<br/>
+C) Telnet<br/>
+D) DNS TXT records<br/><br/>
+<b>Answer: B</b>. Envoy defines the xDS (discovery service) suite of APIs (LDS, RDS, CDS, EDS) streamed via bidirectional gRPC.
+</details>
+<details>
+<summary><b>5. Which architectural pattern prevents one slow microservice from draining the thread pool of upstream callers?</b></summary>
+A) Monolithic compilation<br/>
+B) Circuit Breaker & Timeout Deadlines<br/>
+C) DNS Caching<br/>
+D) Round-Robin DNS<br/><br/>
+<b>Answer: B</b>. Circuit breakers and aggressive deadlines fail fast when a downstream dependency is unhealthy, keeping upstream threads alive.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

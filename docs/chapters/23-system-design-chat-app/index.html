@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design: Real-Time Distributed Chat App (WhatsApp / Discord)">
+  <title>System Design: Real-Time Distributed Chat App (WhatsApp / Discord) | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="23---system-design-real-time-distributed-chat-app-whatsapp--discord">23 - System Design: Real-Time Distributed Chat App (WhatsApp / Discord)</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> Designing a global real-time chat application (like WhatsApp, Discord, or Slack) requires orchestrating millions of persistent, full-duplex <strong>WebSocket</strong> connections, maintaining a high-throughput <strong>Presence Service</strong> (Online/Offline status), routing messages across distributed gateway clusters via a low-latency pub/sub message broker, storing petabytes of chat history in wide-column LSM-tree storage (Apache Cassandra / ScyllaDB), and falling back to APNs/FCM mobile push notifications for offline users.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../23-system-design-chat-app/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: WebSockets vs. HTTP long-polling vs. SSE.</li>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column NoSQL stores vs. relational tables.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub routing and asynchronous messaging.</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection pooling, heartbeats, and fail-fast patterns.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine you and your friend are talking over two-way walkie-talkies:</p>
+<ul>
+<li>When you speak, sound travels instantaneously over the open radio frequency (<strong>WebSocket</strong>). You don't hang up the phone and redial every time you say a single sentence!</li>
+<li>If your friend is in another country, your walkie-talkie signal beams to a local radio tower (<strong>Chat Gateway</strong>), which zips the message through an underground fiber optic cable (<strong>Message Broker</strong>) to your friend's local radio tower.</li>
+<li>If your friend's walkie-talkie is turned off (<strong>Offline</strong>), the central post office writes your message down in an envelope, slips it into their mailbox (<strong>Message Store</strong>), and taps on their window with a postcard (<strong>Push Notification</strong>).</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Chat System Component</th>
+<th style="text-align:left">Walkie-Talkie &amp; Dispatch Analogy</th>
+<th style="text-align:left">Technical Reality in Discord / WhatsApp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>WebSocket Connection</strong></td>
+<td style="text-align:left">Holding open a persistent walkie-talkie channel</td>
+<td style="text-align:left">Full-duplex bidirectional TCP connection (RFC 6455)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Chat Gateway Server</strong></td>
+<td style="text-align:left">Local radio dispatch tower managing 50,000 radios</td>
+<td style="text-align:left">Stateful edge gateway holding open client socket descriptors</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Message Broker</strong></td>
+<td style="text-align:left">High-speed pneumatic tubes connecting dispatch towers</td>
+<td style="text-align:left">Redis Pub/Sub, Apache Kafka, or RabbitMQ cluster</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Presence Service</strong></td>
+<td style="text-align:left">The tower's status board showing which radios are transmitting</td>
+<td style="text-align:left">In-memory Redis Sorted Sets updated via 10-second heartbeats</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Message History Store</strong></td>
+<td style="text-align:left">Permanent bound filing cabinets with timestamped transcripts</td>
+<td style="text-align:left">Apache Cassandra / ScyllaDB wide-column store</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Push Notification</strong></td>
+<td style="text-align:left">Ringing the recipient's home doorbell when radio is turned off</td>
+<td style="text-align:left">Apple APNs / Google Firebase Cloud Messaging (FCM)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="why-traditional-http-fails-for-real-time-chat">Why Traditional HTTP Fails for Real-Time Chat</h3>
+<p>In classic HTTP request-response:</p>
+<ul>
+<li>The client must always initiate communication; the server cannot push data to the client.</li>
+<li><strong>Polling (<code>setInterval(fetch, 1000)</code>)</strong>: Creates massive wasted traffic—$99%$ of requests return empty responses, wasting bandwidth and exhausting server CPU.</li>
+<li><strong>HTTP Long-Polling</strong>: Holds connection open until a message arrives. However, every new message requires tearing down the TCP connection, doing a new TLS handshake, and sending heavy HTTP headers ($500\text{–}1,000\text{ bytes}$ of header overhead for a $10\text{-byte}$ message!).</li>
+</ul>
+<h3 id="how-websockets-revolutionize-real-time-scale">How WebSockets Revolutionize Real-Time Scale</h3>
+<ul>
+<li><strong>Persistent Bi-directional Socket</strong>: Initiated via an HTTP Upgrade handshake, then converts to a lightweight framed binary protocol over TCP.</li>
+<li><strong>Minimal Framing Overhead</strong>: Frame headers are only <strong>$2\text{ to }10\text{ bytes}$</strong> per message.</li>
+<li><strong>Instantaneous Server Push</strong>: The server pushes messages directly into the client's open socket with zero polling delay ($&lt;5\text{ ms}$).</li>
+</ul>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-chat-app-animation">High-Resolution Chat App Animation</h3>
+<p>Below is an animated trace of cross-gateway message routing between Alice and Bob via Redis Pub/Sub, with Cassandra history persistence:</p>
+<p><img src="./assets/chat_app.gif" alt="Real-Time Chat Application" /></p>
+<hr />
+<h3 id="end-to-end-chat-architecture-flowchart">End-to-End Chat Architecture Flowchart</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor Alice as 👤 Alice (Tokyo)
+    participant GW1 as ⚡ Chat Gateway 1
+    participant Presence as 📡 Presence Service (Redis)
+    participant Broker as 📜 Redis Pub/Sub / Kafka
+    participant GW2 as ⚡ Chat Gateway 2
+    actor Bob as 👤 Bob (London)
+    participant DB as 🗄️ Cassandra Message Store
+
+    Alice-&gt;&gt;GW1: Send: &quot;Hello Bob!&quot; (over WebSocket)
+    GW1-&gt;&gt;DB: 1. Persist message (channel_id, timestamp)
+    GW1-&gt;&gt;Presence: 2. Query Bob's location
+    Presence--&gt;&gt;GW1: Bob is on 'GW-London-02'
+    
+    rect rgb(22, 27, 34)
+    Note over GW1, GW2: Cross-Gateway Real-Time Dispatch
+    GW1-&gt;&gt;Broker: 3. Publish to channel 'user:bob'
+    Broker-&gt;&gt;GW2: 4. Route frame to GW-London-02
+    GW2-&gt;&gt;Bob: 5. Push frame over active WebSocket (5ms)
+    end
+
+    Bob--&gt;&gt;GW2: Read ACK
+    GW2-&gt;&gt;Alice: Delivery Receipt: DELIVERED (✓✓)
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's model capacity planning for a platform with <strong>50 Million Daily Active Users (DAU)</strong>:</p>
+<h3 id="1-concurrency--throughput-math">1. Concurrency &amp; Throughput Math</h3>
+<ul>
+<li><strong>Peak Concurrent Connections</strong>:
+Assume 20% of DAU are connected simultaneously at peak:
+$$\text{Concurrent WebSockets} = 50,000,000 \times 0.20 = \mathbf{10,000,000\text{ active connections}}$$</li>
+<li><strong>Message Volume</strong>:
+Assume average active user sends 40 messages per day:
+$$\text{Total Daily Messages} = 50,000,000 \times 40 = \mathbf{2\text{ Billion messages/day}}$$</li>
+<li><strong>Average QPS</strong>:
+$$\text{QPS} = \frac{2,000,000,000}{86,400} \approx \mathbf{23,150\text{ msgs/sec}}$$
+$$\text{Peak QPS (3x)} \approx \mathbf{70,000\text{ msgs/sec}}$$</li>
+</ul>
+<h3 id="2-gateway-server-fleet-sizing">2. Gateway Server Fleet Sizing</h3>
+<p>A high-performance Linux server running modern Erlang/Go/Node with tuned <code>epoll</code> and <code>file-max</code> can comfortably hold <strong>$100,000$ open idle WebSocket connections</strong>:</p>
+<ul>
+<li>Memory per open WebSocket connection (OS TCP buffer + app struct): $\approx 10\text{ KB}$.</li>
+<li>RAM for 100k connections: $100,000 \times 10\text{ KB} \approx 1\text{ GB of RAM}$.</li>
+<li>Servers needed to hold 10M concurrent connections:
+$$\text{Gateways Needed} = \frac{10,000,000}{100,000} = \mathbf{100\text{ Chat Gateway instances}}$$</li>
+</ul>
+<h3 id="3-storage-estimations-5-year-horizon">3. Storage Estimations (5-Year Horizon)</h3>
+<ul>
+<li>Average message size: $100\text{ bytes}$ text + $60\text{ bytes}$ metadata = $160\text{ bytes}$.</li>
+<li>Daily storage: $2\text{ Billion} \times 160\text{ bytes} \approx 320\text{ GB/day}$.</li>
+<li>5-year storage:
+$$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{584\text{ Terabytes}}$$
+584 TB fits cleanly in a multi-node Apache Cassandra or ScyllaDB cluster.</li>
+</ul>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-transport-comparison">1. Transport Comparison</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Protocol</th>
+<th style="text-align:left">Connection Type</th>
+<th style="text-align:left">Header Overhead</th>
+<th style="text-align:left">Latency</th>
+<th style="text-align:left">Suitability for Chat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>HTTP Polling</strong></td>
+<td style="text-align:left">Short-lived request/response</td>
+<td style="text-align:left">Enormous (~800 bytes/req)</td>
+<td style="text-align:left">Terrible (tied to poll interval)</td>
+<td style="text-align:left">❌ Unusable at scale</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Long-Polling</strong></td>
+<td style="text-align:left">Request held until data arrives</td>
+<td style="text-align:left">High (~800 bytes per msg)</td>
+<td style="text-align:left">Medium (~100–300 ms)</td>
+<td style="text-align:left">Legacy fallback only</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Server-Sent Events (SSE)</strong></td>
+<td style="text-align:left">Persistent half-duplex (server to client)</td>
+<td style="text-align:left">Minimal (~5 bytes)</td>
+<td style="text-align:left">Low (&lt;10 ms)</td>
+<td style="text-align:left">Good for feeds, but cannot send client-to-server</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>WebSockets (RFC 6455)</strong></td>
+<td style="text-align:left"><strong>Persistent full-duplex bi-directional</strong></td>
+<td style="text-align:left"><strong>Tiny (2 to 10 bytes)</strong></td>
+<td style="text-align:left"><strong>Ultra-Low (&lt;5 ms)</strong></td>
+<td style="text-align:left"><strong>Gold Standard for Modern Chat</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="2-presence-service-architecture-heartbeats">2. Presence Service Architecture (Heartbeats)</h3>
+<p>How do you track whether 50 million users are online or offline without melting the database?</p>
+<ul>
+<li><strong>Heartbeat Mechanism</strong>: Every client sends a lightweight heartbeat frame (ping/pong) every 10–15 seconds over its existing WebSocket.</li>
+<li><strong>In-Memory Store (Redis)</strong>:
+<ul>
+<li>When a heartbeat arrives: <code>SET user:online:&lt;id&gt; 1 EX 30</code> (sets key with 30-second TTL).</li>
+<li>If the user disconnects or loses cellular signal, the 30-second TTL naturally expires in Redis. The user automatically transitions to <strong>Offline</strong> without needing an explicit logout event!</li>
+</ul>
+</li>
+<li><strong>Presence Caching</strong>: Clients only query presence for users visible on their current screen (e.g. current conversation or top 20 visible contacts), never for their entire contact book.</li>
+</ul>
+<hr />
+<h3 id="3-group-chat-fanout-small-groups-vs-massive-discord-channels">3. Group Chat Fanout: Small Groups vs. Massive Discord Channels</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Feature</th>
+<th style="text-align:left">Small Group Chat (e.g. WhatsApp / iMessage, $&lt;100$ users)</th>
+<th style="text-align:left">Massive Public Channels (e.g. Discord / Twitch, $&gt;100,000$ users)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Fanout Strategy</strong></td>
+<td style="text-align:left"><strong>Fanout-on-Write</strong> (Push model)</td>
+<td style="text-align:left"><strong>Fanout-on-Read</strong> (Pull / Pub-Sub model)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Mechanism</strong></td>
+<td style="text-align:left">Message is copied into each member's private inbox queue</td>
+<td style="text-align:left">Single copy stored in channel log; active members pull from channel</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Cost</strong></td>
+<td style="text-align:left">$O(N)$ where $N$ is group members</td>
+<td style="text-align:left">$O(1)$ constant time</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Delivery</strong></td>
+<td style="text-align:left">Instantaneous push to all members</td>
+<td style="text-align:left">Broadcast only to actively connected viewers in that channel</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="4-why-cassandra--scylladb-for-message-storage">4. Why Cassandra / ScyllaDB for Message Storage?</h3>
+<p>Relational databases (MySQL/Postgres) struggle with chat history because:</p>
+<ol>
+<li>High concurrent random writes cause heavy B-tree index splits and lock contention.</li>
+<li>Deleting old messages creates table fragmentation.</li>
+</ol>
+<p><strong>Wide-Column NoSQL (Cassandra) is perfect for chat</strong>:</p>
+<ul>
+<li><strong>LSM-Tree Storage Engine</strong>: Writes are sequential appends to memory (Memtable) and flushed sequentially to disk (SSTables), providing massive write throughput.</li>
+<li><strong>Clustered Primary Key Design</strong>:
+<code>*(The ScyllaDB/Cassandra message table schema is separated into [schema.sql](./schema.sql); run [demo.py](./demo.py) for the complete chat gateway simulation.)*</code></li>
+<li><strong>$O(1)$ Range Lookups</strong>: Fetching the latest 50 messages for a channel translates to a single contiguous sequential disk scan!</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Fanout on Write (Push to Inbox)</th>
+<th style="text-align:left">Fanout on Read (Shared Channel)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Best For</strong></td>
+<td style="text-align:left">1-on-1 DMs and small group chats (&lt;50 people)</td>
+<td style="text-align:left">Massive public channels, Discord servers, Twitch chat</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Amplification</strong></td>
+<td style="text-align:left">High ($N$ writes for $N$ recipients)</td>
+<td style="text-align:left"><strong>Zero ($O(1)$ single write to channel log)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read Complexity</strong></td>
+<td style="text-align:left">Ultra-Fast ($O(1)$ query to single inbox)</td>
+<td style="text-align:left">Must query channel log and filter permissions</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Storage Footprint</strong></td>
+<td style="text-align:left">Multiplied by number of participants</td>
+<td style="text-align:left"><strong>Single master copy of message</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Broadcasting Presence Changes to All Contacts</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: When User A logs in, the presence service broadcasts <code>Alice is Online</code> to all 2,000 of Alice's contacts.</li>
+<li><em>Result</em>: With 10,000,000 users logging in during peak morning hours, presence broadcasts generate $10\text{M} \times 2,000 = \mathbf{20\text{ Billion messages/second}}$, crashing the gateway cluster! Only push presence updates to users who are actively viewing a direct conversation with Alice.</li>
+</ul>
+</li>
+<li>
+<p><strong>Using Auto-Incrementing IDs for Messages</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Using database auto-increment integers (<code>1, 2, 3...</code>) across distributed shards.</li>
+<li><em>Result</em>: Impossible to coordinate monotonically increasing sequential IDs across multi-region databases without distributed lock bottlenecks. Use <strong>UUIDv7</strong> or <strong>Twitter Snowflake IDs</strong> (which encode a 41-bit millisecond timestamp + worker ID + sequence).</li>
+</ul>
+</li>
+<li>
+<p><strong>Treating WebSockets as Stateless</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: Assuming an L4 load balancer can route WebSocket frames to any server.</li>
+<li><em>Reality</em>: WebSockets are <strong>stateful TCP connections</strong>. The TCP socket exists in memory on one specific physical machine. The architecture must maintain a Session Registry (in Redis) mapping <code>user_id -&gt; gateway_server_id</code> so other servers know where to route incoming messages.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/23-system-design-chat-app/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>Multi-server Chat Gateways holding active WebSocket client connections.</li>
+<li>Real-time cross-gateway message routing via a simulated Redis Pub/Sub broker.</li>
+<li>A distributed Presence Service tracking Online/Offline status with heartbeats.</li>
+<li>Offline message inbox queuing and simulated mobile Push Notifications (APNs/FCM).</li>
+<li>Wide-Column Cassandra message history fetching.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>WhatsApp</strong>: Built on Erlang and the BEAM virtual machine. Uses lightweight Erlang actor processes to hold millions of concurrent connections per box, passing messages across an internal actor distribution mesh.</li>
+<li><strong>Discord</strong>: Uses Elixir on edge gateways to terminate millions of WebSockets. Migrated their massive message history store from MongoDB to Apache Cassandra, and subsequently to <strong>ScyllaDB</strong> (C++ Cassandra rewrite) to eliminate Java JVM garbage collection latency spikes.</li>
+<li><strong>Slack</strong>: Originally used HTTP long-polling with PHP backends; re-architected their real-time engine to Java/Go WebSocket edge servers backed by Kafka and Envoy proxies.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-how-do-you-guarantee-that-messages-in-a-group-chat-are-displayed-in-the-exact-same-chronological-order-on-all-devices">Q1: &quot;How do you guarantee that messages in a group chat are displayed in the exact same chronological order on all devices?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing candidate's mastery of distributed ordering and message ID generation.</p>
+<p><strong>Model Answer</strong>:
+&quot;Guaranteeing consistent ordering across distributed clients requires two core mechanisms:</p>
+<ol>
+<li><strong>Timestamped Monotonic IDs (Snowflake / UUIDv7)</strong>:
+<ul>
+<li>We cannot rely on client device clocks because client clocks suffer from severe skew, drift, and time-zone errors.</li>
+<li>When the Chat Gateway receives a message, it assigns a 64-bit monotonically increasing ID (like Twitter Snowflake):
+$$\text{ID} = [\text{41-bit timestamp}] + [\text{10-bit machine ID}] + [\text{12-bit sequence}]$$</li>
+<li>This ensures that within any given millisecond, messages are uniquely and strictly ordered.</li>
+</ul>
+</li>
+<li><strong>Channel Sequence Numbers</strong>:
+<ul>
+<li>For high-concurrency group chats, the channel coordinator maintains an atomic sequence counter (<code>seq_num = 1, 2, 3...</code>) stored in Redis or assigned by a single partition leader in Kafka.</li>
+<li>Clients render messages strictly sorted by <code>seq_num</code>. If a client receives sequence 4 while only having sequence 2, it buffers message 4 and issues a sync request for missing sequence 3.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q2-how-do-you-scale-a-presence-service-when-you-have-100-million-users-logging-on-and-off">Q2: &quot;How do you scale a Presence Service when you have 100 million users logging on and off?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Evaluating backpressure control and high-throughput cache design.</p>
+<p><strong>Model Answer</strong>:
+&quot;Naive presence architectures collapse because broadcasting online/offline status changes for 100M users generates billions of fanout events.
+To scale presence efficiently:</p>
+<ol>
+<li><strong>Heartbeats Instead of Persistent DB Writes</strong>:
+<ul>
+<li>Clients send a TCP ping every 10–15 seconds.</li>
+<li>The gateway writes to Redis using a key with a 30-second TTL: <code>SET presence:&lt;user_id&gt; online EX 30</code>.</li>
+</ul>
+</li>
+<li><strong>Batching &amp; Debouncing</strong>:
+<ul>
+<li>When a user's mobile connection fluctuates (e.g. driving through a tunnel), they may connect and disconnect 5 times in 1 minute.</li>
+<li>We <strong>debounce</strong> status updates: don't broadcast 'Offline' immediately upon socket close; wait 30 seconds. If the user reconnects within 30 seconds, zero presence change events are emitted!</li>
+</ul>
+</li>
+<li><strong>Pull Model for Large Contact Lists</strong>:
+<ul>
+<li>We never broadcast presence to a user's entire friend list.</li>
+<li>When a user opens the app, the client fetches presence only for the <strong>visible screen items</strong> (e.g., the top 15 conversations in their inbox). For group chats with $&gt;100$ people, presence is turned off completely.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q3-what-happens-when-a-message-is-sent-to-an-offline-user-and-how-does-mobile-push-notification-delivery-work">Q3: &quot;What happens when a message is sent to an offline user, and how does mobile push notification delivery work?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing edge-to-cloud mobile integration and offline sync protocols.</p>
+<p><strong>Model Answer</strong>:
+&quot;When Alice sends a message to Bob:</p>
+<ol>
+<li>Gateway queries the Presence Service: Bob has no active WebSocket connection (Offline).</li>
+<li>The message is written to the persistent <strong>Cassandra Message Store</strong> with status <code>UNREAD</code>.</li>
+<li>The message is also placed in Bob's <strong>Offline Inbox Queue</strong>.</li>
+<li>The Gateway invokes the <strong>Push Notification Service</strong>:
+<ul>
+<li>Assembles payload (e.g. <code>{&quot;alert&quot;: &quot;Alice: Hello!&quot;, &quot;badge&quot;: 1}</code>).</li>
+<li>Dispatches payload to Apple Push Notification service (APNs) for iOS or Firebase Cloud Messaging (FCM) for Android.</li>
+</ul>
+</li>
+<li>When Bob wakes up and opens the app:
+<ul>
+<li>Bob establishes a new WebSocket connection to a gateway.</li>
+<li>Bob's client sends a sync request: <code>Sync(last_received_message_id = 'msg_9821')</code>.</li>
+<li>The gateway fetches all messages for Bob with $\text{ID} &gt; \text{'msg_9821'}$, streams them down the socket, and marks them <code>DELIVERED</code>.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q4-why-is-apache-cassandra-or-scylladb-preferred-over-mysqlpostgres-for-storing-chat-history">Q4: &quot;Why is Apache Cassandra or ScyllaDB preferred over MySQL/Postgres for storing chat history?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing database internal storage engine mechanics (LSM-trees vs B-Trees).</p>
+<p><strong>Model Answer</strong>:
+&quot;Chat messaging has an extreme write-heavy profile (billions of new inserts daily) coupled with a very specific read pattern: users almost exclusively query recent messages in a single channel ordered chronologically.</p>
+<ol>
+<li><strong>LSM-Trees vs B-Trees</strong>:
+<ul>
+<li>In MySQL/Postgres (B-Trees), inserting new rows requires random disk lookups to update index pages, causing heavy lock contention and disk head thrashing at high scale.</li>
+<li>In Cassandra/ScyllaDB (LSM-Trees), all writes are sequential in-memory appends (Memtable) flushed sequentially to disk (SSTable), providing virtually unlimited horizontal write throughput.</li>
+</ul>
+</li>
+<li><strong>Partition &amp; Clustering Key Alignment</strong>:
+<ul>
+<li>By designing the schema with <code>PRIMARY KEY (channel_id, message_id)</code>, all messages for a conversation reside on the same physical cluster partition and are stored <strong>pre-sorted on disk</strong>.</li>
+<li>Fetching the last 50 messages requires a single contiguous sequential disk read ($O(1)$ disk seek), rather than scanning scattered relational blocks.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q5-how-does-end-to-end-encryption-e2ee-impact-the-system-design-of-a-chat-application">Q5: &quot;How does End-to-End Encryption (E2EE) impact the system design of a chat application?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing security protocols (Signal Protocol) and server-side constraints.</p>
+<p><strong>Model Answer</strong>:
+&quot;When End-to-End Encryption (like the Signal Protocol used by WhatsApp) is introduced, the system design fundamentally shifts:</p>
+<ol>
+<li><strong>Server is Zero-Knowledge</strong>:
+<ul>
+<li>The application servers, message brokers, and database stores <strong>cannot read message contents</strong>. Messages are encrypted on the sender's device using the recipient's public key / session ratchet key, and can only be decrypted on the recipient's device.</li>
+</ul>
+</li>
+<li><strong>Key Management Infrastructure</strong>:
+<ul>
+<li>The architecture must introduce a <strong>Key Distribution Service</strong> storing Identity Keys, Signed Prekeys, and One-Time Prekeys uploaded by clients upon registration.</li>
+</ul>
+</li>
+<li><strong>No Server-Side Full-Text Search</strong>:
+<ul>
+<li>Because the server stores encrypted ciphertext blobs, servers cannot run Elasticsearch or SQL <code>LIKE '%keyword%'</code> queries. All message indexing and full-text search must be executed <strong>locally on the client's mobile device (SQLite)</strong>.</li>
+</ul>
+</li>
+<li><strong>Media Handling</strong>:
+<ul>
+<li>Images and videos are encrypted on the sender's phone with a symmetric key. The encrypted ciphertext blob is uploaded to an S3/Blob store, and the symmetric key is transmitted inside the encrypted chat message payload.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. Why are WebSockets vastly superior to HTTP Long-Polling for high-frequency chat?</b></summary>
+<br>
+Because WebSockets establish a <b>persistent, full-duplex TCP socket</b> with frame overhead of only <b>2 to 10 bytes</b>. In contrast, HTTP Long-Polling tears down the connection on every message, requiring fresh TCP/TLS handshakes and re-transmitting 500–1,000 bytes of redundant HTTP headers for every single message.
+</details>
+<details>
+<summary><b>2. How does a Chat Gateway know which server an active recipient is connected to?</b></summary>
+<br>
+Via an in-memory <b>Session Registry / Presence Service</b> (typically built on Redis). When a client connects via WebSocket, the gateway writes <code>user_id -> gateway_server_id</code>. When another server needs to deliver a message, it queries Redis and routes the payload to that specific gateway via a pub/sub message broker.
+</details>
+<details>
+<summary><b>3. Why is Cassandra's <code>PRIMARY KEY (channel_id, message_id)</code> optimal for message history queries?</b></summary>
+<br>
+Because <code>channel_id</code> acts as the <b>partition key</b> (grouping all messages for that channel onto the same storage node), and <code>message_id</code> acts as the <b>clustering column</b> (storing messages sequentially on disk pre-sorted by time). Fetching recent history is a contiguous sequential disk read rather than an expensive multi-table join.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>System Design Interview – An Insider's Guide (Volume 1)</strong> by Alex Xu — <em>Chapter 12: Design a Chat System</em>.</li>
+<li><strong>The Discord Engineering Blog</strong>: <em>How Discord Stores Billions of Messages (Migrating from Cassandra to ScyllaDB)</em>.</li>
+<li><strong>WhatsApp Architecture</strong>: <em>Scaling Erlang/OTP to Millions of Concurrent WebSockets (Rick Reed)</em>.</li>
+<li><strong>RFC 6455</strong>: <em>The WebSocket Protocol Specification</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP sockets, WebSockets, and TLS termination.</li>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column LSM storage engines.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub message brokers for inter-gateway routing.</li>
+<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection heartbeats and dead-letter queues.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

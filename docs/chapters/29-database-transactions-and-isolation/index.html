@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Database Transactions &amp; Isolation Levels">
+  <title>Database Transactions &amp; Isolation Levels | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="29--database-transactions--isolation-levels">29 · Database Transactions &amp; Isolation Levels</h1>
+<blockquote>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~25 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · Relational vs NoSQL</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Cloud Spanner Serializable Snapshot Isolation via TrueTime) and <strong>Netflix</strong> (handling financial billing isolation in relational databases) implement transaction safety are documented in <a href="../29-database-transactions-and-isolation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<hr />
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>A <strong>transaction</strong> is a safety shield: it bundles multiple database reads and writes into a single logical execution. Either <strong>everything succeeds (Commit)</strong>, or if anything goes wrong, <strong>everything is completely undone (Abort/Rollback)</strong>.</p>
+<p>Without transactions:</p>
+<ul>
+<li>If a server crashes midway through transferring money between bank accounts, money vanishes from Account A but never reaches Account B.</li>
+<li>If two users try to book the last seat on a flight at the exact same millisecond, both get confirmed.</li>
+</ul>
+<p>The <strong>Isolation Level</strong> determines how well concurrent transactions are shielded from each other:</p>
+<ol>
+<li><strong>Read Committed</strong>: No dirty reads (you only read data that has been permanently committed).</li>
+<li><strong>Snapshot Isolation / Repeatable Read</strong>: Readers see a consistent snapshot of the database as of the transaction start time; readers never block writers, and writers never block readers.</li>
+<li><strong>Serializable</strong>: The gold standard. Transactions execute with the mathematical guarantee of running one-at-a-time, completely preventing race conditions like <strong>Write Skew</strong>.</li>
+</ol>
+<hr />
+<h2 id="everyday-analogy-the-shared-google-doc-vs-meeting-rooms">🍕 Everyday analogy: The Shared Google Doc vs Meeting Rooms</h2>
+<p>Imagine multiple coworkers booking meeting rooms:</p>
+<ul>
+<li><strong>Dirty Read (Read Uncommitted)</strong>: Bob starts drafting an email saying <em>&quot;Room 101 booked&quot;</em>, then changes his mind and deletes it. Alice peeked at Bob's draft screen and wrongly assumes Room 101 is taken.</li>
+<li><strong>Lost Update</strong>: Alice and Bob both read the inventory: <em>&quot;Items remaining: 5&quot;</em>. Alice sells 1 item and writes back $4$. Bob sells 1 item and writes back $4$. Two items were sold, but the counter says 4 instead of 3!</li>
+<li><strong>Write Skew</strong>: A hospital requires at least 1 doctor on call. Doctors Alice and Bob are both on call. Both simultaneously request to go off duty. Under Snapshot Isolation:
+<ul>
+<li>Alice's transaction checks: <em>&quot;Is another doctor on call?&quot;</em> Yes (Bob). Alice logs off.</li>
+<li>Bob's transaction checks: <em>&quot;Is another doctor on call?&quot;</em> Yes (Alice). Bob logs off.</li>
+<li><strong>Catastrophe</strong>: Zero doctors remain on call! Only <strong>Serializable isolation</strong> catches this race condition.</li>
+</ul>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In everyday life</th>
+<th style="text-align:left">In Database Architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Peeking at an unsaved draft</strong></td>
+<td style="text-align:left"><strong>Dirty Read</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Overwriting someone's draft</strong></td>
+<td style="text-align:left"><strong>Dirty Write</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Two people selling the same item</strong></td>
+<td style="text-align:left"><strong>Lost Update</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Two doctors logging off simultaneously</strong></td>
+<td style="text-align:left"><strong>Write Skew (Phantom Read)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Locking the door while in the room</strong></td>
+<td style="text-align:left"><strong>Pessimistic Locking (2PL)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Checking if anyone changed the room before leaving</strong></td>
+<td style="text-align:left"><strong>Optimistic Concurrency Control (SSI)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<p>In high-concurrency production systems, executing transactions without strict isolation triggers catastrophic race conditions:</p>
+<ol>
+<li><strong>Lost Updates</strong>: Concurrent increments or JSON modifications overwrite each other.</li>
+<li><strong>Non-Repeatable Reads</strong>: Query 1 reads an account balance of $100. Query 2 (in the same transaction 10ms later) reads $50 because an external transaction committed in between.</li>
+<li><strong>Write Skew</strong>: Two concurrent transactions read the same data, make independent decisions based on that data, and write to different rows, violating global business constraints.</li>
+</ol>
+<hr />
+<h2 id="picture-it-the-4-sql-standard-isolation-levels">🖼️ Picture It: The 4 SQL Standard Isolation Levels</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Levels[&quot;The Isolation Spectrum (Weakest to Strongest)&quot;]
+        L1[&quot;1. Read Uncommitted&lt;br/&gt;(Suffers from Dirty Reads)&quot;]
+        L2[&quot;2. Read Committed&lt;br/&gt;(No Dirty Reads, No Dirty Writes)&quot;]
+        L3[&quot;3. Snapshot Isolation / Repeatable Read&lt;br/&gt;(MVCC, Consistent Snapshot, Prevents Lost Updates)&quot;]
+        L4[&quot;4. Serializable&lt;br/&gt;(Guarantees Total Sequential Execution; Prevents Write Skew)&quot;]
+    end
+    
+    L1 --&gt; L2 --&gt; L3 --&gt; L4
+    
+    style L1 fill:#161b22,stroke:#f85149,stroke-width:2px;
+    style L2 fill:#161b22,stroke:#d29922,stroke-width:2px;
+    style L3 fill:#161b22,stroke:#58a6ff,stroke-width:2px;
+    style L4 fill:#161b22,stroke:#3fb950,stroke-width:2px;
+</code></pre>
+<hr />
+<h2 id="the-race-conditions--anomalies-matrix">🔢 The Race Conditions &amp; Anomalies Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Isolation Level</th>
+<th style="text-align:center">Dirty Read</th>
+<th style="text-align:center">Lost Update</th>
+<th style="text-align:center">Non-Repeatable Read</th>
+<th style="text-align:center">Write Skew / Phantoms</th>
+<th style="text-align:left">Default In</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Read Uncommitted</strong></td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:left">Rarely used</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read Committed</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:left"><strong>PostgreSQL, Oracle, SQL Server</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Repeatable Read (Snapshot)</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">❌ Allowed</td>
+<td style="text-align:left"><strong>MySQL InnoDB</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Serializable</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:center">✅ <strong>Prevented</strong></td>
+<td style="text-align:left">CockroachDB, Google Spanner</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-multi-version-concurrency-control-mvcc">1. Multi-Version Concurrency Control (MVCC)</h3>
+<p>Modern databases (PostgreSQL, MySQL InnoDB, CockroachDB) implement Snapshot Isolation using <strong>MVCC</strong>:</p>
+<ul>
+<li>When a row is updated, the database does <em>not</em> overwrite the old data in place.</li>
+<li>Instead, it appends a new version of the row with creation and expiration transaction IDs:
+<code>(row_id, value, created_by_tx, deleted_by_tx)</code></li>
+<li>When Transaction 42 starts, it is assigned a <strong>read watermark</strong> of 42.</li>
+<li>It only sees row versions created <em>before</em> Transaction 42 that were not deleted before 42.</li>
+<li><strong>The Superpower</strong>: Readers never block writers, and writers never block readers!</li>
+</ul>
+<h3 id="2-preventing-write-skew-two-phase-locking-2pl-vs-serializable-snapshot-isolation-ssi">2. Preventing Write Skew: Two-Phase Locking (2PL) vs Serializable Snapshot Isolation (SSI)</h3>
+<ul>
+<li><strong>Two-Phase Locking (2PL)</strong>: Pessimistic. Acquires shared locks (<code>SELECT ... FOR UPDATE</code>) on read data. If another transaction wants to write, it blocks.</li>
+<li><strong>Serializable Snapshot Isolation (SSI)</strong>: Optimistic. Transactions read and write concurrently without blocking. At commit time, the database tracks read-write conflicts. If two transactions exhibited write skew, the database aborts one and forces the client to retry.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Strategy</th>
+<th style="text-align:left">Performance / Throughput</th>
+<th style="text-align:left">Concurrency Anomalies</th>
+<th style="text-align:left">Operational Cost</th>
+<th style="text-align:left">Best Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Read Committed</strong></td>
+<td style="text-align:left">Highest Throughput</td>
+<td style="text-align:left">Vulnerable to non-repeatable reads &amp; lost updates</td>
+<td style="text-align:left">Lowest CPU/RAM</td>
+<td style="text-align:left">Standard CRUD dashboards</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Snapshot Isolation</strong></td>
+<td style="text-align:left">High Throughput (MVCC)</td>
+<td style="text-align:left">Vulnerable to Write Skew</td>
+<td style="text-align:left">Medium RAM (old row versions)</td>
+<td style="text-align:left">Financial ledgers &amp; carts</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Serializable (2PL)</strong></td>
+<td style="text-align:left">Low Throughput (Lock waits)</td>
+<td style="text-align:left">Zero Anomalies</td>
+<td style="text-align:left">High lock contention &amp; deadlocks</td>
+<td style="text-align:left">Rare single-node high-stakes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Serializable (SSI)</strong></td>
+<td style="text-align:left">High on low-conflict</td>
+<td style="text-align:left">Zero Anomalies</td>
+<td style="text-align:left">Abort/retry handling in app code</td>
+<td style="text-align:left">Distributed SQL (Spanner/Cockroach)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li><strong>Blind Overwrite Instead of Atomic Updates</strong>:
+<ul>
+<li><em>Pitfall</em>: <code>balance = SELECT balance; balance += 10; UPDATE SET balance = balance;</code></li>
+<li><em>Result</em>: Lost Update under Read Committed.</li>
+<li><em>Fix</em>: Use atomic database expressions: <code>UPDATE accounts SET balance = balance + 10 WHERE id = 1;</code> or <code>SELECT FOR UPDATE</code>.</li>
+</ul>
+</li>
+<li><strong>Long-Running Transactions Holding Locks</strong>:
+<ul>
+<li><em>Pitfall</em>: Opening a database transaction, making an external Stripe API call (taking 1.5s), and then committing.</li>
+<li><em>Result</em>: Database connection pool starvation and lock timeouts. Never place third-party HTTP network calls inside database transactions!</li>
+</ul>
+</li>
+<li><strong>Table Bloat in MVCC</strong>:
+<ul>
+<li><em>Pitfall</em>: High-frequency updates without PostgreSQL <code>VACUUM</code> maintenance.</li>
+<li><em>Result</em>: Millions of dead tuple row versions consume disk space and degrade sequential scans.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try It Yourself</h2>
+<p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/29-database-transactions-and-isolation/demo.py"><code>demo.py</code></a> simulates concurrent multi-threaded transactions demonstrating:</p>
+<ol>
+<li>The <strong>Lost Update Anomaly</strong> under naive execution vs. atomic Compare-And-Swap (CAS).</li>
+<li>The <strong>Write Skew Anomaly</strong> (the classic Doctors on Call problem) under Snapshot Isolation vs. Serializable enforcement.</li>
+</ol>
+<p>Run it directly in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Google Cloud Spanner</strong>: Provides globally distributed Serializable transactions using TrueTime atomic clocks to serialize transactions worldwide.</li>
+<li><strong>PostgreSQL</strong>: Defaults to <strong>Read Committed</strong>, using MVCC to serve fast non-blocking reads while providing Serializable Snapshot Isolation (SSI) for mission-critical tables.</li>
+<li><strong>Stripe</strong>: Enforces strict database transaction isolation and idempotency keys to ensure that a customer is never double-charged during API retries.</li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions--deep-answers">🎯 Top 5 Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-write-skew-and-why-does-snapshot-isolation-fail-to-prevent-it">Q1: &quot;What is Write Skew, and why does Snapshot Isolation fail to prevent it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Write Skew occurs when two concurrent transactions read the same data, make a decision based on that premise, and update <em>different rows</em> in a way that violates a global invariant (e.g. the Doctors on Call scenario, or reserving the same conference room).
+Snapshot Isolation fails because it only detects <strong>Dirty Writes on the same row</strong> (first-committer-wins). Because Transaction A updates Row 1 and Transaction B updates Row 2, Snapshot Isolation sees zero row conflict and allows both to commit! Write Skew can only be prevented by:</p>
+<ol>
+<li><strong>Explicit Locking</strong>: <code>SELECT ... FOR UPDATE</code> (Pessimistic).</li>
+<li><strong>Serializable Isolation</strong>: SSI tracks read-write dependency cycles and aborts one transaction.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-how-does-multi-version-concurrency-control-mvcc-eliminate-read-locks">Q2: &quot;How does Multi-Version Concurrency Control (MVCC) eliminate read locks?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Instead of overwriting rows in-place, MVCC creates a new timestamped version of the row for every mutation. When a transaction starts, it receives a logical snapshot watermark. Any read operation simply seeks row versions created before that watermark, ignoring later writes. Because readers only inspect immutable past versions, <strong>readers never acquire locks and never block concurrent writers</strong>.</p>
+</details>
+<hr />
+<h3 id="q3-what-is-the-lost-update-problem-and-what-are-3-ways-to-prevent-it">Q3: &quot;What is the Lost Update problem, and what are 3 ways to prevent it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>A Lost Update happens when Transaction 1 and Transaction 2 both read value $V$, compute new values independently, and write back, with the second write blindly overwriting the first.
+Three ways to prevent it:</p>
+<ol>
+<li><strong>Atomic Database Operations</strong>: <code>UPDATE counters SET val = val + 1 WHERE id = 10;</code></li>
+<li><strong>Pessimistic Locking</strong>: <code>SELECT val FROM counters WHERE id = 10 FOR UPDATE;</code></li>
+<li><strong>Optimistic Locking (Compare-And-Swap)</strong>: Add a version column: <code>UPDATE counters SET val = 20, version = 2 WHERE id = 10 AND version = 1;</code> If 0 rows are updated, the app retries.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-why-should-you-never-execute-external-http-network-calls-inside-a-database-transaction-block">Q4: &quot;Why should you never execute external HTTP network calls inside a database transaction block?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Database transactions hold row-level locks and occupy a dedicated connection from the server's connection pool (typically limited to 50–200 connections). External HTTP calls (e.g., Stripe, Twilio) can take seconds or time out. Holding a database transaction open during network I/O exhausts the connection pool, locks other transactions, and triggers cascading system failure. Always execute database writes and external HTTP calls in separate decoupled steps using the <strong>Transactional Outbox Pattern</strong>.</p>
+</details>
+<hr />
+<h3 id="q5-what-is-the-difference-between-two-phase-locking-2pl-and-two-phase-commit-2pc">Q5: &quot;What is the difference between Two-Phase Locking (2PL) and Two-Phase Commit (2PC)?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Two-Phase Locking (2PL)</strong> is a <strong>concurrency control mechanism</strong> on a <em>single database</em> ensuring Serializable isolation: transactions acquire locks during the growing phase and release them during the shrinking phase.</li>
+<li><strong>Two-Phase Commit (2PC)</strong> is an <strong>atomic distributed consensus protocol</strong> across <em>multiple independent databases/nodes</em> (Prepare phase $	o$ Commit phase) ensuring all nodes commit or all abort.
+They are completely different concepts despite sharing the &quot;Two-Phase&quot; name!</li>
+</ul>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go Deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann: Chapter 7 (<em>Transactions &amp; Isolation Levels</em>).</li>
+<li><strong>A Critique of ANSI SQL Isolation Levels</strong> (Berenson et al., 1995): The foundational paper establishing modern isolation definitions.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

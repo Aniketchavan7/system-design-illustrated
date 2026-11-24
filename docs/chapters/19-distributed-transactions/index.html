@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Distributed Transactions: 2PC, Sagas &amp; Outbox">
+  <title>Distributed Transactions: 2PC, Sagas &amp; Outbox | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="19---distributed-transactions-2pc-sagas--outbox">19 - Distributed Transactions: 2PC, Sagas &amp; Outbox</h1>
+<blockquote>
+<p><strong>Executive Summary:</strong> In monolithic architectures, database transactions rely on local ACID guarantees—a single <code>BEGIN ... COMMIT</code> block guarantees all-or-nothing atomicity. In microservice architectures where each service owns its private database (<strong>Database-per-Service</strong>), local ACID transactions cannot span network boundaries. While <strong>Two-Phase Commit (2PC)</strong> enforces atomic commits across databases, its heavy synchronous locking causes severe latency and single-point-of-failure coordinator deadlocks. Modern distributed systems favor the <strong>Saga Pattern</strong> (a sequence of local transactions with semantic <strong>Compensating Transactions</strong>) combined with the <strong>Transactional Outbox Pattern</strong> to guarantee eventual consistency without distributed locks.</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../19-distributed-transactions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
+<p>To get the most out of this module, make sure you understand:</p>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: ACID transactions, isolation levels, and row-level locks.</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across decoupled services.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous message delivery, at-least-once delivery, and consumer idempotency.</li>
+<li><a href="../18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Domain events and state reconstruction.</li>
+</ul>
+<hr />
+<h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
+<p>Imagine booking a vacation: you need a <strong>Flight</strong>, a <strong>Hotel</strong>, and a <strong>Rental Car</strong>.</p>
+<ul>
+<li><strong>Two-Phase Commit (2PC)</strong>: You call the airline, the hotel, and the car company simultaneously. You force all three managers to freeze their computer screens, hold the inventory, and stay on the phone without hanging up. If your cell connection drops, all three businesses stay frozen forever!</li>
+<li><strong>The Saga Pattern</strong>: You book the flight first (it succeeds). Then you book the hotel (it succeeds). Then you try to book the rental car, but they are sold out!
+<ul>
+<li>You don't freeze the world. Instead, you call the hotel and cancel your room (<strong>Compensating Transaction</strong>), and call the airline to refund your ticket (<strong>Compensating Transaction</strong>).</li>
+<li>You return to where you started without holding anyone hostage.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="everyday-analogy">🍕 Everyday Analogy</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Concept</th>
+<th style="text-align:left">Vacation Booking Analogy</th>
+<th style="text-align:left">Technical Reality in Microservices</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Local Transaction</strong></td>
+<td style="text-align:left">Paying for your flight on the airline website</td>
+<td style="text-align:left">Single database ACID transaction (<code>OrderService</code> Postgres DB)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Two-Phase Commit</strong></td>
+<td style="text-align:left">Forcing 3 hotel managers to hold phone receivers open</td>
+<td style="text-align:left">Synchronous XA distributed lock blocking rows on multiple DBs</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Coordinator Crash</strong></td>
+<td style="text-align:left">Travel agent passes out; hotels remain locked indefinitely</td>
+<td style="text-align:left">2PC coordinator fails; participant database locks never release</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Saga</strong></td>
+<td style="text-align:left">Booking items one-by-one: Flight $\rightarrow$ Hotel $\rightarrow$ Car</td>
+<td style="text-align:left">Chain of local transactions linked by messages/events</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Compensating Action</strong></td>
+<td style="text-align:left">Calling the hotel to cancel your room with full refund</td>
+<td style="text-align:left">Reversing previous step (e.g. <code>RefundPayment</code>, <code>ReleaseStock</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Saga Orchestrator</strong></td>
+<td style="text-align:left">A dedicated travel concierge following a checklist</td>
+<td style="text-align:left">Central state machine service (e.g. AWS Step Functions)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Saga Choreography</strong></td>
+<td style="text-align:left">Hotel finishes booking and automatically faxes the car company</td>
+<td style="text-align:left">Services listen to event bus and trigger next step reactively</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Transactional Outbox</strong></td>
+<td style="text-align:left">Tucking the receipt and the mail parcel into the same mailbox</td>
+<td style="text-align:left">Writing business data + event table in ONE local SQL transaction</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
+<h3 id="the-dual-write-problem">The Dual-Write Problem</h3>
+<p>In a microservice checkout handler:</p>
+<ol>
+<li><strong>Step 1 (Local DB Write)</strong>: Save the order record to the local SQL database.</li>
+<li><strong>Step 2 (Network Event Publish)</strong>: Publish an <code>OrderCreated</code> event to Apache Kafka.</li>
+</ol>
+<p><em>(See <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/19-distributed-transactions/demo.py"><code>demo.py</code></a> for an executable simulation of this dual-write failure mode and its outbox solution.)</em>
+<strong>This is fundamentally broken.</strong></p>
+<ul>
+<li>If Step 1 succeeds, but the network drops or the server crashes before Step 2, the order exists in the database, but downstream billing, shipping, and notification services never receive the event.</li>
+<li>If you flip the order (send event first, then save to DB), Kafka emits the event, but the database transaction rolls back due to a constraint violation $\rightarrow$ downstream services charge the customer for a non-existent order!</li>
+<li>You cannot wrap an HTTP/Kafka network call inside a database SQL transaction!</li>
+</ul>
+<h3 id="the-flaws-of-two-phase-commit-2pc">The Flaws of Two-Phase Commit (2PC)</h3>
+<p>For decades, distributed transactions relied on 2PC (XA transactions):</p>
+<ol>
+<li><strong>Prepare Phase</strong>: Coordinator asks all participants: <em>&quot;Can you commit?&quot;</em> Participants acquire locks and vote <code>YES</code>.</li>
+<li><strong>Commit Phase</strong>: If all vote <code>YES</code>, Coordinator writes commit log and tells all to commit.</li>
+</ol>
+<ul>
+<li><strong>Why 2PC fails in the cloud</strong>:
+<ul>
+<li><strong>Blocking Protocol</strong>: If the coordinator crashes during Phase 2, participants hold database locks indefinitely, blocking all other transactions.</li>
+<li><strong>Latency Multiplier</strong>: 2PC requires at least 4 network hops ($2\times \text{Prepare} + 2\times \text{Commit}$). Cross-region WAN latency easily exceeds $300\text{–}500\text{ ms}$, dropping throughput to single digits.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
+<h3 id="high-resolution-distributed-saga-animation">High-Resolution Distributed Saga Animation</h3>
+<p>Below is an animated trace of an Orchestrated Saga handling forward steps, a payment failure, and triggering compensating rollbacks:</p>
+<p><img src="./assets/distributed_transactions.gif" alt="Distributed Transactions &amp; Sagas" /></p>
+<hr />
+<h3 id="orchestrated-saga-sequence-diagram-failure--rollback">Orchestrated Saga Sequence Diagram (Failure &amp; Rollback)</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor User as 👤 Customer
+    participant Orch as ⚙️ Saga Orchestrator
+    participant Inv as 📦 Inventory Service
+    participant Pay as 💳 Payment Service
+    participant Order as 📝 Order Service
+
+    User-&gt;&gt;Orch: Checkout Order #102 ($450)
+    Orch-&gt;&gt;Order: Create Order (Status: PENDING)
+    Order--&gt;&gt;Orch: Order Created
+    
+    Orch-&gt;&gt;Inv: Reserve 2 Items
+    Inv--&gt;&gt;Orch: Stock Reserved (10 -&gt; 8)
+    
+    Orch-&gt;&gt;Pay: Process Payment ($450)
+    Pay--&gt;&gt;Orch: 💥 Payment Declined (Card Invalid)
+
+    rect rgb(35, 15, 15)
+    Note over Orch, Inv: Triggering Compensating Transactions
+    Orch-&gt;&gt;Inv: Compensate: ReleaseStock(2 Items)
+    Inv--&gt;&gt;Orch: Stock Restored (8 -&gt; 10)
+    Orch-&gt;&gt;Order: Update Status: CANCELLED
+    Order--&gt;&gt;Orch: Order Cancelled
+    end
+
+    Orch--&gt;&gt;User: 400 Bad Request: Payment Declined
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
+<p>Let's calculate the latency and lock contention between 2PC and Sagas under high concurrent traffic:</p>
+<h3 id="latency-math-3-service-checkout-order-inventory-payment">Latency Math: 3-Service Checkout (Order, Inventory, Payment)</h3>
+<ul>
+<li>Inter-service network round-trip time: $20\text{ ms}$.</li>
+<li>Local database write latency: $2\text{ ms}$.</li>
+</ul>
+<pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│ Model 1: Two-Phase Commit (2PC / XA)                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Phase 1 Prepare: Send prepare to 3 DBs (20ms)                       │
+│ 2. Participants acquire row locks &amp; flush prepare log (2ms)            │
+│ 3. Phase 1 Responses collected (20ms)                                  │
+│ 4. Coordinator writes commit decision to disk (2ms)                    │
+│ 5. Phase 2 Commit: Send commit to 3 DBs (20ms)                         │
+│ 6. Participants release row locks &amp; ACK (20ms)                         │
+│ Total Latency: ~84 ms per transaction!                                 │
+│ Lock Hold Time: ~64 ms per transaction.                                │
+│ Max Throughput on hot inventory row: 1 / 0.064s = ~15 tx/second!      │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ Model 2: Asynchronous Saga with Local Transactions                    │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Order Service commits locally (2ms) -&gt; Emits event                  │
+│ 2. Inventory Service commits locally (2ms) -&gt; Emits event              │
+│ 3. Payment Service commits locally (2ms)                               │
+│ Total Lock Hold Time per database: Exactly 2 ms!                       │
+│ Max Throughput on hot inventory row: 1 / 0.002s = ~500 tx/second!      │
+│ (33x higher throughput with ZERO cross-service locks!)                 │
+└────────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr />
+<h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
+<h3 id="1-the-saga-pattern-garcia-molina--salem-1987">1. The Saga Pattern (Garcia-Molina &amp; Salem, 1987)</h3>
+<p>A Saga is a sequence of local transactions:
+$$T_1, T_2, \dots, T_n$$
+Each local transaction $T_i$ updates state within a single service's database and publishes an event.
+For every forward transaction $T_i$, there exists a corresponding <strong>Compensating Transaction</strong> $C_i$ that semantically undoes its effects:</p>
+<ul>
+<li>If transaction $T_3$ fails, the system executes:
+$$C_2, C_1$$</li>
+<li>The system achieves <strong>Eventual Consistency</strong> without holding global locks.</li>
+</ul>
+<h4 id="saga-orchestration-vs-choreography">Saga Orchestration vs. Choreography</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Saga Choreography (Event-Driven)</th>
+<th style="text-align:left">Saga Orchestration (Command-Driven)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Architecture</strong></td>
+<td style="text-align:left">Services reactively listen to events and publish new events</td>
+<td style="text-align:left">A central Orchestrator coordinates steps sequentially</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Coupling</strong></td>
+<td style="text-align:left">Loosely coupled (no central orchestrator)</td>
+<td style="text-align:left">Central state machine holds workflow logic</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Complexity</strong></td>
+<td style="text-align:left">Becomes tangled (&quot;spaghetti events&quot;) at $&gt;4$ services</td>
+<td style="text-align:left">Clear, centralized visualization of states and timeouts</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Best For</strong></td>
+<td style="text-align:left">Simple 2–3 step workflows</td>
+<td style="text-align:left">Complex enterprise multi-step business transactions</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="2-the-transactional-outbox-pattern">2. The Transactional Outbox Pattern</h3>
+<p>To completely eliminate the Dual-Write problem, services use the <strong>Transactional Outbox Pattern</strong>:</p>
+<pre><code>[Application Service]
+       │
+       ▼ (Single Local ACID Transaction: BEGIN ... COMMIT)
+┌─────────────────────────────────────────────────────────────┐
+│ PostgreSQL Database                                         │
+│  ├── `orders` Table: INSERT INTO orders (id, total)...      │
+│  └── `outbox` Table: INSERT INTO outbox (event_id, payload) │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼ (Tails WAL via Debezium or Polling Worker)
+[Outbox Relay Worker] ──&gt; Publish Event ──&gt; [Apache Kafka / RabbitMQ]
+</code></pre>
+<ol>
+<li>The business record (<code>orders</code>) and the event record (<code>outbox</code>) are written in the <strong>exact same local ACID database transaction</strong>.</li>
+<li>Either both commit, or both abort. It is physically impossible for the order to exist without the corresponding outbox record!</li>
+<li>A background process (or <strong>Change Data Capture (CDC)</strong> tool like Debezium) tails the database Write-Ahead Log (WAL) and reliably delivers the outbox events to Kafka with at-least-once guarantees.</li>
+</ol>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Strategy</th>
+<th style="text-align:left">Atomicity Guarantee</th>
+<th style="text-align:left">Latency</th>
+<th style="text-align:left">Complexity</th>
+<th style="text-align:left">Fault Tolerance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Local DB ACID</strong></td>
+<td style="text-align:left">Strict (all-or-nothing)</td>
+<td style="text-align:left">Ultra-Low (&lt;2 ms)</td>
+<td style="text-align:left">Lowest</td>
+<td style="text-align:left">Single database failure only</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Two-Phase Commit (2PC)</strong></td>
+<td style="text-align:left">Strict Atomic Commit</td>
+<td style="text-align:left">High (80–300 ms)</td>
+<td style="text-align:left">Medium</td>
+<td style="text-align:left">Fragile (coordinator crash locks all)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Saga Orchestration</strong></td>
+<td style="text-align:left"><strong>Eventual Consistency</strong></td>
+<td style="text-align:left">Low (async chain)</td>
+<td style="text-align:left">Medium</td>
+<td style="text-align:left">Resilient (automatic compensation)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Saga Choreography</strong></td>
+<td style="text-align:left"><strong>Eventual Consistency</strong></td>
+<td style="text-align:left">Low (async chain)</td>
+<td style="text-align:left">High (hard to debug)</td>
+<td style="text-align:left">Resilient</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Transactional Outbox</strong></td>
+<td style="text-align:left">Guaranteed Event Delivery</td>
+<td style="text-align:left">Low</td>
+<td style="text-align:left">Low–Medium</td>
+<td style="text-align:left">Guaranteed zero event loss</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common Mistakes &amp; Production Pitfalls</h2>
+<ol>
+<li>
+<p><strong>Non-Idempotent Compensating Actions</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: When a network glitch causes the orchestrator to retry a compensating <code>Refund($50)</code> call.</li>
+<li><em>Result</em>: The customer is refunded $50 twice! All forward and compensating actions in a Saga <strong>must be strictly idempotent</strong> (using unique transaction IDs).</li>
+</ul>
+</li>
+<li>
+<p><strong>Semantic Anomalies (Lack of Isolation)</strong>:</p>
+<ul>
+<li><em>Pitfall</em>: In a Saga, Step 1 reserves inventory, but Step 3 fails 2 seconds later. During those 2 seconds, other users read the database and see that the item is out of stock (<strong>Dirty Read / Lack of Isolation</strong>).</li>
+<li><em>Fix</em>: Use semantic locking or reservation states: mark item as <code>Status: RESERVED_PENDING_PAYMENT</code> with an automatic 5-minute expiration timer.</li>
+</ul>
+</li>
+<li>
+<p><strong>Writing to Kafka Inside a DB Transaction Block</strong>:</p>
+<ul>
+<li><em>Pitfall</em>:
+Placing network I/O calls (<code>kafka.send()</code>) inside a database transaction block (<code>with db.transaction():</code>). If the message broker takes 2 seconds to respond, database connection locks remain held open, exhausting connection pools. Always use the Transactional Outbox pattern instead.</li>
+<li><em>Result</em>: If Kafka takes 2 seconds to respond, the database connection and row locks are held open for 2 seconds, destroying database connection pool capacity. Never place network I/O inside SQL transactions; use Transactional Outbox instead.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
+<p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/19-distributed-transactions/demo.py"><code>demo.py</code></a> implements:</p>
+<ol>
+<li>An Orchestrated Saga handling an e-commerce checkout flow across 3 isolated microservice databases.</li>
+<li>A live payment decline triggering a <strong>Compensating Transaction</strong> that restores inventory stock.</li>
+<li>The <strong>Transactional Outbox Pattern</strong> guaranteeing zero Dual-Write inconsistency.</li>
+</ol>
+<p>Run it locally in your terminal:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
+<ul>
+<li><strong>Uber (Trip Lifecycle Saga)</strong>: Booking a ride coordinates Rider Dispatch, Driver Match, Dynamic Pricing, and Payment Authorization. If no driver accepts the ride within 3 minutes, a compensating transaction unfreezes the rider's credit card authorization.</li>
+<li><strong>Stripe Billing</strong>: Manages recurring subscription charges, invoice generation, tax calculation, and bank ACH transfers using state machine Sagas.</li>
+<li><strong>Airbnb</strong>: Booking an apartment reserves dates on the host's calendar, authorizes guest payment, and handles security deposits. If host declines, compensating refunds execute automatically.</li>
+<li><strong>AWS Step Functions</strong>: Amazon's serverless orchestration service explicitly designed to run visual Saga state machines with built-in retry backoff and error catch/compensation blocks.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-why-does-two-phase-commit-2pc-fail-to-scale-in-modern-microservice-architectures">Q1: &quot;Why does Two-Phase Commit (2PC) fail to scale in modern microservice architectures?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing candidate's knowledge of distributed locking and failure modes.</p>
+<p><strong>Model Answer</strong>:
+&quot;Two-Phase Commit fails in modern microservices for three critical reasons:</p>
+<ol>
+<li><strong>The Synchronous Blocking Problem</strong>: 2PC is a blocking protocol. When participants vote <code>YES</code> in the Prepare phase, they acquire local row and table locks. If the coordinator crashes or network partition occurs before the Commit phase completes, participants hold locks indefinitely. All other transactions touching those rows are blocked, causing cascading thread exhaustion.</li>
+<li><strong>Extreme Latency</strong>: 2PC requires multiple synchronous network round-trips across all participating databases. In multi-region deployments, latency exceeds $200\text{–}400\text{ ms}$, dropping throughput to single digits.</li>
+<li><strong>Loss of Service Autonomy</strong>: 2PC violates microservice encapsulation by requiring external transaction managers to coordinate internal database locks across organizational boundaries.&quot;</li>
+</ol>
+<hr />
+<h3 id="q2-what-is-the-difference-between-saga-orchestration-and-saga-choreography-and-when-should-you-choose-each">Q2: &quot;What is the difference between Saga Orchestration and Saga Choreography, and when should you choose each?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Evaluating architectural maturity in workflow design.</p>
+<p><strong>Model Answer</strong>:
+&quot;Both implement the Saga pattern, but differ in where control logic resides:</p>
+<ol>
+<li><strong>Saga Choreography (Decentralized / Event-Driven)</strong>:
+<ul>
+<li>There is no central controller. Service A executes its local transaction and publishes <code>OrderCreated</code>. Service B listens to <code>OrderCreated</code>, reserves inventory, and publishes <code>InventoryReserved</code>.</li>
+<li><em>Pros</em>: Simple for small flows (2–3 services); loose coupling.</li>
+<li><em>Cons</em>: High cognitive load at scale; cyclic dependencies; difficult to track workflow status.</li>
+</ul>
+</li>
+<li><strong>Saga Orchestration (Centralized / Command-Driven)</strong>:
+<ul>
+<li>A dedicated Orchestrator service (state machine) sends explicit commands to services: <code>ReserveInventory</code>, awaits the reply, and decides the next step or compensation.</li>
+<li><em>Pros</em>: Centralized workflow visibility, easy to implement timeouts, clear error handling.</li>
+<li><em>Cons</em>: Orchestrator can become a god service if business logic leaks into it.
+<em>Rule of Thumb</em>: Use choreography for simple 2–3 service pipelines. Use orchestration for complex, high-value business flows like checkout, flight booking, or loan approvals.&quot;</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="q3-what-is-the-dual-write-problem-and-how-does-the-transactional-outbox-pattern-solve-it">Q3: &quot;What is the Dual-Write Problem, and how does the Transactional Outbox Pattern solve it?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Testing practical data consistency patterns across database and messaging boundaries.</p>
+<p><strong>Model Answer</strong>:
+&quot;The <strong>Dual-Write Problem</strong> occurs when an application must update a database and publish a message to an event bus (e.g. Kafka):</p>
+<ul>
+<li>Because the database and message broker are separate distributed systems, you cannot update both atomically without expensive 2PC.</li>
+<li>If the database write succeeds but the message send fails (or crashes), downstream systems are out of sync. If the message send succeeds but the database transaction rolls back, downstream systems process phantom data.</li>
+</ul>
+<p><strong>The Transactional Outbox Pattern solves this</strong>:</p>
+<ol>
+<li>An <code>outbox</code> table is created in the application's relational database.</li>
+<li>In a single local ACID transaction, the application inserts the business record (<code>orders</code>) and inserts the message event into the <code>outbox</code> table.</li>
+<li>Because both happen in the same local transaction, atomicity is guaranteed: either both are saved, or neither is.</li>
+<li>An asynchronous relay process (or Change Data Capture tool like Debezium tailing the WAL) reads unread events from <code>outbox</code> and reliably publishes them to the message broker.&quot;</li>
+</ol>
+<hr />
+<h3 id="q4-how-do-you-handle-the-lack-of-isolation-the-i-in-acid-in-saga-transactions">Q4: &quot;How do you handle the 'Lack of Isolation' (the 'I' in ACID) in Saga transactions?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Probing deep knowledge of distributed transaction anomalies.</p>
+<p><strong>Model Answer</strong>:
+&quot;Sagas provide Atomicity, Consistency, and Durability, but fundamentally lack <strong>Isolation</strong> (ACID): because each local transaction commits immediately, intermediate states are visible to other concurrent transactions before the entire Saga finishes.</p>
+<p>To mitigate this lack of isolation in production:</p>
+<ol>
+<li><strong>Semantic Locking</strong>: Mark records with a pending flag (e.g., <code>status = PENDING_PAYMENT</code>). Other transactions inspecting the row know it is in-flight and refuse to modify it.</li>
+<li><strong>Commutative Updates</strong>: Design operations so that execution order does not affect the final outcome (e.g., <code>account_balance += 50</code> rather than overwriting <code>balance = 150</code>).</li>
+<li><strong>Pessimistic Reservation Timers</strong>: Deduct inventory with an expiration lease (e.g. 10-minute hold). If the checkout saga does not confirm within 10 minutes, a background sweeper automatically releases the hold.&quot;</li>
+</ol>
+<hr />
+<h3 id="q5-what-is-the-tcc-try-confirm-cancel-pattern-and-how-does-it-differ-from-a-standard-saga">Q5: &quot;What is the TCC (Try-Confirm-Cancel) pattern, and how does it differ from a standard Saga?&quot;</h3>
+<p><strong>Interviewer Goal</strong>: Assessing advanced financial transaction architectures.</p>
+<p><strong>Model Answer</strong>:
+&quot;<strong>TCC (Try-Confirm-Cancel)</strong> is a 2-phase reservation-based transaction pattern tailored for high-contention financial systems:</p>
+<ol>
+<li><strong>Try Phase</strong>: Checks business prerequisites and <strong>reserves/freezes</strong> resources without finalizing them (e.g., placing a $100 temporary authorization hold on a credit card, or placing 2 seats in a 'Reserved' bucket).</li>
+<li><strong>Confirm Phase</strong>: If all Try calls across services succeed, the coordinator issues Confirm calls to finalize the transaction (e.g., permanently capturing the $100 hold). This phase is guaranteed not to fail unless network errors occur.</li>
+<li><strong>Cancel Phase</strong>: If any Try call fails, the coordinator issues Cancel calls to release the frozen reservations.</li>
+</ol>
+<p><strong>Difference from Saga</strong>:</p>
+<ul>
+<li>In a standard Saga, transactions execute directly and mutate actual state; rollbacks require semantic compensation.</li>
+<li>In TCC, state is only temporarily reserved in the Try phase; actual state mutation only commits in the Confirm phase, avoiding dirty reads and messy compensations.&quot;</li>
+</ul>
+<hr />
+<h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
+<details>
+<summary><b>1. Why can't you wrap a Kafka publish call inside a relational SQL transaction block?</b></summary>
+<br>
+Because Kafka and PostgreSQL are completely separate distributed systems. The SQL transaction manager only controls local database locks and WAL logs; it has no control over external network calls. If the SQL transaction rolls back after the Kafka message was sent, the message is already out in the wild! Use the <b>Transactional Outbox Pattern</b> instead.
+</details>
+<details>
+<summary><b>2. If a Saga executes 3 steps (A -> B -> C), and Step C fails, in what order are compensating transactions executed?</b></summary>
+<br>
+In <b>reverse chronological order</b>: Compensate Step B first ($C_B$), then Compensate Step A ($C_A$). This unwinds the stack cleanly back to the original starting state.
+</details>
+<details>
+<summary><b>3. Why is it mandatory that all Compensating Transactions in a Saga be idempotent?</b></summary>
+<br>
+Because in a distributed system, network timeouts will cause the Saga orchestrator to retry compensating calls. If a compensating <code>Refund($50)</code> call is executed twice, the user would be refunded $100 instead of $50 unless the service enforces idempotency via unique transaction IDs.
+</details>
+<hr />
+<h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — <em>Chapter 9: Consistency and Consensus (Distributed Transactions and Two-Phase Commit)</em>.</li>
+<li><strong>Sagas (1987)</strong> by Hector Garcia-Molina and Kenneth Salem (Princeton University).</li>
+<li><strong>Microservices Patterns</strong> by Chris Richardson — <em>Chapter 4: Managing transactions with sagas &amp; Chapter 3: Transactional outbox</em>.</li>
+<li><strong>AWS Architecture Blog</strong>: <em>Building resilient distributed transactions with AWS Step Functions</em>.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related Modules</h2>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Relational ACID transaction semantics.</li>
+<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous systems.</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Decoupling services with reliable messaging.</li>
+<li><a href="../18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Generating immutable event streams from domain aggregates.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Client–Server Networking">
+  <title>Client–Server Networking | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="01--clientserver-networking">01 · Client–Server Networking</h1>
+<blockquote>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../01-client-server-networking/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Every digital product is a conversation between two computers: a <strong>client</strong> (your phone or browser) asking for something, and a <strong>server</strong> (a computer in a datacenter) answering. Before they can speak English or JSON, they must agree on a set of rules called <strong>protocols</strong>.</p>
+<ul>
+<li><strong>TCP</strong> is like a certified courier who demands a signature for every package—if a box falls off the truck, they stop everything and redeliver it.</li>
+<li><strong>UDP</strong> is like a live radio broadcast—it sprays sound into the air as fast as possible; if you miss two syllables of music, it doesn't rewind the station.</li>
+<li><strong>HTTP/1.1, HTTP/2, and HTTP/3</strong> are the languages clients and servers use on top of those couriers to send web pages, videos, and API data.</li>
+</ul>
+<h2 id="first-pass">First pass</h2>
+<p><strong>Trail Notes</strong> is a fictional website where people read hiking guides. Imagine opening <code>https://trailnotes.example/guide</code> and follow one request. For this lesson, assume the browser already knows the server's address.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant B as Browser
+    participant S as Trail Notes server
+    B-&gt;&gt;S: Establish a secure connection if needed
+    B-&gt;&gt;S: GET /guide
+    S--&gt;&gt;B: 200 OK and the guide HTML
+</code></pre>
+<ol>
+<li>The browser is the <strong>client</strong>. It sends the request over a secure connection.</li>
+<li>The <strong>server</strong> reads the path <code>/guide</code> and sends a response. Status <code>200 OK</code> indicates success, and the response body contains the HTML.</li>
+<li>The browser renders the HTML. It may ask for styles or images in additional requests, using the same connection when possible.</li>
+</ol>
+<p><strong>Predict.</strong> An established connection has a 50 ms round-trip time. The server takes 20 ms to produce a small response. What is the estimated time from sending the request to receiving the response? What might a new connection add?</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>About <strong>70 ms</strong> in this model. The outbound request and inbound response use one network round trip, and server work adds another 20 ms. This estimate omits payload transfer time and browser rendering. A new HTTPS connection can add connection and encryption setup. How much it adds depends on the protocol and whether an earlier session can be resumed.</p>
+</details>
+<p>Use the existing <a href="#run-the-demo">Python simulator</a> to compare connection setup and request patterns. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Client–Server Networking</strong> and explain how you estimated 70 ms.</p>
+<p><strong>Next lesson</strong> · <a href="../02-domain-name-system/index.html#first-pass">Find the website's address with DNS</a></p>
+<hr />
+<h2 id="technical-reference">Technical reference</h2>
+<p>Explore TCP and UDP, HTTP versions, loss and multiplexing, streaming protocols, and interview questions.</p>
+<h2 id="everyday-analogy-the-postal-letter-vs-the-live-phone-call">🍕 Everyday analogy: The Postal Letter vs The Live Phone Call</h2>
+<p>Imagine you want to order dinner from a restaurant:</p>
+<ul>
+<li><strong>HTTP/1.1 (Postal Mail):</strong> You write a paper letter: <em>&quot;Please send 1 pizza.&quot;</em> You wait 2 days for the pizza and receipt. Then you write another letter: <em>&quot;Please send 1 soda.&quot;</em> You wait another 2 days. If letter #1 is delayed in the snow, letter #2 cannot even be read (<strong>Head-of-Line Blocking</strong>).</li>
+<li><strong>WebSockets (Dedicated Phone Call):</strong> You call the restaurant and leave the line open. You can speak whenever you want; the chef can shout <em>&quot;Your order is in the oven!&quot;</em> whenever they want. Neither of you has to dial the phone again.</li>
+<li><strong>HTTP/3 QUIC (Independent Courier Drones):</strong> Instead of one mail truck carrying all boxes in single file down a narrow road, each dish is delivered by its own independent drone over UDP. If drone #2 gets lost in a storm, drone #1 and drone #3 still land on your table without waiting.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In everyday life</th>
+<th style="text-align:left">In network architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Phone number / House address</strong></td>
+<td style="text-align:left"><strong>IP Address</strong> (<code>142.250.190.46</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Specific apartment door number</strong></td>
+<td style="text-align:left"><strong>Port number</strong> (Port <code>80</code> for HTTP, Port <code>443</code> for HTTPS)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Handshake / &quot;Hello, can you hear me?&quot;</strong></td>
+<td style="text-align:left"><strong>TCP 3-Way Handshake</strong> (<code>SYN</code> $\to$ <code>SYN-ACK</code> $\to$ <code>ACK</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Speaking in English or Spanish</strong></td>
+<td style="text-align:left"><strong>Application Protocol</strong> (HTTP, WebSocket, gRPC)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>A lost letter resent by post office</strong></td>
+<td style="text-align:left"><strong>TCP Packet Retransmission</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>A live radio speaker ignoring static</strong></td>
+<td style="text-align:left"><strong>UDP Datagram Stream</strong> (VoIP, live gaming)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<p>When you click a link on your phone in New York to fetch data from a server in London:</p>
+<ol>
+<li>Physical light in glass fiber travels at $\approx 200,000\text{ km/s}$.</li>
+<li>The physical distance round-trip is $\approx 11,000\text{ km}$.</li>
+<li>That means <strong>one network Round-Trip Time (RTT)</strong> takes roughly <strong>$70\text{ ms}$</strong> just for the physics of light transit, plus router queue delays.</li>
+</ol>
+<p>If every API request had to open a brand-new connection, perform a 3-way handshake (1 RTT), negotiate TLS encryption keys (1 to 2 RTTs), and wait for sequential responses, a single web page needing 80 assets (images, fonts, scripts) would take <strong>over 10 seconds to load</strong>.</p>
+<p>Modern networking protocols solve this by <strong>reusing connections</strong>, <strong>multiplexing hundreds of streams over a single pipe</strong>, and <strong>eliminating round-trips</strong>.</p>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/tcp_handshake.gif" alt="TCP Handshake Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    actor Client as 📱 Client (Browser/Mobile)
+    participant Server as 🖥️ Server (Nginx / API Gateway)
+
+    Note over Client,Server: Phase 1: TCP Three-Way Handshake (1 RTT)
+    Client-&gt;&gt;Server: 1. SYN (seq = 1000)
+    Server--&gt;&gt;Client: 2. SYN-ACK (seq = 5000, ack = 1001)
+    Client-&gt;&gt;Server: 3. ACK (ack = 5001)
+
+    Note over Client,Server: Phase 2: TLS 1.3 Encryption Handshake (1 RTT)
+    Client-&gt;&gt;Server: 4. Client Hello + Key Share
+    Server--&gt;&gt;Client: 5. Server Hello + Certificate + Handshake Finished
+
+    Note over Client,Server: Phase 3: Application Data Transfer (HTTP/2 Multiplexing)
+    Client-&gt;&gt;Server: 6. GET /api/v1/feed (Stream 1) + GET /avatar.png (Stream 3)
+    Server--&gt;&gt;Client: 7. Interleaved Binary Frames (Stream 1 data &amp; Stream 3 data)
+</code></pre>
+<ol>
+<li><strong>Step 1 (SYN):</strong> Client chooses an Initial Sequence Number (<code>seq=1000</code>) and asks to connect.</li>
+<li><strong>Step 2 (SYN-ACK):</strong> Server reserves buffer memory, acknowledges the client (<code>ack=1001</code>), and sends its own sequence number (<code>seq=5000</code>).</li>
+<li><strong>Step 3 (ACK):</strong> Client confirms receipt (<code>ack=5001</code>). Both sides now have open sockets in the <code>ESTABLISHED</code> state.</li>
+<li><strong>Step 4–5 (TLS 1.3):</strong> Cryptographic keys are exchanged using Elliptic-Curve Diffie-Hellman in just <strong>1 single RTT</strong>.</li>
+<li><strong>Step 6–7 (HTTP/2 Data):</strong> Multiple independent requests travel concurrently over the exact same socket without waiting for one another.</li>
+</ol>
+<hr />
+<h2 id="worked-estimate--four-page-assets">🔢 Worked estimate · Four page assets</h2>
+<p>Suppose your mobile app needs to fetch <strong>4 items</strong> to display a user profile:</p>
+<ul>
+<li><code>profile.json</code> (2 KB)</li>
+<li><code>avatar.jpg</code> (20 KB)</li>
+<li><code>theme.css</code> (5 KB)</li>
+<li><code>analytics.js</code> (50 KB)</li>
+</ul>
+<p>This is a simplified comparison of request patterns. The TCP rows omit TLS setup and payload transfer time. The HTTP/3 row assumes a previously established session can resume with accepted early data. Assume network <strong>$\text{RTT} = 50\text{ ms}$</strong>, and server computation takes <strong>$20\text{ ms}$</strong> per asset.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Protocol</th>
+<th style="text-align:center">Connections Opened</th>
+<th style="text-align:left">How requests travel</th>
+<th style="text-align:center">Total Elapsed Time</th>
+<th style="text-align:left">Why?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>HTTP/1.0</strong> (Naive)</td>
+<td style="text-align:center">4 separate</td>
+<td style="text-align:left">1 after another, new TCP handshake each time</td>
+<td style="text-align:center"><strong>$560\text{ ms}$</strong></td>
+<td style="text-align:left">4 handshakes ($4 \times 50\text{ms}$) + 4 fetches ($4 \times 70\text{ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>HTTP/1.1</strong> (Keep-Alive)</td>
+<td style="text-align:center">1 persistent</td>
+<td style="text-align:left">Serial queue on one socket (Head-of-Line blocking)</td>
+<td style="text-align:center"><strong>$330\text{ ms}$</strong></td>
+<td style="text-align:left">1 handshake ($50\text{ms}$) + 4 serial requests in sequence ($4 \times 70\text{ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>HTTP/2</strong> (Multiplexed)</td>
+<td style="text-align:center">1 persistent</td>
+<td style="text-align:left">All 4 sent concurrently as binary streams</td>
+<td style="text-align:center"><strong>$120\text{ ms}$</strong></td>
+<td style="text-align:left">1 handshake ($50\text{ms}$) + parallel transfer bounded by slowest asset ($70\text{ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>HTTP/3</strong> (QUIC 0-RTT)</td>
+<td style="text-align:center">1 UDP session</td>
+<td style="text-align:left">Instant resumption + independent stream frames</td>
+<td style="text-align:center"><strong>$70\text{ ms}$</strong></td>
+<td style="text-align:left">Zero connection handshake penalty + parallel stream delivery</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>Takeaway:</strong> Moving from HTTP/1.1 to HTTP/2 cut latency by <strong>$64%$</strong> without changing a single line of backend database code!</p>
+</blockquote>
+<hr />
+<h2 id="how-it-works-the-core-protocols">⚙️ How it works: The Core Protocols</h2>
+<h3 id="1-tcp-vs-udp-the-transport-layer">1. TCP vs UDP (The Transport Layer)</h3>
+<pre><code class="language-mermaid">flowchart TD
+    App[&quot;Application Layer (HTTP, WebSocket, DNS, gRPC)&quot;] --&gt; Choice{&quot;Reliability vs Speed?&quot;}
+    Choice --&gt;|Must not lose a single byte| TCP[&quot;🔒 TCP (Transmission Control Protocol)&quot;]
+    Choice --&gt;|Speed &amp; real-time latency matter most| UDP[&quot;⚡ UDP (User Datagram Protocol)&quot;]
+
+    TCP --&gt; TCP_Uses[&quot;Web APIs (REST/JSON)&lt;br/&gt;Bank Transactions&lt;br/&gt;File Downloads (SFTP)&lt;br/&gt;Email (SMTP)&quot;]
+    UDP --&gt; UDP_Uses[&quot;Live Video Streaming&lt;br/&gt;Online Multiplayer Gaming&lt;br/&gt;Voice over IP (VoIP)&lt;br/&gt;DNS Lookups&quot;]
+</code></pre>
+<ul>
+<li><strong>TCP guarantees:</strong>
+<ul>
+<li><strong>Zero data loss:</strong> Lost packets are automatically retransmitted.</li>
+<li><strong>In-order delivery:</strong> Packets arriving out of order are reassembled using sequence numbers.</li>
+<li><strong>Congestion control:</strong> Slows down transmission speed if routers on the path are dropping packets.</li>
+</ul>
+</li>
+<li><strong>UDP guarantees:</strong>
+<ul>
+<li><strong>Minimal latency:</strong> No connection setup handshake, no acknowledgments, no retransmission delays.</li>
+<li>An 8-byte header compared to TCP's 20-to-60-byte header.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="2-the-evolution-of-http">2. The Evolution of HTTP</h3>
+<h4 id="http11-persistent-connections">HTTP/1.1: Persistent Connections</h4>
+<ul>
+<li>Introduced <code>Connection: keep-alive</code> so multiple requests could reuse the same TCP socket.</li>
+<li><strong>The Fatal Flaw (Head-of-Line Blocking):</strong> Requests on a single socket must be answered in strict FIFO order. If request #1 is an expensive SQL query taking 3 seconds, requests #2, #3, and #4 are stuck waiting in line behind it.</li>
+<li><strong>The Hack:</strong> Browsers opened 6 parallel TCP connections per domain, which saturated client CPU and router buffers.</li>
+</ul>
+<h4 id="http2-binary-framing--multiplexing">HTTP/2: Binary Framing &amp; Multiplexing</h4>
+<ul>
+<li>Replaced plain-text strings with <strong>binary frames</strong>.</li>
+<li>Introduced <strong>Multiplexing</strong>: Requests and responses are chopped into small numbered frames with a <code>Stream ID</code>. Frames from stream 1, 3, and 5 interleave freely over a single TCP connection.</li>
+<li>Introduced <strong>HPACK Header Compression</strong>: Removes repeated redundant headers (like cookies and User-Agent) on every request.</li>
+</ul>
+<h4 id="http3-quic-over-udp">HTTP/3: QUIC over UDP</h4>
+<ul>
+<li>Why HTTP/2 was not enough: HTTP/2 solves application-layer Head-of-Line blocking, but TCP itself still has transport Head-of-Line blocking. If a single TCP packet drops on Wi-Fi, the OS pauses <strong>all</strong> HTTP/2 streams until that lost packet is resent.</li>
+<li>HTTP/3 replaces TCP with <strong>QUIC (running over UDP)</strong>.</li>
+<li>QUIC orders data per stream. Missing bytes on one stream do not stop delivery of available bytes on another stream, though shared congestion control can slow the connection as a whole.</li>
+<li><strong>Connection Migration:</strong> If your phone switches from home Wi-Fi to cellular 5G, the IP address changes. TCP connections break and must reconnect from scratch. QUIC uses a 64-bit Connection ID, so streams continue seamlessly without dropping!</li>
+</ul>
+<hr />
+<h3 id="3-persistent-real-time-websockets-vs-sse-vs-long-polling">3. Persistent Real-Time: WebSockets vs SSE vs Long Polling</h3>
+<p>When a server needs to push live data to the client (like a chat message or stock price update):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Technique</th>
+<th style="text-align:center">Direction</th>
+<th style="text-align:center">Connection Type</th>
+<th style="text-align:center">Protocol</th>
+<th style="text-align:left">Best Used For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Short Polling</strong></td>
+<td style="text-align:center">Client $\to$ Server</td>
+<td style="text-align:center">Ephemeral HTTP</td>
+<td style="text-align:center">HTTP</td>
+<td style="text-align:left">Obsolete; wastes massive bandwidth</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Long Polling</strong></td>
+<td style="text-align:center">Client $\to$ Server</td>
+<td style="text-align:center">Stalls HTTP response</td>
+<td style="text-align:center">HTTP</td>
+<td style="text-align:left">Legacy fallbacks when WebSockets are blocked</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Server-Sent Events (SSE)</strong></td>
+<td style="text-align:center">Server $\to$ Client (One-Way)</td>
+<td style="text-align:center">Persistent streaming</td>
+<td style="text-align:center">HTTP</td>
+<td style="text-align:left">Live stock tickers, AI text streaming (ChatGPT)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>WebSockets</strong></td>
+<td style="text-align:center">Full Duplex (Both Ways)</td>
+<td style="text-align:center">Persistent open TCP</td>
+<td style="text-align:center"><code>ws://</code> / <code>wss://</code></td>
+<td style="text-align:left">Real-time chat, multiplayer games, collaborative docs</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="4-grpc--protocol-buffers-internal-microservices">4. gRPC &amp; Protocol Buffers (Internal Microservices)</h3>
+<p>While public internet clients use HTTP/JSON REST APIs because every browser supports JSON, internal backend microservices within a datacenter use <strong>gRPC</strong>:</p>
+<ul>
+<li><strong>Protocol Buffers (Protobuf):</strong> Serializes typed data into compact binary bytes instead of verbose text strings (<code>{&quot;user_id&quot;: 10293}</code> is 22 bytes in JSON, but only 4 bytes in Protobuf).</li>
+<li>Runs on top of <strong>HTTP/2</strong>: Reuses single TCP connections between services, supports bidirectional streaming, and generates typed client code in Go, Java, Python, and Rust.</li>
+<li><strong>Result:</strong> $5\times$ to $10\times$ faster throughput and significantly lower CPU utilization across microservice fleets.</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">⚖️ Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Requirement</th>
+<th style="text-align:left">Recommended Protocol</th>
+<th style="text-align:left">Why?</th>
+<th style="text-align:left">Avoid</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Public web or mobile app API</strong></td>
+<td style="text-align:left"><strong>HTTPS (HTTP/2 or HTTP/3) + JSON</strong></td>
+<td style="text-align:left">Universal browser compatibility, firewall-friendly, standard caching</td>
+<td style="text-align:left">UDP (blocked by firewalls), Raw TCP</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>High-throughput internal microservices</strong></td>
+<td style="text-align:left"><strong>gRPC over HTTP/2</strong></td>
+<td style="text-align:left">Binary compression, strict contract schemas, high RPC speed</td>
+<td style="text-align:left">REST/JSON (unnecessary text serialization overhead)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Live chat or multiplayer game actions</strong></td>
+<td style="text-align:left"><strong>WebSockets (<code>wss://</code>)</strong></td>
+<td style="text-align:left">Bi-directional, 2-byte frame overhead, sub-millisecond response</td>
+<td style="text-align:left">HTTP Polling (kills server with empty requests)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Live server-to-client notifications or LLM streaming</strong></td>
+<td style="text-align:left"><strong>Server-Sent Events (SSE)</strong></td>
+<td style="text-align:left">Simpler than WebSockets, automatic reconnection, standard HTTP</td>
+<td style="text-align:left">WebSockets (overkill when client never sends data back)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Real-time video/voice call (WebRTC)</strong></td>
+<td style="text-align:left"><strong>SRTP over UDP</strong></td>
+<td style="text-align:left">Late packets are useless; packet loss is preferred over buffering</td>
+<td style="text-align:left">TCP (retransmissions cause stutter and voice delay)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Opening a new TCP/HTTP connection for every single backend request:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> Burns CPU on TLS handshakes and exhausts available ephemeral ports (<code>TIME_WAIT</code> socket exhaustion).</li>
+<li><em>Fix:</em> Always configure <strong>Connection Pooling</strong> with keep-alive timeouts in HTTP clients (e.g., <code>requests.Session()</code> in Python, <code>http.Client</code> in Go).</li>
+</ul>
+</li>
+<li>
+<p><strong>Using WebSockets when Server-Sent Events (SSE) is enough:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> WebSockets bypass standard HTTP proxy caches, require custom heartbeat/ping-pong servers, and need custom load balancing sticky sessions.</li>
+<li><em>Fix:</em> If data only flows from server to user (like live scores or LLM generation), use SSE over standard HTTP/2.</li>
+</ul>
+</li>
+<li>
+<p><strong>Assuming UDP is always faster than TCP:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> If your application requires reliability and you attempt to rebuild retransmission, acking, and windowing in user-space code on top of UDP without hardware offloading, it is often slower and buggier than the kernel's optimized TCP stack.</li>
+</ul>
+</li>
+<li>
+<p><strong>Ignoring TCP SYN Flood vulnerabilities:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> Attackers send millions of spoofed SYN packets without sending the final ACK. The server's backlog queue fills with half-open connections and crashes.</li>
+<li><em>Fix:</em> Enable <strong>SYN Cookies</strong> in the Linux kernel (<code>sysctl -w net.ipv4.tcp_syncookies=1</code>).</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="run-the-demo">Run the demo</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 01-client-server-networking
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>The demo counts three one-way legs until the server receives the final ACK. The client can normally send its first data with that ACK after one RTT. Separate TLS setup can add time.</li>
+<li>Watch how HTTP/1.1 serial queueing creates <strong>Head-of-Line blocking</strong>, forcing the total page load time to equal the sum of all individual latencies.</li>
+<li>Contrast with the HTTP/2 multiplexing test, which models concurrent requests with elapsed time bounded by the slowest asset under the demo's assumptions.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Google</strong> documented an early QUIC deployment for HTTPS traffic in a 2017 research paper. <a href="https://research.google/pubs/the-quic-transport-protocol-design-and-internet-scale-deployment/">Google's QUIC deployment paper</a></li>
+<li><strong>Netflix</strong> documents how Zuul 2 proxies client requests to upstream services. <a href="https://github.com/Netflix/zuul/wiki/How-It-Works-2.0">Netflix's Zuul 2 architecture</a></li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-walk-me-through-step-by-step-what-happens-when-you-type-httpsexamplecom-into-your-browser-and-press-enter">Q1: &quot;Walk me through step-by-step what happens when you type <code>https://example.com</code> into your browser and press Enter.&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>A comprehensive answer spans <strong>DNS $\to$ TCP $\to$ TLS $\to$ HTTP $\to$ Rendering</strong>:</p>
+<ol>
+<li><strong>URL Parsing &amp; HSTS:</strong> The browser parses the protocol (<code>https</code>) and domain (<code>example.com</code>). It checks its preloaded HSTS list to enforce HTTPS.</li>
+<li><strong>DNS Resolution:</strong> Checks browser cache $\to$ OS cache $\to$ <code>/etc/hosts</code> $\to$ queries recursive DNS resolver (UDP port 53). The resolver walks Root $\to$ TLD (<code>.com</code>) $\to$ Authoritative DNS to return the server's IP (e.g. <code>93.184.216.34</code>).</li>
+<li><strong>TCP 3-Way Handshake:</strong> Browser initiates TCP connection on port 443 by sending <code>SYN</code>. Server replies with <code>SYN-ACK</code>. Browser returns <code>ACK</code>. (Cost: 1 RTT).</li>
+<li><strong>TLS 1.3 Handshake:</strong> Browser sends <code>ClientHello</code> with supported cipher suites and key share. Server returns <code>ServerHello</code>, certificate, and cryptographic verification. Shared symmetric session keys are established. (Cost: 1 RTT).</li>
+<li><strong>HTTP Request &amp; Multiplexing:</strong> Browser transmits an encrypted <code>GET / HTTP/2</code> request with headers.</li>
+<li><strong>Server Processing &amp; Routing:</strong> The request hits a reverse proxy / load balancer (e.g., Nginx), terminates TLS, forwards to application services, queries databases/caches, and streams back an <code>HTTP 200 OK</code> HTML payload.</li>
+<li><strong>Browser DOM Construction &amp; Critical Path:</strong> Browser parses HTML, builds the DOM tree, encounters linked CSS/JS assets, and streams them concurrently over the same multiplexed HTTP/2 socket before rendering pixels to screen.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-what-is-tcp-head-of-line-hol-blocking-and-why-did-http2-fail-to-solve-it">Q2: &quot;What is TCP Head-of-Line (HoL) blocking, and why did HTTP/2 fail to solve it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Application-Layer HoL Blocking (HTTP/1.1):</strong> In HTTP/1.1, only one request could be active on a TCP socket at a time. HTTP/2 solved this by multiplexing binary frames with stream IDs.</li>
+<li><strong>Transport-Layer HoL Blocking (TCP):</strong> TCP is an abstraction of a single continuous stream of ordered bytes. If packet #3 of Stream B is dropped by a router on Wi-Fi, the operating system's TCP receive buffer <strong>refuses to deliver packets #4, #5, and #6 to the application</strong>—even if those subsequent packets belong to a completely unrelated Stream A!</li>
+<li><strong>Why it matters:</strong> On lossy links, a missing range of TCP bytes can delay every HTTP/2 stream on that connection. The relative performance of one multiplexed connection and several independent connections depends on the workload and network.</li>
+<li><strong>The Solution:</strong> HTTP/3 abandoned TCP entirely for <strong>QUIC (over UDP)</strong>. In QUIC, each stream has its own independent sequencing and loss-recovery queue. Missing data on Stream B does not impose ordered delivery on Stream A. Shared congestion control still affects the connection.</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-when-would-you-choose-websockets-over-server-sent-events-sse-or-http-long-polling">Q3: &quot;When would you choose WebSockets over Server-Sent Events (SSE) or HTTP Long Polling?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Pick Server-Sent Events (SSE) when:</strong>
+<ul>
+<li>Communication is <strong>unidirectional</strong> (server-to-client only), such as live stock tickers, system monitoring alerts, or LLM token streaming.</li>
+<li>You want automatic reconnection, event IDs, and compatibility with standard HTTP/2 multiplexing, corporate proxies, and firewalls without custom protocol handling.</li>
+</ul>
+</li>
+<li><strong>Pick WebSockets when:</strong>
+<ul>
+<li>Communication is <strong>bidirectional and low latency</strong> (both client and server send frequent messages), such as real-time multiplayer gaming, interactive whiteboards, or chat applications.</li>
+<li>You need to send high-frequency small binary frames where the 2-byte WebSocket header overhead is dramatically smaller than repeating HTTP headers.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-how-does-grpc-achieve-dramatically-higher-throughput-than-traditional-rest-over-json">Q4: &quot;How does gRPC achieve dramatically higher throughput than traditional REST over JSON?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>gRPC wins across three distinct technical dimensions:</p>
+<ol>
+<li><strong>Binary Serialization (Protobuf vs JSON):</strong> JSON is human-readable text that requires expensive CPU string parsing, delimiter scanning, and field name repetition. Protobuf compiles to fixed-offset binary tags with varint encoding, reducing payload sizes by $60\text{–}80%$ and CPU serialization time by up to $10\times$.</li>
+<li><strong>Transport Multiplexing (HTTP/2):</strong> gRPC natively runs over HTTP/2, allowing dozens of concurrent RPC calls to interleave over a single long-lived TCP connection, eliminating connection handshake latency.</li>
+<li><strong>Strict Code Contracts:</strong> Protobuf <code>.proto</code> schemas generate typed client stubs at compile time, eliminating runtime type checking, schema drift, and boilerplate validation logic.</li>
+</ol>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A user's phone moves from home Wi-Fi to cellular 5G while playing a live game. Under standard TCP, what happens to the connection? What happens under HTTP/3 QUIC?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Under TCP, the connection is bound to a 4-tuple: <code>(Source IP, Source Port, Dest IP, Dest Port)</code>. Switching networks changes the phone's Source IP, which immediately breaks the TCP socket. The app must time out and re-establish a brand-new TCP and TLS handshake.<br />
+Under QUIC (HTTP/3), connections are identified by a persistent 64-bit <strong>Connection ID</strong> independent of IP address. The phone simply transmits the next UDP packet with the same Connection ID from its new cellular IP, and data transfer continues without interruption (<strong>Connection Migration</strong>).</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>Why does the TCP handshake take 3 steps (SYN, SYN-ACK, ACK) instead of just 2 steps (SYN, ACK)?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Because network links are two-way (full-duplex) and unreliable. Both sides must independently choose, transmit, and have their Initial Sequence Number (ISN) acknowledged:</p>
+<ul>
+<li>Step 1: Client sends its ISN ($x$).</li>
+<li>Step 2: Server acknowledges client's ISN ($x+1$) AND sends its own ISN ($y$).</li>
+<li>Step 3: Client acknowledges server's ISN ($y+1$).<br />
+If it were only 2 steps, the server would have no way of knowing if the client actually received its sequence number before the server started sending real data.</li>
+</ul>
+</details>
+<hr />
+<ol start="3">
+<li><strong>In an HTTP/1.1 system, why did web developers combine 50 small icon images into a single giant &quot;CSS Sprite&quot; image? Is this still recommended in HTTP/2?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>In HTTP/1.1, fetching 50 separate images required either 50 sequential round trips (Head-of-Line blocking) or opening multiple expensive TCP connections. Bundling them into one file allowed fetching all icons in a single HTTP request.<br />
+In HTTP/2 and HTTP/3, <strong>CSS sprites are an anti-pattern</strong>. HTTP/2 multiplexes 50 individual requests over a single connection with zero extra overhead. Keeping them separate improves browser cache granularity (changing one icon doesn't invalidate the other 49).</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Understanding Distributed Systems</strong> by Roberto Vitillo: Part 1 (<em>Reliable links, Transport layer, Network APIs</em>).</li>
+<li><strong>High Performance Browser Networking</strong> by Ilya Grigorik: Complete deep dive into TCP mechanics, TLS tuning, and HTTP/2 internals (free online at hpbn.co).</li>
+<li><strong>RFC 9000:</strong> The official IETF specification for the QUIC transport protocol.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How the browser turns the hostname into an IP address before the TCP handshake.</li>
+<li><a href="../03-load-balancing/index.html">03 · Load Balancing</a>: How Layer 4 and Layer 7 load balancers route incoming TCP connections.</li>
+<li><a href="../04-api-gateways-and-proxies/index.html">04 · API Gateways &amp; Proxies</a>: Terminating TLS at the network perimeter.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

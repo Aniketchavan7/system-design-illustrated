@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Caching Strategies &amp; Architecture Patterns">
+  <title>Caching Strategies &amp; Architecture Patterns | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="10--caching-strategies--architecture-patterns">10 · Caching Strategies &amp; Architecture Patterns</h1>
+<blockquote>
+<p><strong>Part 3 · Caching &amp; edge</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../10-caching-patterns/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>Fetching data from a database on a hard drive takes about <strong>15 milliseconds</strong>. Reading data from a computer's RAM memory takes about <strong>100 nanoseconds</strong>—over <strong>$100,000\times$ faster</strong>.</p>
+<p>A <strong>cache</strong> is a high-speed in-memory storage layer (like Redis or Memcached) sitting between your application and your database. Instead of making the database re-calculate the same expensive SQL query 10,000 times a second, the application checks the cache first. If the answer is already in memory (<strong>Cache Hit</strong>), it returns it in under 1 millisecond.</p>
+<h2 id="trail-notes-exercise">Trail Notes exercise</h2>
+<p>In the <a href="../03-load-balancing/index.html#first-pass">load balancing lesson</a>, two surviving servers can handle <strong>1,800 requests per second</strong>, while users send <strong>2,000</strong>. Trail Notes adds a cache in front of those servers for public guide pages. Assume all incoming requests are eligible for caching, a cache hit never reaches a backend, and the origin can sustain the same rate for cache misses.</p>
+<p><strong>Predict.</strong> With a <strong>70% hit rate</strong>, how many requests per second go to the backends? What happens if the cache stops answering and the site sends every request through?</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>The cache handles <strong>1,400 requests per second</strong>, and the backends see <strong>600</strong>. If all traffic bypasses the cache, the backends see <strong>2,000</strong> again and the 200-request-per-second shortfall returns. Plan for cold caches and cache failures. For example, limit concurrent work sent to the origin and decide whether an older cached guide is acceptable during an outage.</p>
+</details>
+<p><strong>Next exercise</strong> · <a href="../17-message-queues/index.html#trail-notes-exercise">Move photo processing off the request path</a>.</p>
+<hr />
+<h2 id="everyday-analogy-the-kitchen-counter-vs-the-basement-pantry">🍕 Everyday analogy: The Kitchen Counter vs The Basement Pantry</h2>
+<p>Imagine you are cooking dinner in your kitchen:</p>
+<ul>
+<li><strong>The Basement Pantry (The Database):</strong> It holds 500 cans of food, 50 bags of flour, and all ingredients. But every time you need salt, you have to walk down two flights of stairs, unlock the door, search the shelf, and walk back up (<strong>15 ms disk I/O</strong>).</li>
+<li><strong>The Kitchen Counter (The In-Memory Cache):</strong> You place a small shaker of salt and black pepper directly next to your stove (<strong>0.1 ms RAM access</strong>).
+<ul>
+<li>When you need salt, you reach out your hand and grab it instantly (<strong>Cache Hit</strong>).</li>
+<li>If you need truffle oil that isn't on the counter (<strong>Cache Miss</strong>), you walk down to the basement pantry once, bring the bottle upstairs, and set it on the counter for the rest of the evening (<strong>Lazy Loading / Cache-Aside</strong>).</li>
+</ul>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the kitchen analogy</th>
+<th style="text-align:left">In caching architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Basement Pantry</strong></td>
+<td style="text-align:left"><strong>Persistent Database on Disk</strong> (PostgreSQL, MySQL)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Kitchen Counter</strong></td>
+<td style="text-align:left"><strong>In-Memory Cache in RAM</strong> (Redis, Memcached)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Grabbing salt from counter in 1 second</strong></td>
+<td style="text-align:left"><strong>Cache Hit</strong> ($&lt; 0.5\text{ ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Walking to basement when counter is empty</strong></td>
+<td style="text-align:left"><strong>Cache Miss</strong> ($\approx 15\text{ ms}$ disk latency)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Throwing away expired milk from counter</strong></td>
+<td style="text-align:left"><strong>Time-To-Live (TTL) Eviction</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Clearing counter when counter is full</strong></td>
+<td style="text-align:left"><strong>Least Recently Used (LRU) Eviction</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<ol>
+<li><strong>Database CPU Exhaustion:</strong> A standard PostgreSQL instance can handle roughly $1,000$ to $3,000$ complex queries/second. If a celebrity tweets a link to a product page and $50,000$ users click it simultaneously, the database runs out of connection pools and crashes. An in-memory Redis cluster handles <strong>$100,000+$ reads/second per node</strong> with ease.</li>
+<li><strong>Slow Sub-Query Latencies:</strong> A dashboard showing user profile + order history + account tier requires 3 table joins and takes $40\text{ ms}$. Caching the assembled JSON response reduces response time to <strong>$0.4\text{ ms}$</strong>, eliminating $99%$ of database load.</li>
+</ol>
+<hr />
+<h2 id="picture-it">🖼️ Picture it</h2>
+<p align="center">
+  <img src="./assets/cache_aside.gif" alt="Cache-Aside Pattern Animation" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph PatternA[&quot;1. Cache-Aside (Lazy Loading - Most Common)&quot;]
+        App1[&quot;📱 App&quot;] &lt;--&gt;|1. Check Cache| Redis1[&quot;⚡ Redis&quot;]
+        App1 -.-&gt;|2. On Miss: Query DB| DB1[(&quot;💾 DB&quot;)]
+        App1 --&gt;|3. Populate Cache with TTL| Redis1
+    end
+
+    subgraph PatternB[&quot;2. Write-Through (Strong Freshness)&quot;]
+        App2[&quot;📱 App&quot;] --&gt;|1. Write Data| Redis2[&quot;⚡ Cache&quot;]
+        Redis2 --&gt;|2. Synchronously write to DB| DB2[(&quot;💾 DB&quot;)]
+    end
+
+    subgraph PatternC[&quot;3. Write-Behind / Write-Back (High Write Speed)&quot;]
+        App3[&quot;📱 App&quot;] --&gt;|&quot;1. Fast Write (&lt; 0.1ms)&quot;| Redis3[&quot;⚡ Cache&quot;]
+        Redis3 -.-&gt;|2. Async Batch Flush in background| DB3[(&quot;💾 DB&quot;)]
+    end
+</code></pre>
+<hr />
+<h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
+<h3 id="the-impact-of-cache-hit-ratio-on-user-latency">The Impact of Cache Hit Ratio on User Latency</h3>
+<p>Suppose your database query takes <strong>$20\text{ ms}$</strong> and your Redis cache lookup takes <strong>$0.5\text{ ms}$</strong>:</p>
+<p>$$\text{Effective Latency} = (\text{Hit Ratio} \times \text{Cache Latency}) + ((1 - \text{Hit Ratio}) \times \text{DB Latency})$$</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Cache Hit Ratio</th>
+<th style="text-align:left">Calculation</th>
+<th style="text-align:center">Average Request Latency</th>
+<th style="text-align:center">Database Load Reduction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>$0%$ (No Cache)</strong></td>
+<td style="text-align:left">$1.0 \times 20\text{ ms}$</td>
+<td style="text-align:center"><strong>$20.0\text{ ms}$</strong></td>
+<td style="text-align:center">$0%$</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>$80%$</strong></td>
+<td style="text-align:left">$(0.80 \times 0.5) + (0.20 \times 20)$</td>
+<td style="text-align:center"><strong>$4.4\text{ ms}$</strong></td>
+<td style="text-align:center">$80%$</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>$95%$ (Target)</strong></td>
+<td style="text-align:left">$(0.95 \times 0.5) + (0.05 \times 20)$</td>
+<td style="text-align:center"><strong>$1.47\text{ ms}$</strong></td>
+<td style="text-align:center"><strong>$95%$</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>$99%$ (Elite)</strong></td>
+<td style="text-align:left">$(0.99 \times 0.5) + (0.01 \times 20)$</td>
+<td style="text-align:center"><strong>$0.69\text{ ms}$</strong></td>
+<td style="text-align:center"><strong>$99%$</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>Takeaway:</strong> Pushing your hit ratio from $80%$ to $95%$ cuts average user latency by <strong>$66%$</strong> and reduces database query traffic by a factor of 4!</p>
+</blockquote>
+<hr />
+<h2 id="how-it-works-the-4-core-caching-access-patterns">⚙️ How it works: The 4 Core Caching Access Patterns</h2>
+<h3 id="1-cache-aside-lazy-loading">1. Cache-Aside (Lazy Loading)</h3>
+<ul>
+<li><strong>Read Path:</strong> Application checks cache first. If found (<strong>Hit</strong>), returns data. If missing (<strong>Miss</strong>), reads from database, writes data into cache with a <strong>Time-To-Live (TTL)</strong>, and returns to user.</li>
+<li><strong>Write Path:</strong> Application writes directly to the database, and <strong>deletes (invalidates)</strong> the key from the cache.</li>
+<li><strong>Pros:</strong> Only requested data is cached (memory efficient); resilience against cache node restarts.</li>
+<li><strong>Cons:</strong> Cache miss penalty on the first read; risk of transient stale reads.</li>
+</ul>
+<hr />
+<h3 id="2-write-through-pattern">2. Write-Through Pattern</h3>
+<ul>
+<li>When data is updated, the application writes to the cache. The cache synchronously writes to the database in the same transaction before returning success.</li>
+<li><strong>Pros:</strong> Data in cache is never stale; reads are always $100%$ fresh.</li>
+<li><strong>Cons:</strong> High write latency (writes must wait for two storage systems); caches items that may never be read again.</li>
+</ul>
+<hr />
+<h3 id="3-write-behind-write-back-pattern">3. Write-Behind (Write-Back) Pattern</h3>
+<ul>
+<li>When data is updated, the application writes to the cache, which acknowledges immediately in $&lt; 0.1\text{ ms}$.</li>
+<li>The cache queues the update and asynchronously flushes batches of writes to the database in the background (e.g. every 10 seconds or 1,000 writes).</li>
+<li><strong>Pros:</strong> Ultra-fast write performance; absorbs massive write spikes (e.g. video view count counters).</li>
+<li><strong>Cons:</strong> <strong>Data loss risk!</strong> If the Redis node loses power before flushing to the database, recent in-flight writes are lost forever.</li>
+</ul>
+<hr />
+<h3 id="4-write-around-pattern">4. Write-Around Pattern</h3>
+<ul>
+<li>Writes go directly to the persistent database, completely bypassing the cache.</li>
+<li>The cache is only populated when a subsequent read request experiences a cache miss.</li>
+<li><strong>Pros:</strong> Prevents cache pollution when writing large volumes of data that are rarely read immediately (e.g. archived log files, legal receipts).</li>
+</ul>
+<hr />
+<h3 id="5-redis-vs-memcached">5. Redis vs Memcached</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Redis</th>
+<th style="text-align:left">Memcached</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Data Structures</strong></td>
+<td style="text-align:left">Rich: Strings, Hashes, Lists, Sets, Sorted Sets (<code>ZSET</code>), Bitmaps, HyperLogLogs</td>
+<td style="text-align:left">Simple key-value strings and raw blobs only</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Thread Architecture</strong></td>
+<td style="text-align:left">Single-threaded event loop (epoll / kqueue) with I/O threads</td>
+<td style="text-align:left">Multi-threaded (scales across multiple CPU cores on 1 machine)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Persistence to Disk</strong></td>
+<td style="text-align:left">✅ Yes: RDB snapshots and AOF (Append-Only File) logs</td>
+<td style="text-align:left">❌ No: Pure in-memory only (cache wiped on reboot)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Clustering &amp; Replication</strong></td>
+<td style="text-align:left">Built-in Redis Sentinel (failover) and Redis Cluster (sharding)</td>
+<td style="text-align:left">Client-side consistent hashing across nodes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Lua Scripting / PubSub</strong></td>
+<td style="text-align:left">✅ Yes: Atomic Lua scripts and Pub/Sub message channels</td>
+<td style="text-align:left">❌ No</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="caching-patterns-comparison-matrix">⚖️ Caching Patterns Comparison Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Pattern</th>
+<th style="text-align:center">Write Latency</th>
+<th style="text-align:center">Read Latency</th>
+<th style="text-align:center">Data Freshness</th>
+<th style="text-align:center">Risk of Data Loss</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Cache-Aside</strong></td>
+<td style="text-align:center">Fast (Writes DB)</td>
+<td style="text-align:center">Ultra-Fast on Hit</td>
+<td style="text-align:center">Eventual (Bounded by TTL)</td>
+<td style="text-align:center">None</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write-Through</strong></td>
+<td style="text-align:center">Slower (Writes both)</td>
+<td style="text-align:center">Ultra-Fast</td>
+<td style="text-align:center"><strong>Strong / Immediate</strong></td>
+<td style="text-align:center">None</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write-Behind</strong></td>
+<td style="text-align:center"><strong>Blazing Fast (&lt; 0.1ms)</strong></td>
+<td style="text-align:center">Ultra-Fast</td>
+<td style="text-align:center">Eventual</td>
+<td style="text-align:center"><strong>High (Power crash)</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write-Around</strong></td>
+<td style="text-align:center">Fast</td>
+<td style="text-align:center">Slower on 1st read</td>
+<td style="text-align:center">Strong</td>
+<td style="text-align:center">None</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Updating the Cache instead of Deleting it on Write:</strong></p>
+<ul>
+<li><em>The Trap:</em> When updating a user profile in the DB, you also execute <code>cache.set(user_id, new_data)</code>.</li>
+<li><em>Why it causes bugs (Race Condition):</em> Two concurrent updates arrive: Thread A writes DB, Thread B writes DB. Due to network jitter, Thread B's cache update executes <em>before</em> Thread A's cache update. The cache now holds stale Thread A data indefinitely!</li>
+<li><em>The Fix:</em> <strong>Always invalidate (delete) the cache key on mutation</strong> (<code>cache.delete(user_id)</code>). The next read will cleanly re-populate the cache from the database.</li>
+</ul>
+</li>
+<li>
+<p><strong>Caching without a Time-To-Live (TTL):</strong></p>
+<ul>
+<li><em>Why it hurts:</em> If a cache invalidation bug occurs in code, data without a TTL remains stale in memory forever until a human engineer manually flushes the cluster.</li>
+<li><em>The Fix:</em> <strong>Always set a TTL</strong> (e.g. 5 minutes or 1 hour) as a safety net.</li>
+</ul>
+</li>
+<li>
+<p><strong>Caching Giant Monolithic JSON Blobs:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> Storing a 5 MB JSON document in Redis. Redis is single-threaded; transferring and serializing a 5 MB string blocks the Redis event loop for 10 ms, stalling thousands of other concurrent requests.</li>
+<li><em>The Fix:</em> Cache granular records ($&lt; 10\text{ KB}$) or split objects into Redis Hashes (<code>HSET / HGET</code>).</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">💻 Try it yourself</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 10-caching-patterns
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch the <strong>Cache-Aside pattern</strong>: first read triggers a 15 ms disk query, and immediate second read returns in <strong>0.2 ms</strong> from RAM!</li>
+<li>Observe <strong>Write-Through</strong>: synchronously updating both tiers for 100% data freshness.</li>
+<li>Observe <strong>Write-Behind</strong>: updates acknowledged instantly in memory, then flushed to disk in an asynchronous batch by a background worker.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Twitter / X Timeline Cache:</strong> Caches user home timelines in Redis clusters so opening the app renders tweets in $&lt; 50\text{ ms}$ without querying databases.</li>
+<li><strong>Reddit:</strong> Uses massive Memcached clusters to cache comment trees and upvote scores.</li>
+<li><strong>Netflix:</strong> Uses EVCache (distributed Memcached on AWS) to serve personalization recommendations to 250M+ viewers.</li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-when-modifying-data-in-the-database-should-you-update-the-cached-value-or-delete-invalidate-it-why">Q1: &quot;When modifying data in the database, should you UPDATE the cached value or DELETE (invalidate) it? Why?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>In almost all production scenarios, you should <strong>DELETE (invalidate) the cache key</strong> rather than updating it:</p>
+<ol>
+<li><strong>Prevents Concurrent Race Conditions:</strong>
+<ul>
+<li>Suppose Thread 1 updates row $X=10$ in the DB.</li>
+<li>Thread 2 updates row $X=20$ in the DB.</li>
+<li>If both threads try to update the cache directly, Thread 2's cache update might execute first, followed by Thread 1's cache update arriving late due to network latency.</li>
+<li>Result: Database has $20$, but Cache has $10$! The cache is permanently corrupted with stale data.</li>
+<li>By <strong>deleting</strong> the key on mutation, neither thread leaves stale data in the cache. The next read query will fetch the authoritative state directly from the DB.</li>
+</ul>
+</li>
+<li><strong>Resource Efficiency (Lazy Evaluation):</strong>
+<ul>
+<li>If a record is updated 10 times in 1 minute, but nobody reads it, updating the cache 10 times wastes CPU cycles and serialization overhead. Deleting it costs almost nothing, and the cache is only recomputed when someone actually asks for it.</li>
+</ul>
+</li>
+</ol>
+</details>
+<hr />
+<h3 id="q2-what-is-the-difference-between-write-through-and-write-behind-and-when-is-write-behind-worth-the-risk-of-data-loss">Q2: &quot;What is the difference between Write-Through and Write-Behind, and when is Write-Behind worth the risk of data loss?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Write-Through:</strong>
+<ul>
+<li>The application writes to the cache, and the cache synchronously writes to the database before returning <code>OK</code>.</li>
+<li><strong>Trade-off:</strong> High write latency, zero data loss, $100%$ fresh reads.</li>
+</ul>
+</li>
+<li><strong>Write-Behind (Write-Back):</strong>
+<ul>
+<li>The application writes only to the cache, which returns <code>OK</code> in $&lt; 0.1\text{ ms}$. A background worker batches queued writes and updates the database asynchronously.</li>
+<li><strong>When is Write-Behind worth the data loss risk?</strong>
+<ol>
+<li><strong>Extremely High-Frequency Increment Counters:</strong> (e.g. YouTube video view counts, live stream like buttons, TikTok analytics). If 100,000 users click &quot;like&quot; in 5 seconds, sending 100,000 individual <code>UPDATE</code> queries to PostgreSQL will lock the row and crash the DB. Write-Behind batches them in Redis memory and flushes 1 single <code>UPDATE likes = likes + 100000</code> query to Postgres every 10 seconds.</li>
+<li><strong>Telemetry &amp; Sensor Logging:</strong> Where losing the last 3 seconds of GPS coordinates during an unexpected crash is completely acceptable to the business.</li>
+</ol>
+</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q3-how-do-you-choose-between-redis-and-memcached-in-a-modern-distributed-system-design">Q3: &quot;How do you choose between Redis and Memcached in a modern distributed system design?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Choose Memcached when:</strong>
+<ul>
+<li>The data model is strictly simple key-value blobs (e.g. HTML fragments, rendered web templates).</li>
+<li>You are running on multi-core servers with massive RAM and want multi-threaded memory scaling with zero background disk persistence overhead.</li>
+</ul>
+</li>
+<li><strong>Choose Redis (The Industry Standard for 95% of Use Cases) when:</strong>
+<ul>
+<li>You need <strong>rich data structures</strong>: Sorted Sets (<code>ZSET</code>) for real-time leaderboards, Sets for unique visitor tracking, Hashes for user objects, Lists for queues.</li>
+<li>You need <strong>disk persistence (RDB/AOF)</strong> to avoid cold-cache stampedes when a cache node reboots.</li>
+<li>You need <strong>atomic operations via Lua scripting</strong> (e.g., distributed rate limiters, distributed locks via Redlock).</li>
+<li>You need automated failover (Redis Sentinel) and clustering (Redis Cluster).</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q4-what-is-the-8020-rule-pareto-principle-in-caching-and-how-does-it-determine-cluster-memory-sizing">Q4: &quot;What is the 80/20 Rule (Pareto Principle) in caching, and how does it determine cluster memory sizing?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>The Principle:</strong> In almost all internet applications, <strong>$20%$ of the keys generate $80%$ of the read traffic</strong> (e.g., top trending tweets, viral products, active users).</li>
+<li><strong>Memory Sizing Math:</strong>
+<ul>
+<li>You <strong>never</strong> need enough RAM to store your entire database in cache!</li>
+<li>If your total database size is $10\text{ Terabytes}$, sizing your Redis cluster to hold the hottest <strong>$20%$ of data</strong> ($2\text{ TB}$ of RAM across 32 nodes of 64 GB each) allows you to achieve an <strong>$80%$ to $90%$ Cache Hit Ratio</strong>, reducing database load by up to $90%$ at a fraction of the hardware cost!</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>An application uses the Cache-Aside pattern. Key <code>user:10</code> has a TTL of 60 seconds. A client updates <code>user:10</code> in the database, but forgets to delete it from Redis. For how long will users see stale data?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>For <strong>at most 60 seconds</strong>. After 60 seconds, Redis's TTL expires, the key is evicted, and the next read query experiences a Cache Miss, fetching the updated record from the database and healing the cache. (This is why setting a TTL is mandatory as a safety net!).</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>Why does Write-Through caching have higher write latency than Cache-Aside?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Because Write-Through requires a <strong>synchronous write to two distinct systems</strong> (first to the cache, then across the network to the database disk) before returning an HTTP response to the user. Cache-Aside writes to the database and issues an instantaneous in-memory delete command.</p>
+</details>
+<hr />
+<ol start="3">
+<li><strong>In Redis, what is the time complexity of an <code>HGET</code> on a Hash compared to querying a relational database?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>An <code>HGET</code> in Redis is <strong>$O(1)$</strong> in memory ($&lt; 0.1\text{ ms}$). In a relational database, even with a B-Tree index, a query is <strong>$O(\log N)$</strong> and requires traversing tree pages on disk ($1\text{–}15\text{ ms}$).</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Designing Data-Intensive Applications (DDIA)</strong> by Martin Kleppmann: Section on <em>Caching and Derived Data</em>.</li>
+<li><strong>Redis Documentation:</strong> Official guides on Memory Optimization, Redis Persistence (AOF vs RDB), and Cluster Topologies (redis.io/docs).</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: The underlying databases protected by the cache tier.</li>
+<li><a href="../11-cache-eviction-and-invalidation/index.html">11 · Cache eviction &amp; invalidation</a>: What happens when the cache runs out of memory (LRU, LFU, Cache Stampedes).</li>
+<li><a href="../16-consistent-hashing/index.html">16 · Consistent hashing</a>: How Redis clusters distribute keys across multiple nodes.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

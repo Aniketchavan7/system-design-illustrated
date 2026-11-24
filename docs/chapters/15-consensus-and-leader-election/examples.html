@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Distributed Consensus &amp; Leader Election: Raft and Paxos">
+  <title>Distributed Consensus &amp; Leader Election: Raft and Paxos | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-consensus-and-leader-election">Real-World Production Deep Dives: Consensus and Leader Election</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix/Kubernetes</strong> solve distributed consensus and leader election using Google Chubby (Paxos) and etcd/Raft.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-uses-consensus-the-chubby-distributed-lock-service">🏢 Deep Dive 1: How Google Uses Consensus (The Chubby Distributed Lock Service)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google <strong>Chubby</strong>.</li>
+<li><strong>Mission</strong>: The foundation of Google's entire infrastructure. Provides coarse-grained distributed locking, master election, and configuration storage for:
+<ul>
+<li><strong>GFS (Google File System)</strong> &amp; Colossus: Master election.</li>
+<li><strong>Bigtable</strong>: Tablet Server coordination and root tablet location.</li>
+<li><strong>Borg</strong>: Cluster manager master leader election.</li>
+</ul>
+</li>
+<li><strong>Availability Requirement</strong>: Five-nines. If a Chubby cell fails, thousands of machines in that Google data center lose their master and freeze.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ul>
+<li>Implementing consensus (Paxos) directly inside every individual distributed service is notoriously difficult and bug-prone.</li>
+<li>If 10,000 Bigtable nodes all participate in a consensus round for every write, network traffic grows quadratically ($O(N^2)$), causing immediate network collapse.</li>
+</ul>
+<h3 id="3-googles-architecture-the-chubby-paxos-cell">3. Google's Architecture: The Chubby Paxos Cell</h3>
+<pre><code>┌────────────────────────────────────────────────────────┐
+│ Google Chubby Cell (5 Replicas)                        │
+│                                                        │
+│  [ Replica 1 ]  [ Replica 2 ]  [ Replica 3 ]           │
+│         ▲              ▲              ▲                │
+│         └──────────────┼──────────────┘                │
+│             Runs Multi-Paxos Consensus                 │
+│                        │                               │
+│                        ▼                               │
+│           [ Elected Chubby Master ]                    │
+│             ├── Master Lease (~12 seconds)             │
+│             └── In-Memory B-Tree File System           │
+└────────────────────────┼───────────────────────────────┘
+                         │
+             Keep-Alive Heartbeat Protocol
+                         │
+       ┌─────────────────┴─────────────────┐
+       ▼                                   ▼
+[ Bigtable Master Node ]         [ GFS Master Node ]
+(Holds Primary Lock)             (Holds Primary Lock)
+</code></pre>
+<h4 id="a-coarse-grained-locking-vs-fine-grained-locking">A. Coarse-Grained Locking vs Fine-Grained Locking</h4>
+<ul>
+<li>Chubby provides <strong>Coarse-Grained Locking</strong>:
+<ul>
+<li>Locks are held for <strong>hours or days</strong>, not milliseconds.</li>
+<li>Example: A Bigtable Master acquires a Chubby lock when it boots. It holds that lock continuously for its entire operational lifetime.</li>
+<li>Client services do <em>not</em> run Paxos for every transaction. They rely on the elected master, which handles fine-grained data writes directly.</li>
+</ul>
+</li>
+</ul>
+<h4 id="b-master-leases--heartbeats">B. Master Leases &amp; Heartbeats</h4>
+<ul>
+<li>A Chubby cell consists of 5 nodes. The nodes run Paxos to elect one node as the <strong>Master</strong>.</li>
+<li>The replicas grant the master a <strong>Master Lease</strong> (typically 12 seconds).</li>
+<li>As long as the master receives periodic keep-alive pings from a majority of replicas, it extends its lease. While holding a valid lease, the master serves reads and writes locally from RAM <strong>without running Paxos consensus on every operation</strong>, achieving tens of thousands of QPS with sub-millisecond response times.</li>
+</ul>
+<h4 id="c-fencing-tokens-preventing-split-brain-disasters">C. Fencing Tokens (Preventing Split-Brain Disasters)</h4>
+<p>What happens if Master A experiences a 30-second garbage collection pause?</p>
+<ol>
+<li>Replicas notice Master A's lease expired.</li>
+<li>Replicas run Paxos and elect Master B as the new leader.</li>
+<li>Master A wakes up from its GC pause, unaware that it has been deposed, and attempts to write to storage!</li>
+</ol>
+<ul>
+<li><strong>Chubby's Fencing Tokens</strong>:
+<ul>
+<li>Whenever a lock is acquired, Chubby issues a monotonically increasing <strong>Fencing Token</strong> (e.g., Token 42).</li>
+<li>The storage layer (Colossus) only accepts writes carrying a token higher than the highest token it has seen. When Master A submits a write with Token 41, Colossus rejects it instantly, completely eliminating split-brain corruption!</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix--kubernetes-use-consensus-raft--etcd">⚓ Deep Dive 2: How Netflix &amp; Kubernetes Use Consensus (Raft &amp; etcd)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: <strong>etcd</strong> (built on the <strong>Raft</strong> consensus algorithm).</li>
+<li><strong>Adoption</strong>: Powers <strong>Kubernetes</strong> control planes globally and acts as the state store for <strong>Netflix Titus</strong> (Netflix's container management platform running hundreds of thousands of microservice containers daily).</li>
+<li><strong>Design Philosophy</strong>: Understandability and operational simplicity over the academic complexity of Multi-Paxos.</li>
+</ul>
+<h3 id="2-raft-consensus-mechanics-in-production">2. Raft Consensus Mechanics in Production</h3>
+<pre><code>[ Inbound Write: Schedule Pod ]
+               │
+               ▼
+      [ Elected Raft Leader ]
+               │
+     ┌─────────┴─────────┐ (AppendEntries RPC)
+     ▼                   ▼
+[ Raft Follower 1 ] [ Raft Follower 2 ]
+     │                   │
+     └─────────┬─────────┘
+               ▼ (Quorum of Log Replications Received)
+[ Leader Commits Entry &amp; Applies to State Machine ]
+               │
+               ▼
+[ Response Returned to Kubernetes API Server ]
+</code></pre>
+<h4 id="a-leader-election--randomized-heartbeat-timers">A. Leader Election &amp; Randomized Heartbeat Timers</h4>
+<ul>
+<li>Raft decomposes consensus into discrete sub-problems: <strong>Leader Election</strong>, <strong>Log Replication</strong>, and <strong>Safety</strong>.</li>
+<li>Nodes begin in the <strong>Follower</strong> state. If a follower hears no heartbeat from a leader within a randomized election timeout (e.g., 150ms - 300ms), it transitions to <strong>Candidate</strong>, increments its <code>term</code>, and broadcasts <code>RequestVote</code> RPCs.</li>
+<li><strong>Randomized Timers Prevent Split Votes</strong>: Randomizing election timeouts ensures that usually only a single candidate times out first, wins the majority vote, and becomes leader without repeated ties.</li>
+</ul>
+<h4 id="b-strong-leader-invariant--log-matching">B. Strong Leader Invariant &amp; Log Matching</h4>
+<ul>
+<li>In Raft, log entries only flow in <strong>one direction: from the Leader to Followers</strong>.</li>
+<li>If a follower's log diverges from the leader due to a network glitch, the leader forces the follower's log to replicate its own entries, overwriting extraneous entries.</li>
+<li>An entry is committed as soon as it is written to disk by a majority of nodes.</li>
+</ul>
+<h4 id="c-netflix-titus-container-state-machine">C. Netflix Titus: Container State Machine</h4>
+<ul>
+<li>Netflix Titus orchestrates millions of container executions for video encoding, recommendation algorithms, and microservices.</li>
+<li>Titus masters use Raft consensus to guarantee:
+<ul>
+<li>Exact state of container placement (which EC2 instance runs which container).</li>
+<li>High availability: If the active Titus master instance crashes, the Raft follower with the most up-to-date log is elected leader within <strong>under 2 seconds</strong>, seamlessly resuming container scheduling without interrupting running workloads.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix-paxos-vs-raft">⚖️ Comparative Architecture Matrix: Paxos vs Raft</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Chubby (Multi-Paxos)</th>
+<th>Kubernetes / Titus (etcd / Raft)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Consensus Algorithm</strong></td>
+<td>Multi-Paxos with Master Leases</td>
+<td>Raft with Strong Leader Invariants</td>
+</tr>
+<tr>
+<td><strong>Understandability</strong></td>
+<td>Highly complex; requires custom invariants</td>
+<td>Designed explicitly for modular comprehensibility</td>
+</tr>
+<tr>
+<td><strong>Log Flow</strong></td>
+<td>Any replica can propose; leader is optimization</td>
+<td>Unidirectional strictly from Leader to Followers</td>
+</tr>
+<tr>
+<td><strong>Locking Mechanism</strong></td>
+<td>Distributed File System semantics (Chubby locks)</td>
+<td>Key-Value Watch API with version leases</td>
+</tr>
+<tr>
+<td><strong>Split-Brain Defense</strong></td>
+<td>Monotonic Fencing Tokens checked at storage</td>
+<td>Term-based leader rejection (<code>term &lt; current_term</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Explain Fencing Tokens</strong>: Whenever designing a system with an active-passive leader (e.g., Primary Database, Cluster Scheduler), explain how to prevent the <strong>Stale Master / Split-Brain</strong> problem using monotonically incrementing <strong>Fencing Tokens</strong>.</li>
+<li><strong>Coarse vs Fine-Grained Consensus</strong>: If an interviewer asks you to scale a distributed database, <em>do not</em> run Paxos/Raft for every row read/write! Explain that consensus should be used for <strong>coarse-grained metadata / leader election</strong>, while the elected leader coordinates high-speed local data writes.</li>
+<li><strong>The Odd-Number Node Rule</strong>: Always configure consensus clusters (ZooKeeper, etcd, Chubby) with odd node counts ($2F + 1$, e.g., 3 or 5 nodes). A 3-node cluster can tolerate 1 failure; a 5-node cluster can tolerate 2 failures. Adding a 4th node adds cost without increasing failure tolerance!</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

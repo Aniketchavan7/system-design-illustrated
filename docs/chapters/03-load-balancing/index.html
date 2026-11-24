@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Load Balancing">
+  <title>Load Balancing | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="03--load-balancing">03 · Load Balancing</h1>
+<blockquote>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../02-domain-name-system/index.html">02 · DNS</a></p>
+</blockquote>
+<hr />
+<blockquote>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../03-load-balancing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+</blockquote>
+<h2 id="the-30-second-version">🧒 The 30-second version</h2>
+<p>A single computer can only handle so much traffic before its CPU catches fire or runs out of RAM. Rather than buying an impossibly expensive supercomputer (<strong>vertical scaling</strong>), engineers run dozens of cheap computers in parallel (<strong>horizontal scaling</strong>).</p>
+<p>A <strong>load balancer</strong> sits in front of that fleet of servers. When a user sends a request, the load balancer picks one available server, forwards the work, and returns the response. Once it detects a backend failure, it can stop sending new work there. Users may see errors if requests were already in flight or the remaining servers are overloaded.</p>
+<h2 id="first-pass">First pass</h2>
+<p>In the <a href="../02-domain-name-system/index.html#first-pass">DNS lesson</a>, the browser found the site's public address. Traffic has grown, so that address now leads to a <strong>load balancer</strong> in front of three Trail Notes servers. The browser still sends <code>GET /guide</code> over HTTPS.</p>
+<pre><code class="language-mermaid">flowchart LR
+    B[Browser] --&gt;|HTTPS GET /guide| L[Load balancer]
+    L --&gt; A[Server A]
+    L --&gt; C[Server B]
+    L --&gt; D[Server C]
+</code></pre>
+<p>The <a href="#routing-animation">routing animation</a> follows a request from a client through the load balancer to a healthy server. <strong>Text walkthrough.</strong> The browser sends a request to the public endpoint. The load balancer chooses an eligible server and forwards it. That server returns the page through the load balancer. If a health check marks a server unavailable, new requests go to other servers. Requests already sent to the failed server may still fail. The animation illustrates routing. Use the separate workload below for the calculation.</p>
+<p><strong>Predict.</strong> Each server can sustain <strong>900 requests per second</strong> for this mix of work. The site receives a steady <strong>2,000 requests per second</strong>. Once Server C is out of rotation, can the remaining servers keep up? Assume traffic is spread evenly and the backends are the capacity limit.</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>Before the failure, capacity is <strong>3 × 900 = 2,700 requests per second</strong>. After it, capacity is <strong>2 × 900 = 1,800 requests per second</strong>. Surviving servers receive about 1,000 requests per second each, or 100 above each server's limit. Rerouting preserves a route for new requests, but there is still a <strong>200-request-per-second shortfall</strong>.</p>
+</details>
+<h3 id="choose-a-response">Choose a response</h3>
+<p>Which option fits a sustained outage? Which could absorb a two-second traffic burst?</p>
+<details>
+<summary>Compare the trade-offs</summary>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>When it helps</th>
+<th>Cost or limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Run spare capacity</td>
+<td>A failure can last longer than a brief spike. A fourth server leaves 2,700 requests per second after one fails in this model.</td>
+<td>The spare capacity costs money while healthy. Check whether databases and shared services can handle the traffic too.</td>
+</tr>
+<tr>
+<td>Shed low-priority traffic</td>
+<td>Protect essential reads by rejecting or deferring at least 200 requests per second of optional work in this simplified workload.</td>
+<td>Some users lose a feature or get a retryable error. Retries must be bounded so they do not add to the overload.</td>
+</tr>
+<tr>
+<td>Use a bounded queue</td>
+<td>A two-second burst at 200 requests per second over capacity builds up about 400 requests. The queue can drain if arrival rates later fall below capacity.</td>
+<td>Pending work adds latency and can expire. During a sustained 200-request-per-second shortfall, the queue keeps growing until its limit.</td>
+</tr>
+</tbody>
+</table>
+<p><a href="https://sre.google/sre-book/handling-overload/">Google SRE guidance on overload</a></p>
+</details>
+<h3 id="final-exercise--trace-a-request-through-a-failure">Final exercise · Trace a request through a failure</h3>
+<p>Draw the path from a new browser tab to the guide HTML. Include DNS, connection setup, the load balancer, and one backend. Then cross out Server C and answer these questions before revealing the walkthrough.</p>
+<ol>
+<li>Does a browser with a valid cached DNS answer need a new DNS lookup?</li>
+<li>What can happen to a request already running on Server C, and what happens to new requests after the balancer detects the failure?</li>
+<li>What is the remaining capacity, and how would you handle the shortfall if the outage lasts ten minutes?</li>
+</ol>
+<details>
+<summary>Reveal the walkthrough</summary>
+<p>On a cache miss the browser asks its resolver for the public address, then connects to the load balancer. With a valid cached answer it can go straight to the connection. The balancer sends <code>GET /guide</code> to a backend, and the backend returns the HTML through the balancer. Server C's in-flight work may fail. After failure detection, the balancer sends new work to A and B. They can serve <strong>1,800 requests per second</strong>, so steady demand exceeds capacity by <strong>200 per second</strong>. Bring spare capacity online if available. In the meantime, protect the guide request by shedding enough optional work to stay within capacity.</p>
+</details>
+<p>Use the existing <a href="#run-the-demo">Python simulator</a> to see how the balancer routes requests after ejection. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Load Balancing</strong> and explain why a healthy route alone cannot cover a capacity shortfall.</p>
+<p><strong>Continue learning</strong> · <a href="../10-caching-patterns/index.html#trail-notes-exercise">Cache popular guides</a>, <a href="../17-message-queues/index.html#trail-notes-exercise">queue background jobs</a>, and <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/advanced/multi-region-recovery.md#trail-notes-exercise">practice regional failover</a>.</p>
+<hr />
+<h2 id="technical-reference">Technical reference</h2>
+<p>Explore Layer 4 and Layer 7 routing, health checks, balancing algorithms, and failure modes.</p>
+<h2 id="everyday-analogy-the-restaurant-hostess--bank-teller-queues">🍕 Everyday analogy: The Restaurant Hostess &amp; Bank Teller Queues</h2>
+<p>Imagine a busy downtown bank on a Friday afternoon:</p>
+<ul>
+<li><strong>Without a Load Balancer (Chaos):</strong> 50 customers walk in the door and rush randomly towards 5 teller windows. 25 people pile into Line 1 because it's closest to the door, while Teller 4 sits reading a newspaper with zero customers. If Teller 1 faints from exhaustion, everyone in Line 1 is stuck waiting indefinitely.</li>
+<li><strong>With a Load Balancer (Order &amp; Efficiency):</strong> A head coordinator (the Load Balancer) stands at the entrance rope. Customers wait in a single orderly queue. As soon as any teller finishes with a customer, the coordinator directs the next person to that open window. If Teller 3 goes on break, the coordinator simply bypasses Window 3.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the bank analogy</th>
+<th style="text-align:left">In load balancing architecture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Incoming Customers</strong></td>
+<td style="text-align:left"><strong>Client HTTP / HTTPS Requests</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Head Coordinator at the rope</strong></td>
+<td style="text-align:left"><strong>Load Balancer</strong> (HAProxy, Nginx, AWS ALB/NLB)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Bank Tellers at desks</strong></td>
+<td style="text-align:left"><strong>Backend Application Servers</strong> (Node.js, Go, Python instances)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Checking if teller is awake</strong></td>
+<td style="text-align:left"><strong>Health Check Probe</strong> (<code>GET /healthz</code>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Assigning customers 1 by 1 in circle</strong></td>
+<td style="text-align:left"><strong>Round-Robin Algorithm</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Sending customer to teller with fewest papers</strong></td>
+<td style="text-align:left"><strong>Least-Connections Algorithm</strong></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>VIP teller handling large business accounts</strong></td>
+<td style="text-align:left"><strong>Weighted Load Balancing</strong> (allocating traffic by CPU weight)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
+<p>Suppose your e-commerce application runs on <strong>one server</strong>:</p>
+<ul>
+<li>A single high-end server can process roughly <strong>$1,000\text{ requests per second (RPS)}$</strong>.</li>
+<li>On Black Friday, a flash sale begins and <strong>$15,000\text{ RPS}$</strong> hit your server.</li>
+<li>The operating system's connection queue overflows, memory runs out, the kernel starts killing processes (<code>OOM Killer</code>), and your entire website goes completely black for all users.</li>
+<li>Furthermore, if a maintenance engineer reboots that single server, you have <strong>$100%$ downtime</strong>.</li>
+</ul>
+<p>A load balancer solves this by:</p>
+<ol>
+<li><strong>Distributing load:</strong> Spreading $15,000\text{ RPS}$ across 20 servers so each handles a comfortable $750\text{ RPS}$.</li>
+<li><strong>Zero-downtime rolling deploys:</strong> You can take down 2 servers at a time for upgrades while the remaining 18 keep serving customers.</li>
+<li><strong>High availability &amp; self-healing:</strong> When a server crashes, the load balancer's health probe detects the failure within seconds and stops routing traffic to it.</li>
+</ol>
+<hr />
+<h2 id="routing-animation">Routing animation</h2>
+<p align="center">
+  <img src="./assets/load_balancer.gif" alt="Requests move from the client through the load balancer to Server 1 or 2 while failed Server 3 is skipped" width="100%" />
+</p>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph Clients[&quot;Inbound Traffic&quot;]
+        C1[&quot;📱 Mobile App&quot;]
+        C2[&quot;💻 Desktop Browser&quot;]
+        C3[&quot;🌍 Public API Consumer&quot;]
+    end
+
+    LB[&quot;⚖️ Load Balancer (Nginx / HAProxy / ALB)&lt;br/&gt;IP: 198.51.100.1&quot;]
+
+    subgraph Cluster[&quot;Backend Server Fleet&quot;]
+        S1[&quot;🖥️ Server 1 (Healthy - 20% CPU)&quot;]
+        S2[&quot;🖥️ Server 2 (Healthy - 35% CPU)&quot;]
+        S3[&quot;❌ Server 3 (DEAD - Failed /healthz)&quot;]
+    end
+
+    C1 --&gt; LB
+    C2 --&gt; LB
+    C3 --&gt; LB
+
+    LB --&gt;|1. Route request| S1
+    LB --&gt;|2. Route request| S2
+    LB -.-&gt;|Bypassed: Ejected from active pool| S3
+</code></pre>
+<ol>
+<li>Clients send requests to the public IP of the Load Balancer.</li>
+<li>The Load Balancer executes a balancing algorithm (e.g. Round-Robin or Least Connections).</li>
+<li>The Load Balancer maintains a background heartbeat polling <code>GET /healthz</code> every 5 seconds.</li>
+<li>If Server 3 throws HTTP 500 errors or times out, the balancer marks it <strong>UNHEALTHY</strong> and immediately isolates it from traffic until it recovers.</li>
+</ol>
+<hr />
+<h2 id="worked-estimate--provisioning-spare-capacity">🔢 Worked estimate · Provisioning spare capacity</h2>
+<p>Let's calculate how many backend servers you need to survive peak load:</p>
+<h3 id="1-capacity-sizing-math">1. Capacity Sizing Math</h3>
+<ul>
+<li><strong>Peak Traffic:</strong> $20,000\text{ requests/sec (RPS)}$.</li>
+<li><strong>Server Benchmark:</strong> 1 standard compute instance (4 vCPU, 16 GB RAM) comfortably handles <strong>$800\text{ RPS}$</strong> at $60%$ CPU utilization (leaving safety margin for CPU spikes).
+$$\text{Base Servers Needed} = \frac{20,000\text{ RPS}}{800\text{ RPS/server}} = 25\text{ servers}$$</li>
+</ul>
+<h3 id="2-n2-redundancy-fault-tolerance">2. $N+2$ Redundancy (Fault Tolerance)</h3>
+<ul>
+<li>If 2 servers experience sudden hardware failure or restart during peak traffic, you still need full capacity:
+$$\text{Total Production Pool} = 25 + 2 = 27\text{ servers}$$</li>
+</ul>
+<hr />
+<h2 id="how-it-works-deep-dive-into-load-balancing">⚙️ How it works: Deep Dive into Load Balancing</h2>
+<h3 id="1-layer-4-vs-layer-7-load-balancing">1. Layer 4 vs Layer 7 Load Balancing</h3>
+<p>The OSI model dictates how deeply the load balancer inspects each network packet:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Layer 4 (Transport / TCP &amp; UDP)</th>
+<th style="text-align:left">Layer 7 (Application / HTTP &amp; HTTPS)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Inspection Depth</strong></td>
+<td style="text-align:left">Only looks at IP address and TCP/UDP port</td>
+<td style="text-align:left">Inspects full HTTP URL paths, headers, cookies, JSON body</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Latency &amp; Overhead</strong></td>
+<td style="text-align:left">Ultra-low latency ($&lt; 0.1\text{ ms}$), millions of RPS</td>
+<td style="text-align:left">Slightly higher CPU overhead (decrypts TLS, parses HTTP)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>TLS / SSL Handling</strong></td>
+<td style="text-align:left">Passes encrypted bytes straight through</td>
+<td style="text-align:left">Terminates TLS at the balancer (<strong>SSL Offloading</strong>)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Routing Intelligence</strong></td>
+<td style="text-align:left">Packet forwarding only (cannot route by URL path)</td>
+<td style="text-align:left">Smart routing: <code>/api/users</code> $\to$ User Svc, <code>/video</code> $\to$ Media Svc</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Session Tracking</strong></td>
+<td style="text-align:left">IP-based only</td>
+<td style="text-align:left">Cookie-based, header-based, or JWT-based</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Examples</strong></td>
+<td style="text-align:left">AWS Network Load Balancer (NLB), Linux IPVS, HAProxy (TCP)</td>
+<td style="text-align:left">AWS Application Load Balancer (ALB), Nginx, Envoy, Traefik</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="2-the-5-core-balancing-algorithms">2. The 5 Core Balancing Algorithms</h3>
+<ol>
+<li><strong>Round-Robin:</strong> Requests are distributed sequentially: Server 1 $\to$ Server 2 $\to$ Server 3 $\to$ Server 1. Simple and stateless, but assumes all servers have identical hardware and all requests take identical time to process.</li>
+<li><strong>Weighted Round-Robin:</strong> Servers are assigned capacity weights (e.g. Server A has 8 vCPUs, Server B has 4 vCPUs). Server A gets twice as many requests as Server B.</li>
+<li><strong>Least Connections:</strong> Forwards the new request to whichever server currently has the <strong>fewest active open TCP/HTTP connections</strong>. Ideal for workloads with high processing time variance (e.g., image processing or complex database reports).</li>
+<li><strong>Weighted Least Connections:</strong> Calculates normalized score:
+$$\text{Score} = \frac{\text{Active Connections}}{\text{Server Weight}}$$
+Selects the server with the lowest score.</li>
+<li><strong>IP Hash:</strong> Computes <code>hash(client_ip) % num_servers</code>. Guarantees that requests from the same user IP consistently land on the same server (session affinity).</li>
+</ol>
+<hr />
+<h3 id="3-active-vs-passive-health-checks">3. Active vs Passive Health Checks</h3>
+<ul>
+<li><strong>Active Health Checks (Proactive Heartbeats):</strong> The load balancer periodically sends an HTTP probe (e.g. <code>GET /healthz</code> every 5 seconds) to each server. If a server fails 3 consecutive probes, it is ejected.</li>
+<li><strong>Passive Health Checks (Inline Monitoring):</strong> The load balancer watches real user traffic. If a server returns 5 consecutive <code>HTTP 502 Bad Gateway</code> responses to live users, the load balancer temporarily stops sending user requests to that node.</li>
+</ul>
+<hr />
+<h3 id="4-high-availability-for-the-load-balancer-itself">4. High Availability for the Load Balancer Itself</h3>
+<p><em>&quot;If the load balancer distributes traffic so servers don't fail, what happens when the load balancer itself crashes?&quot;</em></p>
+<p>In production, you never run a single load balancer machine. You run a <strong>High Availability Pair</strong>:</p>
+<pre><code class="language-mermaid">flowchart TD
+    DNS[&quot;🌐 DNS Anycast (IP: 198.51.100.1)&quot;]
+
+    subgraph LBCluster[&quot;Load Balancer HA Pair&quot;]
+        LB1[&quot;👑 Primary Load Balancer (Active - Holding Virtual IP)&quot;]
+        LB2[&quot;🛡️ Secondary Load Balancer (Standby - Heartbeat Monitoring)&quot;]
+        LB1 &lt;--&gt;|VRRP / Keepalived Heartbeat Ping| LB2
+    end
+
+    DNS --&gt; LB1
+    LB1 -.-&gt;|&quot;If Primary crashes, Secondary claims Virtual IP in &lt; 1s&quot;| LB2
+</code></pre>
+<ol>
+<li><strong>VRRP (Virtual Router Redundancy Protocol) / Keepalived:</strong> An Active and a Standby load balancer share a single <strong>Virtual IP (VIP)</strong>. The Standby listens to a continuous heartbeat from the Primary. If the Primary misses 3 heartbeats ($&lt; 1\text{ second}$), the Standby instantly assumes ownership of the Virtual IP via ARP broadcast.</li>
+<li><strong>DNS Anycast:</strong> Global cloud providers advertise the load balancer IP from dozens of edge locations simultaneously using BGP.</li>
+</ol>
+<hr />
+<h2 id="trade-offs--algorithm-comparison-matrix">⚖️ Trade-offs &amp; Algorithm Comparison Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Algorithm</th>
+<th style="text-align:center">CPU Overhead</th>
+<th style="text-align:center">Handles Unequal Servers?</th>
+<th style="text-align:center">Handles Long Requests?</th>
+<th style="text-align:left">Recommended Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Round-Robin</strong></td>
+<td style="text-align:center">Ultra Low</td>
+<td style="text-align:center">❌ No</td>
+<td style="text-align:center">❌ Poorly</td>
+<td style="text-align:left">Homogeneous microservices with fast ($&lt; 20\text{ms}$) requests</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Weighted Round-Robin</strong></td>
+<td style="text-align:center">Low</td>
+<td style="text-align:center">✅ Yes</td>
+<td style="text-align:center">❌ Poorly</td>
+<td style="text-align:left">Clusters with mixed machine sizes (e.g. cloud migration)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Least Connections</strong></td>
+<td style="text-align:center">Low</td>
+<td style="text-align:center">❌ No</td>
+<td style="text-align:center">✅ Excellent</td>
+<td style="text-align:left">Web applications with long-lived transactions or downloads</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Weighted Least Connections</strong></td>
+<td style="text-align:center">Low</td>
+<td style="text-align:center">✅ Yes</td>
+<td style="text-align:center">✅ Excellent</td>
+<td style="text-align:left">Production cloud clusters with varying instance families</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>IP Hash</strong></td>
+<td style="text-align:center">Low</td>
+<td style="text-align:center">❌ No</td>
+<td style="text-align:center">⚠️ Average</td>
+<td style="text-align:left">Stateful legacy systems that require local session cache</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-mistakes--production-pitfalls">🚫 Common mistakes &amp; production pitfalls</h2>
+<ol>
+<li>
+<p><strong>Relying on &quot;Sticky Sessions&quot; (Session Affinity) instead of stateless architecture:</strong></p>
+<ul>
+<li><em>Why it hurts:</em> The load balancer forces user A to always hit Server 1. If 5 power users land on Server 1, Server 1 gets overloaded while others sit idle. Worse: when Server 1 is rebooted during deployment, all those users are abruptly logged out!</li>
+<li><em>The Fix:</em> <strong>Make servers completely stateless</strong>. Store session tokens in a distributed in-memory cache like Redis (<a href="../10-caching-patterns/index.html">module 10</a>) or use signed JWTs. Any server can then handle any request.</li>
+</ul>
+</li>
+<li>
+<p><strong>The &quot;Health Check Stampede&quot; (Cascading Crash):</strong></p>
+<ul>
+<li><em>Why it hurts:</em> 50 backend servers are under heavy load. The load balancer sends an expensive health check query (<code>SELECT * FROM users</code>) to all 50 servers every 2 seconds. The servers become slower, health checks time out, the load balancer ejects 10 servers, dumping the remaining traffic onto the surviving 40, which causes them to fail health checks too, collapsing the entire datacenter!</li>
+<li><em>The Fix:</em> Keep health check endpoints <strong>feather-light</strong> (<code>/healthz</code> should just return <code>200 OK</code> in memory, or check a cached health boolean without running heavy DB queries).</li>
+</ul>
+</li>
+<li>
+<p><strong>Not terminating TLS at the Load Balancer (SSL Offloading):</strong></p>
+<ul>
+<li><em>Why it hurts:</em> If every individual backend microservice must negotiate TLS handshakes and decrypt RSA/ECDSA keys, you waste up to $25%$ of your application server CPU capacity on cryptography.</li>
+<li><em>The Fix:</em> Terminate TLS at the load balancer or API gateway, and communicate with backend servers over high-speed private virtual networks (VPC).</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="run-the-demo">Run the demo</h2>
+<p>Run the interactive simulator in this folder:</p>
+<pre><code class="language-bash">cd 03-load-balancing
+python demo.py
+</code></pre>
+<h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
+<ol>
+<li>Watch <strong>Round-Robin</strong> cycle requests cleanly 1-by-1 across servers.</li>
+<li>Watch <strong>Least-Connections</strong> normalize active connections by machine weight and route to the least-burdened node.</li>
+<li>Test <strong>IP Hashing</strong> and observe how a client IP always lands on the same server.</li>
+<li>Watch an injected <strong>health check failure</strong> remove <code>srv-3</code> from the demo's rotation. The demo shows where new requests go. Use the worked exercise to check whether those servers have enough capacity.</li>
+</ol>
+<hr />
+<h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
+<ul>
+<li><strong>Maglev</strong> distributes network flows across service endpoints while using consistent hashing and connection tracking to reduce disruption during failures. <a href="https://research.google/pubs/maglev-a-fast-and-reliable-software-network-load-balancer/">Google's 2016 Maglev paper</a></li>
+<li><strong>AWS Application Load Balancer</strong> uses configurable health checks to determine target health. AWS documents an exception when all registered targets in a group are unhealthy, where the load balancer can fail open. <a href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html">AWS target group health checks</a></li>
+</ul>
+<hr />
+<h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
+<h3 id="q1-what-is-the-architectural-difference-between-layer-4-and-layer-7-load-balancing-and-when-would-you-choose-one-over-the-other">Q1: &quot;What is the architectural difference between Layer 4 and Layer 7 load balancing, and when would you choose one over the other?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Layer 4 (Transport / TCP/UDP):</strong>
+<ul>
+<li>Operates purely at the packet level without inspecting application payloads. It routes based on <code>(Source IP, Source Port, Destination IP, Destination Port)</code>.</li>
+<li><strong>Pros:</strong> Blazing fast throughput, minimal CPU/memory utilization, handles millions of concurrent packets per second.</li>
+<li><strong>Cons:</strong> Cannot make smart decisions based on HTTP paths, cannot terminate TLS, cannot inspect HTTP headers or cookies.</li>
+<li><strong>Pick L4 when:</strong> You need raw throughput for non-HTTP protocols (gaming, VoIP, database connection pooling), or as a top-level perimeter router sitting in front of a tier of L7 balancers.</li>
+</ul>
+</li>
+<li><strong>Layer 7 (Application / HTTP/HTTPS):</strong>
+<ul>
+<li>Terminates the TCP connection, decrypts TLS, and inspects the complete HTTP request (headers, path, cookies, query parameters).</li>
+<li><strong>Pros:</strong> Content-based routing (e.g. routing <code>/checkout</code> to Payment Service and <code>/static</code> to CDN), header injection, rate limiting, and cookie-based sticky routing.</li>
+<li><strong>Cons:</strong> Higher CPU overhead due to TLS termination and stream buffering.</li>
+<li><strong>Pick L7 when:</strong> Modern web/microservices architectures where routing depends on HTTP paths, authentication tokens, and API endpoints.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h3 id="q2-if-the-load-balancer-eliminates-single-points-of-failure-for-backend-servers-isnt-the-load-balancer-itself-a-single-point-of-failure-how-do-you-eliminate-it">Q2: &quot;If the load balancer eliminates single points of failure for backend servers, isn't the load balancer itself a single point of failure? How do you eliminate it?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>In a production system, a load balancer is <strong>never</strong> a single server. We eliminate single points of failure across two architectural tiers:</p>
+<ol>
+<li><strong>Active-Passive Pair with Virtual IP (Local Redundancy):</strong>
+<ul>
+<li>Two load balancers run in parallel sharing a floating <strong>Virtual IP (VIP)</strong> via <strong>VRRP (Virtual Router Redundancy Protocol)</strong> or <strong>Keepalived</strong>.</li>
+<li>The Primary actively processes all traffic while broadcasting heartbeats to the Secondary.</li>
+<li>If the Primary crashes, the Secondary detects missing heartbeats and claims the Virtual IP via ARP spoofing in $&lt; 500\text{ ms}$, taking over traffic with zero DNS changes.</li>
+</ul>
+</li>
+<li><strong>DNS Anycast &amp; Equal-Cost Multi-Path (Global Redundancy):</strong>
+<ul>
+<li>For hyperscale systems, multiple active load balancers advertise the same IP address using BGP Anycast.</li>
+<li>Upstream internet routers use <strong>ECMP (Equal-Cost Multi-Path)</strong> to spray packets across multiple active load balancer machines simultaneously. If one hardware router or balancer dies, BGP withdraws the route in seconds.</li>
+</ul>
+</li>
+</ol>
+</details>
+<hr />
+<h3 id="q3-why-are-sticky-sessions-considered-an-architectural-anti-pattern-in-modern-cloud-architectures">Q3: &quot;Why are sticky sessions considered an architectural anti-pattern in modern cloud architectures?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<p>Sticky sessions (session affinity via IP hash or cookies) force a client's requests to always route to the exact same backend server because that server stores the user's login state in local RAM.</p>
+<p><strong>Why this breaks cloud scalability:</strong></p>
+<ol>
+<li><strong>Traffic Hot-Spotting:</strong> If a few high-activity enterprise users are pinned to Server 1, Server 1 CPU is maxed out while Servers 2, 3, and 4 sit idle.</li>
+<li><strong>Broken Autoscaling &amp; Deployments:</strong> When you scale down or perform a rolling deployment by rebooting a server, all users pinned to that server have their sessions abruptly wiped out and are forcibly logged out.</li>
+<li><strong>The Solution:</strong> Keep servers <strong>$100%$ stateless</strong>. Store session data in a shared distributed cache (Redis / Memcached) or encode identity in cryptographically signed <strong>JSON Web Tokens (JWT)</strong>. Any server can now handle any request from any client at any moment.</li>
+</ol>
+</details>
+<hr />
+<h3 id="q4-how-do-health-checks-work-and-what-is-the-health-check-stampede-failure-mode">Q4: &quot;How do health checks work, and what is the 'health check stampede' failure mode?&quot;</h3>
+<details>
+<summary>💡 Click to reveal the ideal senior engineering answer</summary>
+<ul>
+<li><strong>Health Check Mechanism:</strong> The load balancer sends an HTTP request (<code>GET /healthz</code>) every $T$ seconds. A server must respond with <code>200 OK</code> within a timeout window (e.g. 2 seconds). If it fails $K$ consecutive probes (e.g. 3 fails), it is ejected from the routing table (<strong>unhealthy threshold</strong>). When it recovers and passes $M$ consecutive probes (e.g. 2 passes), it is re-added (<strong>healthy threshold</strong>).</li>
+<li><strong>The Health Check Stampede (Cascading Failure):</strong>
+<ul>
+<li>If the health check endpoint runs a live database query (<code>SELECT 1 FROM orders</code>), and the database experiences high load, database queries slow down.</li>
+<li>Health checks begin timing out across the cluster.</li>
+<li>The load balancer mistakenly assumes the servers are dead and starts ejecting them.</li>
+<li>The remaining surviving servers receive $100%$ of the user traffic, which overloads their CPU and causes their health checks to time out too.</li>
+<li>Within 60 seconds, <strong>every single server in the cluster is ejected</strong>, resulting in a complete global outage!</li>
+</ul>
+</li>
+<li><strong>Mitigation:</strong>
+<ul>
+<li>Health check endpoints must be lightweight and decoupled from heavy database queries.</li>
+<li>Implement a <strong>minimum healthy threshold</strong> (e.g. &quot;Never eject more than $50%$ of the server fleet, even if all health checks fail&quot;) to prevent full cluster shutdown.</li>
+</ul>
+</li>
+</ul>
+</details>
+<hr />
+<h2 id="check-yourself">✅ Check yourself</h2>
+<ol>
+<li><strong>A company has 3 backend servers. Server A has 8 cores, Server B has 4 cores, and Server C has 4 cores. Which load balancing algorithm ensures Server A handles twice the traffic of Server B and C?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p><strong>Weighted Round-Robin</strong> (or <strong>Weighted Least Connections</strong>). You assign a weight of <code>2</code> to Server A, and a weight of <code>1</code> to Server B and Server C. The load balancer will route 2 requests to Server A for every 1 request routed to Server B and C.</p>
+</details>
+<hr />
+<ol start="2">
+<li><strong>If an API has requests with extreme variance in processing time (some take 5 ms, others take 4,000 ms), why will Round-Robin cause severe server degradation? What should you use instead?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>Under Round-Robin, requests are assigned blindly. By bad luck, 5 consecutive 4,000 ms requests could be assigned to Server 2, while Server 1 gets five 5 ms requests. Server 2's thread pool fills up and it starts dropping connections.<br />
+You should use <strong>Least Connections</strong> instead. Least Connections inspects how many active requests are currently executing on each server and routes new requests to whichever server is currently doing the least work.</p>
+</details>
+<hr />
+<ol start="3">
+<li><strong>Why does an AWS Application Load Balancer (ALB) require at least two Availability Zones (AZs) when setting it up?</strong></li>
+</ol>
+<details>
+<summary>View Answer</summary>
+<p>For <strong>datacenter-level fault tolerance</strong>. If an entire AWS physical datacenter loses electrical power or suffers a fiber cut, the load balancer running in the second Availability Zone automatically absorbs all incoming traffic with zero disruption to the service.</p>
+</details>
+<hr />
+<h2 id="go-deeper">📚 Go deeper</h2>
+<ul>
+<li><strong>Understanding Distributed Systems</strong> by Roberto Vitillo: Chapter on <em>Network Load Balancing</em>.</li>
+<li><strong>Web Scalability for Startup Engineers</strong> by Artur Ejsmont: Chapter 3 (<em>Application Services &amp; Load Balancers</em>).</li>
+<li><strong>HAProxy Architecture Guide:</strong> The official documentation on connection pooling, epoll event loops, and health checking mechanics.</li>
+</ul>
+<hr />
+<h2 id="related-modules">🔗 Related modules</h2>
+<ul>
+<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: The TCP and HTTP connections terminated by the load balancer.</li>
+<li><a href="../02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How DNS routes traffic across multiple load balancer IPs.</li>
+<li><a href="../04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: How API gateways extend load balancers with authentication and rate limiting.</li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="System Design News Feed">
+  <title>System Design News Feed | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-34-system-design--news-feed-system">Module 34: System Design — News Feed System</h1>
+<blockquote>
+<p>Comprehensive architectural breakdown of a large-scale News Feed service (Twitter/X, Facebook/Instagram), covering Fan-out-on-Write (Push), Fan-out-on-Read (Pull), Hybrid Celebrity fanout models, and Redis timeline ranking.</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before tackling the news feed system, review these core modules:</p>
+<ul>
+<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a> (Cache-aside, write-through, and timeline storage)</li>
+<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Partitioning feed queues across Redis nodes)</li>
+<li><a href="../17-message-queues/index.html">17 - Message Queues</a> (Asynchronous fanout worker pools)</li>
+<li><a href="../28-distributed-unique-id-generator/index.html">28 - Distributed Unique ID Generator</a> (Time-sortable Snowflake 64-bit IDs)</li>
+</ul>
+<hr />
+<h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
+<p>Imagine you write a short letter to your 10 friends. You can either walk to each friend's house and drop a copy in their mailbox (<strong>Push / Fan-out-on-Write</strong>), or your friends can walk to your house every morning and read what you wrote on your front porch chalkboard (<strong>Pull / Fan-out-on-Read</strong>).</p>
+<p>Push is great because when your friends wake up, their mailboxes are already full—reading their feed is instantaneous! But what if you are a superstar celebrity with 100 million fans? If you post a letter, walking to 100 million houses creates a traffic jam that crashes the city.</p>
+<p>A <strong>Hybrid News Feed</strong> pushes posts to regular friends' mailboxes instantly, but for mega-celebrities, fans fetch their posts only when they open the app and merge them into their timeline on the fly!</p>
+<hr />
+<h2 id="physical-analogy">Physical Analogy</h2>
+<p>Think of a <strong>Suburban Postal Route vs. Central Newspaper Kiosk</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Physical Analogy</th>
+<th style="text-align:left">News Feed Architecture Concept</th>
+<th style="text-align:left">Technical Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Author writing an article</strong></td>
+<td style="text-align:left">Post Publishing API (<code>POST /v1/feed</code>)</td>
+<td style="text-align:left">Ingests post content, media references, and metadata.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Suburban Mail carrier</strong></td>
+<td style="text-align:left">Fan-out Worker Pool (Async Queue)</td>
+<td style="text-align:left">Reads follower list and pushes post ID into follower inbox caches.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Personal Home Mailbox</strong></td>
+<td style="text-align:left">User Feed Timeline (Redis Sorted Set <code>ZSET</code>)</td>
+<td style="text-align:left">Stores pre-computed list of Post IDs sorted by timestamp/rank.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Celebrity Newspaper Kiosk</strong></td>
+<td style="text-align:left">Celebrity Outbox Cache (Pull Fan-out)</td>
+<td style="text-align:left">Standalone feed buffer read on-demand during timeline fetch.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Reading today's breakfast mail</strong></td>
+<td style="text-align:left">Feed Retrieval API (<code>GET /v1/feed</code>)</td>
+<td style="text-align:left">Pulls top 20 Post IDs from Redis, hydrating full posts from KV cache.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-problem-it-solves">The Problem It Solves</h2>
+<p>Social networks with hundreds of millions of daily active users (DAUs) face severe asymmetric read/write traffic:</p>
+<ol>
+<li><strong>Massive Read Dominance</strong>: Users read their feed 50x to 100x more often than they post ($100:1$ read-to-write ratio).</li>
+<li><strong>Sub-100ms Latency Expectation</strong>: When a user launches the app, their timeline must render within 100 milliseconds. Joining thousands of followee tables via relational SQL <code>SELECT * FROM posts WHERE user_id IN (SELECT followee_id...) ORDER BY created_at DESC</code> locks tables and takes dozens of seconds at scale.</li>
+<li><strong>The Celebrity &quot;Hotspot&quot; Problem</strong>: A user with 80 million followers publishing a post requires 80 million database/cache write operations in seconds, overwhelming worker queues.</li>
+</ol>
+<hr />
+<h2 id="visual-architecture">Visual Architecture</h2>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph PublishingPath[&quot;1. Post Publishing Flow (Fan-out on Write)&quot;]
+        ClientPost[&quot;User Client&quot;] --&gt;|&quot;POST /v1/posts&quot;| Gateway[&quot;API Gateway / LB&quot;]
+        Gateway --&gt; PostSvc[&quot;Post Service&quot;]
+        PostSvc --&gt; DBPost[(&quot;Post DB / Blob Store&quot;)]
+        PostSvc --&gt; FanoutQueue[&quot;Kafka / RabbitMQ (Fanout Queue)&quot;]
+        FanoutQueue --&gt; FanoutWorkers[&quot;Fanout Worker Pool&quot;]
+        FanoutWorkers --&gt; FollowerSvc[&quot;Graph Service (Get Followers)&quot;]
+        FollowerSvc --&gt; FilterCeleb{&quot;Is Author Celebrity (&gt;10k)?&quot;}
+        FilterCeleb --&gt;|&quot;No (Normal User)&quot;| PushRedis[&quot;Push Post ID to Follower Timelines (Redis ZSET)&quot;]
+        FilterCeleb --&gt;|&quot;Yes (Celebrity)&quot;| SkipPush[&quot;Write ONLY to Celebrity Outbox Cache&quot;]
+    end
+
+    subgraph ReadingPath[&quot;2. Feed Generation Flow (Hybrid Merge)&quot;]
+        ClientRead[&quot;User Client&quot;] --&gt;|&quot;GET /v1/feed?page=1&quot;| FeedSvc[&quot;News Feed Service&quot;]
+        FeedSvc --&gt; ReadZset[&quot;1. Fetch Top 100 Post IDs from User's Redis ZSET&quot;]
+        FeedSvc --&gt; FetchCeleb[&quot;2. Query Followed Celebrities' Outboxes&quot;]
+        FeedSvc --&gt; MergeSort[&quot;3. K-Way Merge &amp; Rank Candidates&quot;]
+        MergeSort --&gt; Hydrate[&quot;4. Hydrate Post Bodies &amp; User Data from Memcached&quot;]
+        Hydrate --&gt; ReturnJSON[&quot;5. Return Enriched JSON to Client&quot;]
+    end
+</code></pre>
+<hr />
+<h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
+<p>Consider a platform like Twitter or Instagram with <strong>300 Million Daily Active Users (DAU)</strong>:</p>
+<ul>
+<li><strong>Posting Volume</strong>:
+<ul>
+<li>Average posts per user: 2 posts/day.</li>
+<li>Total posts/day: $300\text{M} \times 2 = 600\text{ million posts/day}$.</li>
+<li>Average write QPS: $600\text{M} / 86,400 \approx 7,000\text{ posts/second}$.</li>
+<li>Peak write QPS: $7,000 \times 2 = 14,000\text{ writes/second}$.</li>
+</ul>
+</li>
+<li><strong>Feed Generation / Read Volume</strong>:
+<ul>
+<li>Average feed views per user: 10 views/day.</li>
+<li>Read QPS: $(300\text{M} \times 10) / 86,400 \approx 35,000\text{ QPS}$.</li>
+<li>Peak read QPS: $\approx 70,000\text{ reads/second}$.</li>
+</ul>
+</li>
+<li><strong>Fan-out Amplification</strong>:
+<ul>
+<li>If average user has 200 followers:</li>
+<li>Fan-out write rate: $7,000\text{ posts/s} \times 200 = 1.4\text{ million timeline updates/second}$!</li>
+</ul>
+</li>
+<li><strong>Memory Sizing for Timelines (Redis ZSET)</strong>:
+<ul>
+<li>Keep top 800 post IDs in each active user's timeline.</li>
+<li>8-byte Snowflake Post ID + 8-byte score (timestamp) = 16 bytes per entry.</li>
+<li>$800 \times 16\text{ bytes} \approx 12.8\text{ KB}$ per user timeline.</li>
+<li>For 300 million active users: $300\text{M} \times 12.8\text{ KB} \approx 3.84\text{ TB}$ of RAM.</li>
+<li>A Redis cluster of 32 nodes with 128 GB RAM each comfortably handles this in-memory with redundancy.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
+<h3 id="1-fan-out-on-write-push-model">1. Fan-Out on Write (Push Model)</h3>
+<ul>
+<li><strong>How it works</strong>: When Alice posts, a background worker queries the social graph for Alice's 200 followers and inserts <code>alice_post_id</code> directly into each follower's Redis timeline (<code>ZADD timeline:user_bob &lt;timestamp&gt; &lt;post_id&gt;</code>).</li>
+<li><strong>Pros</strong>: Reading feeds is lightning fast ($O(1)$ to $O(k)$ Redis range query).</li>
+<li><strong>Cons</strong>: Write amplification. If a celebrity with 50 million followers posts, the worker must execute 50,000,000 cache writes. If inactive users never open the app, those computed timelines represent wasted CPU and RAM.</li>
+</ul>
+<h3 id="2-fan-out-on-read-pull-model">2. Fan-Out on Read (Pull Model)</h3>
+<ul>
+<li><strong>How it works</strong>: Timelines are never pre-computed. When Bob opens the feed, the server fetches the latest posts from all 500 people Bob follows, merges them by timestamp, and returns the top 20.</li>
+<li><strong>Pros</strong>: Zero write amplification; inactive users consume zero processing power.</li>
+<li><strong>Cons</strong>: Reading is extremely slow and compute-heavy ($O(N \log k)$ merge over hundreds of followee streams at read time).</li>
+</ul>
+<h3 id="3-the-hybrid-celebrity-model-industry-standard">3. The Hybrid Celebrity Model (Industry Standard)</h3>
+<ul>
+<li>Users with $&lt; 10,000$ followers use <strong>Fan-out on Write</strong>.</li>
+<li>Celebrities/Influencers with $&gt; 10,000$ followers use <strong>Fan-out on Read</strong>.</li>
+<li>When Bob opens his feed:
+<ol>
+<li>The server fetches Bob's pre-computed Redis timeline (containing posts from his regular friends).</li>
+<li>The server queries the outbox caches of the 3 celebrities Bob follows.</li>
+<li>The server performs an in-memory $K$-way merge sort across these streams to assemble the final ranked feed.</li>
+</ol>
+</li>
+</ul>
+<hr />
+<h2 id="trade-offs--decision-matrix">Trade-offs &amp; Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Dimension</th>
+<th style="text-align:left">Fan-out on Write (Push)</th>
+<th style="text-align:left">Fan-out on Read (Pull)</th>
+<th style="text-align:left">Hybrid Push-Pull Model</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Read Latency</strong></td>
+<td style="text-align:left">Ultra-low ($&lt; 10\text{ ms}$)</td>
+<td style="text-align:left">High ($200 - 800\text{ ms}$)</td>
+<td style="text-align:left">Very low ($15 - 30\text{ ms}$)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Write Latency / Load</strong></td>
+<td style="text-align:left">Massive write amplification</td>
+<td style="text-align:left">Minimal ($O(1)$ post insert)</td>
+<td style="text-align:left">Balanced &amp; predictable</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Celebrity Handling</strong></td>
+<td style="text-align:left">Catastrophic (queue backlogs)</td>
+<td style="text-align:left">Excellent</td>
+<td style="text-align:left">Excellent (special outbox routing)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Resource Utilization</strong></td>
+<td style="text-align:left">High RAM (stores dormant feeds)</td>
+<td style="text-align:left">High CPU during read spikes</td>
+<td style="text-align:left">Optimal (RAM for active, CPU on-demand)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
+<ol>
+<li><strong>Hydrating Full Post Objects in the Timeline Queue</strong>: Storing the entire post JSON (text, comments, author profile) inside the follower's Redis ZSET multiplies storage by 1,000x. <em>Rule: Only store 64-bit Post IDs in the feed timeline; hydrate full post objects from Memcached/Redis KV cache only for the paginated window being viewed.</em></li>
+<li><strong>Infinite Timeline Retention</strong>: Keeping years of post history in Redis. Most users only browse the most recent 500-1,000 posts. Set a hard limit on Redis ZSET size (<code>ZREMRANGEBYRANK user:timeline 0 -801</code>).</li>
+<li><strong>Synchronous Fanout in Web Request Handler</strong>: Iterating over followers inside the HTTP <code>POST /posts</code> handler blocks the client for minutes. Fanout must always be decoupled into an asynchronous message queue (Kafka).</li>
+</ol>
+<hr />
+<h2 id="try-it-yourself">Try It Yourself</h2>
+<p>A runnable, zero-dependency Python simulation demonstrating normal user fanout-on-write, celebrity fanout-on-read outbox routing, and real-time hybrid feed merge ranking is included in this directory.</p>
+<p>Run the simulation:</p>
+<pre><code class="language-bash">python demo.py
+</code></pre>
+<hr />
+<h2 id="production-references--further-reading">Production References &amp; Further Reading</h2>
+<ul>
+<li><a href="https://blog.twitter.com/engineering/en_us/topics/infrastructure/2013/timelines-at-scale">Twitter Engineering: Timelines at Scale</a></li>
+<li><a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">Facebook Engineering: Serving Large-Scale Social Graph Data with Tao</a></li>
+<li><a href="https://bytebytego.com">Alex Xu: System Design Interview Vol 1 - Chapter 11 (Design a News Feed System)</a></li>
+</ul>
+<hr />
+<h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
+<h3 id="q1-how-do-you-handle-the-celebrity-problem-hotspot-in-a-news-feed-system">Q1: How do you handle the &quot;Celebrity Problem&quot; (Hotspot) in a News Feed system?</h3>
+<p><strong>Model Answer</strong>: The celebrity problem occurs when an account with millions of followers publishes a post, causing write amplification that chokes message queues. We solve this using a <strong>Hybrid Fan-out Model</strong>:</p>
+<ul>
+<li>Regular users ($&lt; 10\text{k}$ followers) use fan-out on write (pushing Post IDs to follower inboxes upon publishing).</li>
+<li>Celebrities ($&gt; 10\text{k}$ followers) bypass the follower queue entirely; their posts are written only to their personal outbox cache.</li>
+<li>When a follower requests their feed, the system fetches their pre-computed inbox and merges it with the outbox streams of the celebrities they follow using an in-memory priority queue ($K$-way merge).</li>
+</ul>
+<h3 id="q2-what-data-structure-in-redis-is-ideal-for-user-news-feeds-and-why">Q2: What data structure in Redis is ideal for user news feeds and why?</h3>
+<p><strong>Model Answer</strong>: Redis <strong>Sorted Sets (<code>ZSET</code>)</strong> are optimal. The member is the unique 64-bit <code>post_id</code>, and the score is the integer timestamp (or ranking score).</p>
+<ul>
+<li>Insertion is $O(\log N)$ via <code>ZADD</code>.</li>
+<li>Pagination is instantaneous via <code>ZREVRANGEBYSCORE</code> or <code>ZREVRANGE</code> ($O(\log N + M)$ where $M$ is the page size of 20 items).</li>
+<li>Trimming old items to enforce an 800-item cap is $O(\log N)$ using <code>ZREMRANGEBYRANK</code>.</li>
+</ul>
+<h3 id="q3-how-do-you-support-non-chronological-ranked-feeds-eg-machine-learning-relevance-scoring">Q3: How do you support non-chronological ranked feeds (e.g., machine learning relevance scoring)?</h3>
+<p><strong>Model Answer</strong>: Feed ranking operates in a multi-stage pipeline:</p>
+<ol>
+<li><strong>Candidate Retrieval</strong>: Fetch the top 500-1,000 recent candidate post IDs from the user's hybrid inbox.</li>
+<li><strong>Feature Hydration</strong>: Enrich candidate IDs with author authority, user affinity score, post engagement (likes, comments, recency), and media type.</li>
+<li><strong>ML Scoring Model</strong>: Pass feature vectors through a lightweight ranking model (e.g., GBDT or deep neural network) to output an affinity probability $P(\text{click})$.</li>
+<li><strong>Re-sorting &amp; Delivery</strong>: Sort the candidate items by score, apply business heuristics (e.g., diversity rules preventing 5 consecutive videos), and return the top 20 to the client.</li>
+</ol>
+<h3 id="q4-how-do-you-paginate-a-news-feed-reliably-without-missing-or-duplicating-posts">Q4: How do you paginate a news feed reliably without missing or duplicating posts?</h3>
+<p><strong>Model Answer</strong>: Traditional offset-based pagination (<code>OFFSET 20 LIMIT 20</code>) fails in real-time feeds because new posts inserted at the top shift indices, causing duplicate or skipped items across pages. We use <strong>Cursor-Based Pagination</strong> using time-sortable Snowflake IDs:</p>
+<ul>
+<li>The client requests <code>GET /v1/feed?limit=20&amp;cursor=1789234812349000</code>.</li>
+<li>The server queries <code>ZREVRANGEBYSCORE timeline &lt;cursor&gt; -inf LIMIT 1 20</code>.</li>
+<li>Because Snowflake IDs are monotonically increasing with time, cursor pagination remains completely stable regardless of newly arriving posts.</li>
+</ul>
+<h3 id="q5-how-do-you-manage-timeline-storage-for-inactive-users-who-havent-opened-the-app-in-months">Q5: How do you manage timeline storage for inactive users who haven't opened the app in months?</h3>
+<p><strong>Model Answer</strong>: We implement <strong>Active User Gating</strong>:</p>
+<ul>
+<li>If a user has not authenticated in 30 days, we mark them as inactive in the user profile table and evict their Redis timeline to reclaim RAM.</li>
+<li>When an author publishes a post, the fanout worker checks follower activity status and skips inactive followers.</li>
+<li>When an inactive user logs back in, we dynamically reconstruct their timeline on demand (Fan-out on Read) by pulling the last 30 days of posts from their followees, seeding their Redis ZSET before returning the feed.</li>
+</ul>
+<hr />
+<h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
+<details>
+<summary><b>1. Why is Fan-out on Write preferred for read-heavy social platforms with standard users?</b></summary>
+A) Because it eliminates the need for database storage.<br/>
+B) Because it converts expensive multi-table read joins into instantaneous O(1) cache lookups at read time.<br/>
+C) Because it requires zero message queues.<br/>
+D) Because it avoids using Redis.<br/><br/>
+<b>Answer: B</b>. By pre-computing timelines at write time, user reads are instant cache lookups, satisfying sub-100ms mobile expectations.
+</details>
+<details>
+<summary><b>2. Why should full post content NOT be stored directly in follower timeline caches?</b></summary>
+A) Redis cannot store text.<br/>
+B) Storing full posts across millions of follower lists causes massive data redundancy and memory exhaustion; storing only 64-bit Post IDs saves 95%+ RAM.<br/>
+C) Post content must be encrypted with SSL inside Redis.<br/>
+D) Because post IDs cannot be indexed.<br/><br/>
+<b>Answer: B</b>. Storing only the 8-byte ID reduces the footprint to a few kilobytes per user; content is hydrated only when viewed.
+</details>
+<details>
+<summary><b>3. What pagination strategy prevents duplicated posts when a user scrolls down while new posts arrive?</b></summary>
+A) Offset-based pagination (`OFFSET 50`)<br/>
+B) Cursor-based pagination using monotonically increasing Snowflake IDs<br/>
+C) Random sampling<br/>
+D) Polling every 5 seconds<br/><br/>
+<b>Answer: B</b>. Cursor pagination queries strictly earlier timestamp/IDs than the last viewed item, immune to top-of-feed insertions.
+</details>
+<details>
+<summary><b>4. In a hybrid fanout system, how is a post by a celebrity with 20M followers distributed?</b></summary>
+A) Pushed to all 20M follower inboxes immediately.<br/>
+B) Saved only to the celebrity's outbox cache; merged on-the-fly when followers load their feed.<br/>
+C) Sent via SMS to all followers.<br/>
+D) Discarded until the next day.<br/><br/>
+<b>Answer: B</b>. Writing to the celebrity outbox avoids millions of immediate writes, deferring the merge to read time.
+</details>
+<details>
+<summary><b>5. What cache eviction policy is most suitable for News Feed timeline Redis clusters?</b></summary>
+A) LFU (Least Frequently Used)<br/>
+B) LRU / TTL-based eviction prioritizing recently active users<br/>
+C) Random eviction<br/>
+D) Never evict; crash on full memory<br/><br/>
+<b>Answer: B</b>. Feeds of dormant users should be evicted first, while active users' timelines remain hot in RAM.
+</details>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>

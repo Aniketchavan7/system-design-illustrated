@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Database Transactions &amp; Isolation Levels">
+  <title>Database Transactions &amp; Isolation Levels | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../../#lessons">Lessons</a>
+      <a href="../../library.html">Library</a>
+      <a href="../../learn/simulator.html">Simulator</a>
+      <a href="../../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-database-transactions--isolation">Real-World Production Deep Dives: Database Transactions &amp; Isolation</h1>
+<blockquote>
+<p>Deep-dive architectural dissections of how <strong>Google</strong> (Cloud Spanner TrueTime Serializable Isolation) and <strong>Netflix</strong> (relational financial ledgers &amp; membership billing) guarantee transaction safety at multi-billion dollar scale.</p>
+</blockquote>
+<hr />
+<h2 id="deep-dive-1-how-google-achieves-global-serializable-isolation-cloud-spanner-ssi--truetime">🏢 Deep Dive 1: How Google Achieves Global Serializable Isolation (Cloud Spanner SSI &amp; TrueTime)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li><strong>System</strong>: Google Cloud Spanner.</li>
+<li><strong>Mission</strong>: Backs Google AdWords, Google Play Billing, and enterprise banking ledgers worldwide.</li>
+<li><strong>Guarantee</strong>: <strong>Strict Serializability (External Consistency)</strong> across multi-continent distributed datacenters without global locking bottlenecks.</li>
+</ul>
+<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
+<ul>
+<li>Traditional databases achieve Serializable isolation through <strong>Two-Phase Locking (2PL)</strong>.</li>
+<li>If a bank in Tokyo and a bank in London execute 2PL across transoceanic fiber, network round trips (150ms+) hold database locks open for seconds, dropping throughput to single digits.</li>
+<li>Conversely, Snapshot Isolation (used by MySQL and Postgres) permits <strong>Write Skew</strong>, which could allow double-spending or account overdrafts.</li>
+</ul>
+<h3 id="3-googles-architecture-serializable-snapshot-isolation-via-truetime">3. Google's Architecture: Serializable Snapshot Isolation via TrueTime</h3>
+<pre><code>[ Transaction T1 Prepare ]
+             │
+             ▼
+[ Spanner Paxos Leader Node ]
+  ├── Assigns Commit Timestamp s using TrueTime.now()
+  │   └── Guarantees: s &gt;= t_earliest
+  │
+  ├── TrueTime Commit-Wait Rule:
+  │   └── Waits until TrueTime.now().earliest &gt; s (waits ~7ms)
+  │
+  ▼
+[ Commit T1 Permanently ]
+  └── Any transaction T2 starting anywhere on Earth is guaranteed:
+      CommitTimestamp(T2) &gt; CommitTimestamp(T1)
+</code></pre>
+<h4 id="a-lock-free-read-transactions">A. Lock-Free Read Transactions</h4>
+<ul>
+<li>In Spanner, <strong>read-only transactions never acquire any locks</strong>.</li>
+<li>The reader specifies a timestamp (or reads at the current TrueTime). Because Spanner maintains multiversion data across Paxos groups, reads execute entirely from local replica memory without network coordination or lock wait states!</li>
+</ul>
+<h4 id="b-two-phase-commit-over-paxos">B. Two-Phase Commit over Paxos</h4>
+<ul>
+<li>For distributed multi-shard writes:
+<ul>
+<li>Each shard is governed by a Paxos group.</li>
+<li>Spanner executes 2PC <em>across Paxos group leaders</em>, combining consensus fault tolerance with ACID transaction atomicity.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="deep-dive-2-how-netflix-manages-billing-isolation-aws-aurora-mysql--idempotency">🎬 Deep Dive 2: How Netflix Manages Billing Isolation (AWS Aurora MySQL &amp; Idempotency)</h2>
+<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<ul>
+<li>Over 260 million active paying subscriptions worldwide.</li>
+<li>Billions of dollars in monthly recurring subscription charges, plan upgrades, and gift card redemptions.</li>
+</ul>
+<h3 id="2-the-core-problem-at-netflix-scale">2. The Core Problem at Netflix Scale</h3>
+<ul>
+<li>When a user clicks &quot;Upgrade to 4K Premium Plan&quot;, multiple background workers execute concurrent operations:
+<ul>
+<li>Prorate the current billing cycle.</li>
+<li>Authorize credit card charge via external payment gateways (Stripe / Adyen).</li>
+<li>Update user entitlement stream limits (from 2 screens to 4 screens).</li>
+</ul>
+</li>
+<li>If the network drops during the payment gateway call, the subscriber retries. A naive transaction execution would double-charge the credit card or grant double billing credits.</li>
+</ul>
+<h3 id="3-netflixs-architecture-relational-transaction-boundaries--the-idempotency-layer">3. Netflix's Architecture: Relational Transaction Boundaries &amp; The Idempotency Layer</h3>
+<pre><code>[ User Clicks &quot;Upgrade Plan&quot; ]
+              │
+              ▼
+    [ Zuul Edge Gateway ]
+              │ (Carries Idempotency-Key: &quot;uuid_xyz&quot;)
+              ▼
+[ Subscription Billing Microservice ]
+              │
+              ▼ (Checks Idempotency Table in Aurora)
+┌─────────────────────────────────────────────────────────────┐
+│ AWS Aurora MySQL Transaction (REPEATABLE READ)              │
+│                                                             │
+│  BEGIN TRANSACTION;                                         │
+│    1. Check Idempotency Key: if already processed, return!   │
+│    2. Insert Pending Charge with State = 'IN_FLIGHT';       │
+│  COMMIT;                                                    │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+             Execute External Payment API Call
+                              │
+┌─────────────────────────────┴───────────────────────────────┐
+│ AWS Aurora MySQL Transaction (REPEATABLE READ)              │
+│                                                             │
+│  BEGIN TRANSACTION;                                         │
+│    3. Update Plan Tier: Standard -&gt; Premium 4K              │
+│    4. Mark Payment State = 'SETTLED'                        │
+│  COMMIT;                                                    │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<h4 id="a-decoupled-transaction-boundaries">A. Decoupled Transaction Boundaries</h4>
+<ul>
+<li>Notice that Netflix <strong>never</strong> executes the external credit card network call inside the database transaction!</li>
+<li>Instead, it divides the operation into two distinct local transactions:
+<ol>
+<li>Transaction 1 records an in-flight intention with an <strong>Idempotency Key</strong>.</li>
+<li>Transaction 2 confirms and settles the tier change once the payment provider returns HTTP 200.</li>
+</ol>
+</li>
+</ul>
+<h4 id="b-repeatable-read-with-gap-locks">B. Repeatable Read with Gap Locks</h4>
+<ul>
+<li>Netflix utilizes MySQL Aurora InnoDB's <strong>Repeatable Read</strong> isolation level:
+<ul>
+<li>Uses <strong>Next-Key Locks (Gap Locks)</strong> to prevent Phantom Reads on membership records.</li>
+<li>Eliminates Lost Updates on account balances while avoiding the severe lock-wait penalties of global serializability.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Architectural Dimension</th>
+<th>Google Cloud Spanner</th>
+<th>Netflix Billing (AWS Aurora)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Isolation Level</strong></td>
+<td>Strict Serializability (SSI)</td>
+<td>Repeatable Read + Application Idempotency</td>
+</tr>
+<tr>
+<td><strong>Clock Synchronization</strong></td>
+<td>Hardware TrueTime (Atomic Clocks + GPS)</td>
+<td>AWS Time Sync Service (Microsecond NTP)</td>
+</tr>
+<tr>
+<td><strong>Read Mechanism</strong></td>
+<td>Lock-free reads at past timestamps</td>
+<td>MVCC snapshot reads (non-blocking)</td>
+</tr>
+<tr>
+<td><strong>Distributed Protocol</strong></td>
+<td>Two-Phase Commit over Multi-Paxos</td>
+<td>Local ACID transactions linked via Sagas</td>
+</tr>
+<tr>
+<td><strong>Recovery Strategy</strong></td>
+<td>Automatic rollback &amp; Paxos quorum recovery</td>
+<td>Compensating saga transactions &amp; refunds</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
+<ol>
+<li><strong>Explain the 4 Standard Isolation Levels</strong>: Be ready to list the 4 levels (Read Uncommitted, Read Committed, Repeatable Read, Serializable) and the exact anomalies each prevents.</li>
+<li><strong>Never Call External APIs Inside DB Transactions</strong>: Always explain to interviewers that database connection pools will collapse if third-party network I/O is enclosed inside a SQL <code>BEGIN ... COMMIT</code> block.</li>
+<li><strong>Propose TrueTime for Distributed Serializability</strong>: Citing Google Spanner's TrueTime commit-wait mechanism demonstrates world-class distributed systems depth.</li>
+</ol>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../../#lessons">All lessons</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+</body>
+</html>
