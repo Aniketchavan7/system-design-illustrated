@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="19---distributed-transactions-2pc-sagas--outbox">19 - Distributed Transactions: 2PC, Sagas &amp; Outbox</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="19---distributed-transactions-2pc-sagas--outbox">19 - Distributed Transactions: 2PC, Sagas &amp; Outbox</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In monolithic architectures, database transactions rely on local ACID guarantees—a single <code>BEGIN ... COMMIT</code> block guarantees all-or-nothing atomicity. In microservice architectures where each service owns its private database (<strong>Database-per-Service</strong>), local ACID transactions cannot span network boundaries. While <strong>Two-Phase Commit (2PC)</strong> enforces atomic commits across databases, its heavy synchronous locking causes severe latency and single-point-of-failure coordinator deadlocks. Modern distributed systems favor the <strong>Saga Pattern</strong> (a sequence of local transactions with semantic <strong>Compensating Transactions</strong>) combined with the <strong>Transactional Outbox Pattern</strong> to guarantee eventual consistency without distributed locks.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../19-distributed-transactions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/19-distributed-transactions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: ACID transactions, isolation levels, and row-level locks.</li>
-<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across decoupled services.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous message delivery, at-least-once delivery, and consumer idempotency.</li>
-<li><a href="../18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Domain events and state reconstruction.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: ACID transactions, isolation levels, and row-level locks.</li>
+<li><a href="../../chapters/14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across decoupled services.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous message delivery, at-least-once delivery, and consumer idempotency.</li>
+<li><a href="../../chapters/18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Domain events and state reconstruction.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -78,7 +78,7 @@
 </tr>
 <tr>
 <td style="text-align:left"><strong>Saga</strong></td>
-<td style="text-align:left">Booking items one-by-one: Flight $\rightarrow$ Hotel $\rightarrow$ Car</td>
+<td style="text-align:left">Booking items one-by-one: Flight <span class="math-inline">→</span> Hotel <span class="math-inline">→</span> Car</td>
 <td style="text-align:left">Chain of local transactions linked by messages/events</td>
 </tr>
 <tr>
@@ -115,7 +115,7 @@
 <strong>This is fundamentally broken.</strong></p>
 <ul>
 <li>If Step 1 succeeds, but the network drops or the server crashes before Step 2, the order exists in the database, but downstream billing, shipping, and notification services never receive the event.</li>
-<li>If you flip the order (send event first, then save to DB), Kafka emits the event, but the database transaction rolls back due to a constraint violation $\rightarrow$ downstream services charge the customer for a non-existent order!</li>
+<li>If you flip the order (send event first, then save to DB), Kafka emits the event, but the database transaction rolls back due to a constraint violation <span class="math-inline">→</span> downstream services charge the customer for a non-existent order!</li>
 <li>You cannot wrap an HTTP/Kafka network call inside a database SQL transaction!</li>
 </ul>
 <h3 id="the-flaws-of-two-phase-commit-2pc">The Flaws of Two-Phase Commit (2PC)</h3>
@@ -128,7 +128,7 @@
 <li><strong>Why 2PC fails in the cloud</strong>:
 <ul>
 <li><strong>Blocking Protocol</strong>: If the coordinator crashes during Phase 2, participants hold database locks indefinitely, blocking all other transactions.</li>
-<li><strong>Latency Multiplier</strong>: 2PC requires at least 4 network hops ($2\times \text{Prepare} + 2\times \text{Commit}$). Cross-region WAN latency easily exceeds $300\text{–}500\text{ ms}$, dropping throughput to single digits.</li>
+<li><strong>Latency Multiplier</strong>: 2PC requires at least 4 network hops (<span class="math-inline">2× Prepare + 2× Commit</span>). Cross-region WAN latency easily exceeds <span class="math-inline">300–500 ms</span>, dropping throughput to single digits.</li>
 </ul>
 </li>
 </ul>
@@ -139,7 +139,7 @@
 <p><img src="./assets/distributed_transactions.gif" alt="Distributed Transactions &amp; Sagas" /></p>
 <hr />
 <h3 id="orchestrated-saga-sequence-diagram-failure--rollback">Orchestrated Saga Sequence Diagram (Failure &amp; Rollback)</h3>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor User as 👤 Customer
     participant Orch as ⚙️ Saga Orchestrator
@@ -165,15 +165,14 @@
     Order--&gt;&gt;Orch: Order Cancelled
     end
 
-    Orch--&gt;&gt;User: 400 Bad Request: Payment Declined
-</code></pre>
+    Orch--&gt;&gt;User: 400 Bad Request: Payment Declined</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's calculate the latency and lock contention between 2PC and Sagas under high concurrent traffic:</p>
 <h3 id="latency-math-3-service-checkout-order-inventory-payment">Latency Math: 3-Service Checkout (Order, Inventory, Payment)</h3>
 <ul>
-<li>Inter-service network round-trip time: $20\text{ ms}$.</li>
-<li>Local database write latency: $2\text{ ms}$.</li>
+<li>Inter-service network round-trip time: <span class="math-inline">20 ms</span>.</li>
+<li>Local database write latency: <span class="math-inline">2 ms</span>.</li>
 </ul>
 <pre><code>┌────────────────────────────────────────────────────────────────────────┐
 │ Model 1: Two-Phase Commit (2PC / XA)                                   │
@@ -203,13 +202,15 @@
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-the-saga-pattern-garcia-molina--salem-1987">1. The Saga Pattern (Garcia-Molina &amp; Salem, 1987)</h3>
-<p>A Saga is a sequence of local transactions:
-$$T_1, T_2, \dots, T_n$$
-Each local transaction $T_i$ updates state within a single service's database and publishes an event.
-For every forward transaction $T_i$, there exists a corresponding <strong>Compensating Transaction</strong> $C_i$ that semantically undoes its effects:</p>
+<p>A Saga is a sequence of local transactions:</p>
+<div class="math-block">T<sub>1</sub>, T<sub>2</sub>, …, T<sub>n</sub></div>
+<p>Each local transaction <span class="math-inline">T<sub>i</sub></span> updates state within a single service's database and publishes an event.
+For every forward transaction <span class="math-inline">T<sub>i</sub></span>, there exists a corresponding <strong>Compensating Transaction</strong> <span class="math-inline">C<sub>i</sub></span> that semantically undoes its effects:</p>
 <ul>
-<li>If transaction $T_3$ fails, the system executes:
-$$C_2, C_1$$</li>
+<li>If transaction <span class="math-inline">T<sub>3</sub></span> fails, the system executes:</li>
+</ul>
+<div class="math-block">C<sub>2</sub>, C<sub>1</sub></div>
+<ul>
 <li>The system achieves <strong>Eventual Consistency</strong> without holding global locks.</li>
 </ul>
 <h4 id="saga-orchestration-vs-choreography">Saga Orchestration vs. Choreography</h4>
@@ -234,7 +235,7 @@ $$C_2, C_1$$</li>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Complexity</strong></td>
-<td style="text-align:left">Becomes tangled (&quot;spaghetti events&quot;) at $&gt;4$ services</td>
+<td style="text-align:left">Becomes tangled (&quot;spaghetti events&quot;) at <span class="math-inline">&gt;4</span> services</td>
 <td style="text-align:left">Clear, centralized visualization of states and timeouts</td>
 </tr>
 <tr>
@@ -367,7 +368,7 @@ Placing network I/O calls (<code>kafka.send()</code>) inside a database transact
 &quot;Two-Phase Commit fails in modern microservices for three critical reasons:</p>
 <ol>
 <li><strong>The Synchronous Blocking Problem</strong>: 2PC is a blocking protocol. When participants vote <code>YES</code> in the Prepare phase, they acquire local row and table locks. If the coordinator crashes or network partition occurs before the Commit phase completes, participants hold locks indefinitely. All other transactions touching those rows are blocked, causing cascading thread exhaustion.</li>
-<li><strong>Extreme Latency</strong>: 2PC requires multiple synchronous network round-trips across all participating databases. In multi-region deployments, latency exceeds $200\text{–}400\text{ ms}$, dropping throughput to single digits.</li>
+<li><strong>Extreme Latency</strong>: 2PC requires multiple synchronous network round-trips across all participating databases. In multi-region deployments, latency exceeds <span class="math-inline">200–400 ms</span>, dropping throughput to single digits.</li>
 <li><strong>Loss of Service Autonomy</strong>: 2PC violates microservice encapsulation by requiring external transaction managers to coordinate internal database locks across organizational boundaries.&quot;</li>
 </ol>
 <hr />
@@ -444,12 +445,12 @@ Because Kafka and PostgreSQL are completely separate distributed systems. The SQ
 <details>
 <summary><b>2. If a Saga executes 3 steps (A -> B -> C), and Step C fails, in what order are compensating transactions executed?</b></summary>
 <br>
-In <b>reverse chronological order</b>: Compensate Step B first ($C_B$), then Compensate Step A ($C_A$). This unwinds the stack cleanly back to the original starting state.
+In <b>reverse chronological order</b>: Compensate Step B first (<span class="math-inline">C<sub>B</sub></span>), then Compensate Step A (<span class="math-inline">C<sub>A</sub></span>). This unwinds the stack cleanly back to the original starting state.
 </details>
 <details>
 <summary><b>3. Why is it mandatory that all Compensating Transactions in a Saga be idempotent?</b></summary>
 <br>
-Because in a distributed system, network timeouts will cause the Saga orchestrator to retry compensating calls. If a compensating <code>Refund($50)</code> call is executed twice, the user would be refunded $100 instead of $50 unless the service enforces idempotency via unique transaction IDs.
+Because in a distributed system, network timeouts will cause the Saga orchestrator to retry compensating calls. If a compensating <code>Refund(<span class="math-inline">50)</code> call is executed twice, the user would be refunded</span>100 instead of $50 unless the service enforces idempotency via unique transaction IDs.
 </details>
 <hr />
 <h2 id="go-deeper-recommended-reading">📚 Go Deeper: Recommended Reading</h2>
@@ -462,15 +463,28 @@ Because in a distributed system, network timeouts will cause the Saga orchestrat
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Relational ACID transaction semantics.</li>
-<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous systems.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Decoupling services with reliable messaging.</li>
-<li><a href="../18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Generating immutable event streams from domain aggregates.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Relational ACID transaction semantics.</li>
+<li><a href="../../chapters/14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous systems.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Decoupling services with reliable messaging.</li>
+<li><a href="../../chapters/18-event-sourcing-and-cqrs/index.html">18 - Event Sourcing &amp; CQRS</a>: Generating immutable event streams from domain aggregates.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

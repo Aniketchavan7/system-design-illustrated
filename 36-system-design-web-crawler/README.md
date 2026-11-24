@@ -50,6 +50,10 @@ The World Wide Web contains tens of billions of publicly accessible web pages:
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/web_crawler_frontier.svg" alt="Distributed Web Crawler & URL Frontier" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Frontier["1. URL Frontier (Prioritization & Politeness)"]

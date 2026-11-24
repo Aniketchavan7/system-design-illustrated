@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="64-Bit Snowflake Distributed ID Bit Layout">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">64-Bit Snowflake Distributed ID Bit Layout</text>
+  <text x="32" y="58" class="sub">Time-ordered, zero-coordination k-sortable IDs generated at 4,096 IDs/ms per node</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="32" y="115" width="76" height="86" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="70.0" y="154.0" text-anchor="middle" class="box-t">1 Bit</text>
+  <text x="70.0" y="172.0" text-anchor="middle" class="box-s">Sign (0)</text>
+  <rect x="114" y="115" width="390" height="86" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="309.0" y="154.0" text-anchor="middle" class="white-t">41 Bits · Millisecond Timestamp</text>
+  <text x="309.0" y="172.0" text-anchor="middle" class="white-s">~69.7 years from custom epoch (time-sortable B-tree keys)</text>
+  <rect x="510" y="115" width="190" height="86" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="605.0" y="154.0" text-anchor="middle" class="box-t">10 Bits · Node ID</text>
+  <text x="605.0" y="172.0" text-anchor="middle" class="box-s">DC (5b) + Machine (5b) = 1,024</text>
+  <rect x="706" y="115" width="162" height="86" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="787.0" y="154.0" text-anchor="middle" class="box-t">12 Bits · Seq</text>
+  <text x="787.0" y="172.0" text-anchor="middle" class="box-s">0 - 4,095 / ms / node</text>
+  <line x1="220" y1="201" x2="220" y2="255" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="220.0" y="221.0" text-anchor="middle" class="lbl">Guarantees rough chronological sorting</text>
+  <line x1="605" y1="201" x2="605" y2="255" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="605.0" y="221.0" text-anchor="middle" class="lbl">Zero central DB bottleneck</text>
+  <rect x="60" y="255" width="340" height="92" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="230.0" y="297.0" text-anchor="middle" class="box-t">Why 41-Bit Prefix Matters</text>
+  <text x="230.0" y="315.0" text-anchor="middle" class="box-s">B+Tree inserts append monotonically; minimal page splits</text>
+  <rect x="450" y="255" width="390" height="92" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="645.0" y="297.0" text-anchor="middle" class="box-t">Throughput &amp; Clock Guard</text>
+  <text x="645.0" y="315.0" text-anchor="middle" class="box-s">Max 4.09M IDs/ms globally; reject/wait on NTP clock rollback</text>
+</svg>

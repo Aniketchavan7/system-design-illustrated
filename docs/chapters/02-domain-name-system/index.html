@@ -22,26 +22,25 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="02--domain-name-system-dns">02 · Domain Name System (DNS)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/dns-lab.html">DNS cache &amp; TTL cutover lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="02--domain-name-system-dns">02 · Domain Name System (DNS)</h1>
 <blockquote>
-<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a></p>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: See <strong>Google Public DNS</strong>, <strong>Route 53</strong>, and <strong>Netflix</strong> examples in <a href="../02-domain-name-system/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: See <strong>Google Public DNS</strong>, <strong>Route 53</strong>, and <strong>Netflix</strong> examples in <a href="../../chapters/02-domain-name-system/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>Computers on the internet don't understand names like <code>google.com</code> or <code>netflix.com</code>—they only understand numerical coordinates called <strong>IP addresses</strong> (like <code>142.250.190.46</code> or <code>2607:f8b0:4005::200e</code>).</p>
 <p><strong>DNS (Domain Name System)</strong> is the decentralized global contact book of the internet. Whenever you type a URL, your computer asks a chain of specialized servers to translate that human-friendly name into the server's numerical IP address in a fraction of a second.</p>
 <h2 id="first-pass">First pass</h2>
-<p>In the <a href="../01-client-server-networking/index.html#first-pass">first lesson</a>, the browser already knew where to send <code>GET /guide</code>. Now start with only the name <code>trailnotes.example</code>. <strong>DNS</strong> is the system that maps that name to an address the browser can connect to.</p>
-<pre><code class="language-mermaid">flowchart LR
+<p>In the <a href="../../chapters/01-client-server-networking/index.html#first-pass">first lesson</a>, the browser already knew where to send <code>GET /guide</code>. Now start with only the name <code>trailnotes.example</code>. <strong>DNS</strong> is the system that maps that name to an address the browser can connect to.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     B[Browser] --&gt;|Look up trailnotes.example| R[Recursive resolver]
     R --&gt;|Ask when answer is missing from cache| A[Authoritative DNS]
     A --&gt;|Address and TTL| R
     R --&gt;|Return address| B
-    B --&gt;|Connect and request the guide| S[Trail Notes endpoint]
-</code></pre>
+    B --&gt;|Connect and request the guide| S[Trail Notes endpoint]</pre></figure>
 <p>The browser or operating system can reuse an answer it already has. Otherwise, it asks a <strong>recursive resolver</strong>. On a cache miss, the resolver follows referrals as needed to reach the <strong>authoritative DNS server</strong>, which publishes the site's record. The resolver returns the address, and the browser uses it for the HTTPS connection. The HTTP request itself travels to the site.</p>
 <p><strong>Predict.</strong> In this exercise, a resolver caches <code>192.0.2.10</code> at 09:00:00 with a 60-second <strong>TTL</strong>. The TTL sets how long the answer can be reused in this model. The site owner publishes <code>192.0.2.20</code> at 09:00:15. Which address does that resolver return at 09:00:30? What does it return on its first new lookup at 09:01:01?</p>
 <details>
@@ -49,7 +48,7 @@
 <p>At <strong>09:00:30</strong>, the cached answer still has 30 seconds left, so it returns <code>192.0.2.10</code>. At <strong>09:01:01</strong>, the old entry has expired. Assuming the resolver can query the authoritative server and receives the new record, it returns <code>192.0.2.20</code>. Other resolvers may have cached their answers at different times.</p>
 </details>
 <p>Use the existing <a href="#run-the-demo">Python simulator</a> to watch a cached answer expire. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Domain Name System</strong> and explain why two clients can receive different answers during a change.</p>
-<p><strong>Next lesson</strong> · <a href="../03-load-balancing/index.html#first-pass">Route the request to a healthy server</a></p>
+<p><strong>Next lesson</strong> · <a href="../../chapters/03-load-balancing/index.html#first-pass">Route the request to a healthy server</a></p>
 <hr />
 <h2 id="technical-reference">Technical reference</h2>
 <p>Explore record types, cache behavior, anycast, and DNS-based failover.</p>
@@ -110,14 +109,14 @@
 <ol>
 <li><strong>Human Memory Limits:</strong> Humans cannot memorize billions of 32-bit IPv4 numbers (<code>172.217.16.206</code>) or 128-bit IPv6 hex strings (<code>2a00:1450:4009:81f::200e</code>). Names like <code>github.com</code> are permanent and intuitive.</li>
 <li><strong>Infrastructure Decoupling:</strong> IP addresses change frequently. A company might migrate servers from AWS Virginia to GCP Frankfurt, or scale up new server fleets. DNS acts as a layer of indirection: the domain name stays constant while the underlying IP points to different servers dynamically.</li>
-<li><strong>Global Load Balancing &amp; Geo-Routing:</strong> DNS can inspect where the user is calling from and return an IP address in Tokyo for Japanese users, and an IP address in Frankfurt for German users, cutting transit latency by $80%$.</li>
+<li><strong>Global Load Balancing &amp; Geo-Routing:</strong> DNS can inspect where the user is calling from and return an IP address in Tokyo for Japanese users, and an IP address in Frankfurt for German users, cutting transit latency by <span class="math-inline">80%</span>.</li>
 </ol>
 <hr />
 <h2 id="picture-it">🖼️ Picture it</h2>
 <p align="center">
   <img src="./assets/dns_lookup.gif" alt="Hierarchical DNS Resolution Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor User as 👤 Client Browser
     participant OS as 💻 Local OS Cache
@@ -136,8 +135,7 @@
     Resolver-&gt;&gt;Auth: 7. What is A record for &quot;api.example.com&quot;?
     Auth--&gt;&gt;Resolver: 8. Return 93.184.216.34 (TTL = 300s)
     Resolver--&gt;&gt;OS: 9. Cache record &amp; return IP
-    OS--&gt;&gt;User: 10. Connect to 93.184.216.34
-</code></pre>
+    OS--&gt;&gt;User: 10. Connect to 93.184.216.34</pre></figure>
 <ol>
 <li><strong>Step 1–2:</strong> Browser checks in-memory cache, then asks OS resolver. If missing, it fires a UDP query on port 53 to the Recursive Resolver.</li>
 <li><strong>Step 3–4:</strong> Recursive Resolver queries the <strong>Root Server (<code>.</code>)</strong>. The Root server does not know the full domain, but refers the resolver to the <strong><code>.com</code> TLD server</strong>.</li>
@@ -160,32 +158,32 @@
 <tr>
 <td style="text-align:center">1</td>
 <td style="text-align:left">Browser checks local RAM cache</td>
-<td style="text-align:center"><strong>$0.1\text{ ms}$</strong></td>
+<td style="text-align:center"><strong><span class="math-inline">0.1 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center">2</td>
 <td style="text-align:left">Query sent to ISP / Cloudflare recursive resolver (Anycast)</td>
-<td style="text-align:center"><strong>$8\text{ ms}$</strong></td>
+<td style="text-align:center"><strong><span class="math-inline">8 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center">3</td>
-<td style="text-align:left">Resolver $\to$ Root nameserver RTT</td>
-<td style="text-align:center"><strong>$15\text{ ms}$</strong></td>
+<td style="text-align:left">Resolver <span class="math-inline">→</span> Root nameserver RTT</td>
+<td style="text-align:center"><strong><span class="math-inline">15 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center">4</td>
-<td style="text-align:left">Resolver $\to$ <code>.com</code> TLD nameserver RTT</td>
-<td style="text-align:center"><strong>$18\text{ ms}$</strong></td>
+<td style="text-align:left">Resolver <span class="math-inline">→</span> <code>.com</code> TLD nameserver RTT</td>
+<td style="text-align:center"><strong><span class="math-inline">18 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center">5</td>
-<td style="text-align:left">Resolver $\to$ Authoritative nameserver (Route 53) RTT</td>
-<td style="text-align:center"><strong>$22\text{ ms}$</strong></td>
+<td style="text-align:left">Resolver <span class="math-inline">→</span> Authoritative nameserver (Route 53) RTT</td>
+<td style="text-align:center"><strong><span class="math-inline">22 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center"><strong>Total Cold Lookup</strong></td>
 <td style="text-align:left"><strong>Full iterative resolution tree traversal</strong></td>
-<td style="text-align:center"><strong>$\approx 63\text{ ms}$</strong></td>
+<td style="text-align:center"><strong><span class="math-inline">≈ 63 ms</span></strong></td>
 </tr>
 <tr>
 <td style="text-align:center"><strong>Recursive resolver cache hit</strong></td>
@@ -218,31 +216,31 @@
 <td style="text-align:left"><strong>A</strong></td>
 <td style="text-align:left">Address Record</td>
 <td style="text-align:left">Maps a hostname to an <strong>IPv4</strong> address (32-bit)</td>
-<td style="text-align:left"><code>example.com</code> $\to$ <code>93.184.216.34</code></td>
+<td style="text-align:left"><code>example.com</code> <span class="math-inline">→</span> <code>93.184.216.34</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>AAAA</strong></td>
 <td style="text-align:left">IPv6 Address</td>
 <td style="text-align:left">Maps a hostname to an <strong>IPv6</strong> address (128-bit)</td>
-<td style="text-align:left"><code>example.com</code> $\to$ <code>2606:2800:220:1::</code></td>
+<td style="text-align:left"><code>example.com</code> <span class="math-inline">→</span> <code>2606:2800:220:1::</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>CNAME</strong></td>
 <td style="text-align:left">Canonical Name</td>
 <td style="text-align:left">Creates an alias pointing one domain to another domain</td>
-<td style="text-align:left"><code>www.example.com</code> $\to$ <code>example.com</code></td>
+<td style="text-align:left"><code>www.example.com</code> <span class="math-inline">→</span> <code>example.com</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>ALIAS / ANAME</strong></td>
 <td style="text-align:left">Virtual CNAME</td>
 <td style="text-align:left">Resolves an alias at the root/apex domain without breaking MX</td>
-<td style="text-align:left"><code>example.com</code> $\to$ <code>lb-123.aws.com</code></td>
+<td style="text-align:left"><code>example.com</code> <span class="math-inline">→</span> <code>lb-123.aws.com</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>MX</strong></td>
 <td style="text-align:left">Mail Exchange</td>
 <td style="text-align:left">Directs email to mail servers with priority ranking</td>
-<td style="text-align:left"><code>example.com</code> $\to$ <code>10 mail.google.com</code></td>
+<td style="text-align:left"><code>example.com</code> <span class="math-inline">→</span> <code>10 mail.google.com</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>TXT</strong></td>
@@ -254,13 +252,13 @@
 <td style="text-align:left"><strong>NS</strong></td>
 <td style="text-align:left">Name Server</td>
 <td style="text-align:left">Delegates a DNS zone to specific authoritative servers</td>
-<td style="text-align:left"><code>example.com</code> $\to$ <code>ns1.cloudflare.com</code></td>
+<td style="text-align:left"><code>example.com</code> <span class="math-inline">→</span> <code>ns1.cloudflare.com</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>PTR</strong></td>
 <td style="text-align:left">Pointer Record</td>
 <td style="text-align:left">Reverse DNS: maps an IP address back to a hostname</td>
-<td style="text-align:left"><code>34.216.184.93.in-addr.arpa</code> $\to$ <code>example.com</code></td>
+<td style="text-align:left"><code>34.216.184.93.in-addr.arpa</code> <span class="math-inline">→</span> <code>example.com</code></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>SOA</strong></td>
@@ -277,14 +275,13 @@
 <hr />
 <h3 id="3-smart-dns-routing-strategies">3. Smart DNS Routing Strategies</h3>
 <p>Modern Cloud DNS services (like AWS Route 53, Cloudflare, NS1) provide advanced routing policies:</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     User[&quot;👤 Inbound User Query&quot;] --&gt; Policy{&quot;DNS Routing Policy&quot;}
 
     Policy --&gt;|Geolocation| Geo[&quot;🌍 GeoDNS: Route user to closest regional datacenter (e.g. EU vs US)&quot;]
     Policy --&gt;|Latency Measurements| Latency[&quot;⚡ Latency-Based: Ping regional edges and return lowest RTT&quot;]
     Policy --&gt;|Weighted Split| Weighted[&quot;⚖️ Weighted Round Robin: 95% traffic to v1, 5% traffic to v2 (Canary)&quot;]
-    Policy --&gt;|Health Checks| Failover[&quot;🛡️ Failover Routing: Primary DC down? Return Secondary DC IP!&quot;]
-</code></pre>
+    Policy --&gt;|Health Checks| Failover[&quot;🛡️ Failover Routing: Primary DC down? Return Secondary DC IP!&quot;]</pre></figure>
 <hr />
 <h2 id="trade-offs-short-ttl-vs-long-ttl">⚖️ Trade-offs: Short TTL vs Long TTL</h2>
 <p>The <strong>Time-To-Live (TTL)</strong> tells resolvers how long they are legally permitted to cache your record before asking your authoritative server again.</p>
@@ -357,7 +354,7 @@ python demo.py
 </code></pre>
 <h3 id="what-to-explore-in-demopy">What to explore in <code>demo.py</code>:</h3>
 <ol>
-<li>Observe the <strong>iterative step-by-step query log</strong> traversing from Root $\to$ TLD $\to$ Authoritative server on the first lookup.</li>
+<li>Observe the <strong>iterative step-by-step query log</strong> traversing from Root <span class="math-inline">→</span> TLD <span class="math-inline">→</span> Authoritative server on the first lookup.</li>
 <li>Watch how the second lookup returns instantly in <strong>0.1 ms</strong> via the local cache.</li>
 <li>Watch the TTL expire after 3.5 seconds and trigger a fresh lookup.</li>
 <li>See Anycast BGP routing route users across NYC, London, Tokyo, and Sydney.</li>
@@ -448,7 +445,7 @@ python demo.py
 </ol>
 <details>
 <summary>View Answer</summary>
-<p>To protect the Root and TLD servers from catastrophic resource exhaustion. If the 13 Root servers had to maintain stateful open sockets and wait for answers on behalf of billions of queries simultaneously, they would run out of memory and crash instantly. By keeping Root servers purely <strong>iterative</strong> (returning immediate static referrals in $&lt; 1\text{ ms}$), the memory burden is offloaded to the millions of distributed recursive resolvers at the edge of the internet.</p>
+<p>To protect the Root and TLD servers from catastrophic resource exhaustion. If the 13 Root servers had to maintain stateful open sockets and wait for answers on behalf of billions of queries simultaneously, they would run out of memory and crash instantly. By keeping Root servers purely <strong>iterative</strong> (returning immediate static referrals in <span class="math-inline">&lt; 1 ms</span>), the memory burden is offloaded to the millions of distributed recursive resolvers at the edge of the internet.</p>
 </details>
 <hr />
 <h2 id="go-deeper">📚 Go deeper</h2>
@@ -460,14 +457,27 @@ python demo.py
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: What happens immediately after DNS returns the IP address.</li>
-<li><a href="../03-load-balancing/index.html">03 · Load balancing</a>: How DNS distributes traffic across multiple load balancers.</li>
-<li><a href="../12-content-delivery-networks/index.html">12 · Content delivery networks (CDNs)</a>: How GeoDNS routes traffic to the nearest edge Point of Presence.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>: What happens immediately after DNS returns the IP address.</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 · Load balancing</a>: How DNS distributes traffic across multiple load balancers.</li>
+<li><a href="../../chapters/12-content-delivery-networks/index.html">12 · Content delivery networks (CDNs)</a>: How GeoDNS routes traffic to the nearest edge Point of Presence.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

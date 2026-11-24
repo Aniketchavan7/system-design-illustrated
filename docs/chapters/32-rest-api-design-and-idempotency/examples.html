@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-rest--idempotency">Real-World Production Implementations: REST &amp; Idempotency</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-rest--idempotency">Real-World Production Implementations: REST &amp; Idempotency</h1>
 <p>This document explores how engineering organizations implement REST architecture, HTTP standards, and distributed idempotency at hyperscale.</p>
 <hr />
 <h2 id="1-stripe-the-industry-gold-standard-for-api-idempotency">1. Stripe: The Industry Gold Standard for API Idempotency</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Stripe processes billions of dollars in volume every day. In distributed networks, mobile payment terminals and e-commerce checkouts frequently lose connectivity after issuing payments. Stripe solved this through their famous <code>Idempotency-Key</code> HTTP header.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Client[&quot;Client Mobile / Web SDK&quot;] --&gt;|&quot;POST /v1/charges (Header: Idempotency-Key: uuid)&quot;| Edge[&quot;Stripe Edge Proxy (Envoy)&quot;]
     Edge --&gt;|&quot;Authenticate &amp; Route&quot;| API[&quot;API Service Layer&quot;]
     API --&gt;|&quot;1. Atomic SETNX key + SHA256(body)&quot;| RedisCluster[(&quot;Redis Idempotency Cluster&quot;)]
@@ -41,8 +41,7 @@
     LockAcquired --&gt;|&quot;2. Process Card Transaction&quot;| CoreProcessor[&quot;Card Processor / Ledger DB&quot;]
     CoreProcessor --&gt;|&quot;3. Commit Transaction&quot;| SaveDB[(&quot;Postgres Ledger&quot;)]
     SaveDB --&gt;|&quot;4. Update Status=COMPLETED + Body&quot;| RedisCluster
-    API --&gt;|&quot;5. Return 201 Created&quot;| Client
-</code></pre>
+    API --&gt;|&quot;5. Return 201 Created&quot;| Client</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Payload Fingerprinting</strong>: Stripe hashes the request path and serialized parameters. If an API client submits <code>Idempotency-Key: abc</code> with <code>amount=1000</code> and later submits <code>Idempotency-Key: abc</code> with <code>amount=2000</code>, Stripe immediately responds with HTTP <code>400 Bad Request</code> or <code>422 Unprocessable Entity</code> (&quot;Keys cannot be reused with different parameters&quot;).</li>
@@ -53,11 +52,10 @@
 <h2 id="2-google-cloud-api-design--grpc-http-transcoding">2. Google: Cloud API Design &amp; gRPC-HTTP Transcoding</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google's public services—including Google Cloud Platform (GCP), Google Maps, and YouTube—handle trillions of API calls daily. Google standardizes API design across the entire company using the <strong>Google API Design Guide</strong> and <strong>gRPC Transcoding</strong>.</p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     Browser[&quot;Web Browser / HTTP Client&quot;] --&gt;|&quot;REST JSON over HTTP/1.1 or HTTP/2&quot;| ESP[&quot;Google Cloud Endpoints / Envoy&quot;]
     ESP --&gt;|&quot;gRPC Transcoding (HTTP -&gt; Protobuf)&quot;| InternalRPC[&quot;Internal gRPC Microservices&quot;]
-    InternalRPC --&gt;|&quot;Spanner RPC&quot;| Spanner[(&quot;Google Cloud Spanner&quot;)]
-</code></pre>
+    InternalRPC --&gt;|&quot;Spanner RPC&quot;| Spanner[(&quot;Google Cloud Spanner&quot;)]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>AIP Standards (API Improvement Proposals)</strong>: Google enforces strict naming conventions across all APIs:
@@ -70,8 +68,8 @@
 <li><strong>Client-Assigned Request IDs (<code>requestId</code>)</strong>: For mutating operations in Google Cloud Spanner and Storage, clients supply a client-generated UUID in the query parameter or JSON body (<code>requestId=...</code>). Google Cloud Spanner verifies this token inside atomic TrueTime read-write transactions, ensuring exactly-once execution across globally replicated datacenters.</li>
 <li><strong>HTTP-to-gRPC Transcoding</strong>: Engineers define service contracts once in Protocol Buffers (<code>.proto</code>). Google's reverse proxy automatically maps REST HTTP verbs to gRPC RPC methods:
 <ul>
-<li><code>GET /v1/books/{id}</code> $\rightarrow$ <code>rpc GetBook(GetBookRequest)</code></li>
-<li><code>POST /v1/books</code> $\rightarrow$ <code>rpc CreateBook(CreateBookRequest)</code></li>
+<li><code>GET /v1/books/{id}</code> <span class="math-inline">→</span> <code>rpc GetBook(GetBookRequest)</code></li>
+<li><code>POST /v1/books</code> <span class="math-inline">→</span> <code>rpc CreateBook(CreateBookRequest)</code></li>
 </ul>
 </li>
 </ol>
@@ -79,14 +77,13 @@
 <h2 id="3-netflix-zuul-gateway--distributed-chaos-retries">3. Netflix: Zuul Gateway &amp; Distributed Chaos Retries</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Netflix's streaming ecosystem spans thousands of heterogeneous client devices (Smart TVs, gaming consoles, Apple iOS, Android, Roku) that communicate with hundreds of backend microservices via <strong>Zuul API Gateway</strong>.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     SmartTV[&quot;Smart TV / Roku Client&quot;] --&gt;|&quot;POST /playback/session (Session Token)&quot;| Zuul[&quot;Netflix Zuul 2 Gateway (Netty Async)&quot;]
     Zuul --&gt; FilterChain[&quot;Inbound Ingress Filter Chain&quot;]
     FilterChain --&gt; Decrypt[&quot;Decryption &amp; Auth Validation&quot;]
     FilterChain --&gt; IdemCheck[&quot;Idempotency Filter (EVCache / Memcached)&quot;]
     IdemCheck --&gt;|&quot;Route Request&quot;| PlaybackSvc[&quot;Playback Orchestration Service&quot;]
-    PlaybackSvc --&gt;|&quot;Asynchronous Event&quot;| Kafka[&quot;Kafka Event Bus&quot;]
-</code></pre>
+    PlaybackSvc --&gt;|&quot;Asynchronous Event&quot;| Kafka[&quot;Kafka Event Bus&quot;]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Network Chaos Resilience</strong>: Netflix's Chaos Monkey routinely terminates backend instances and drops TCP packets. If a Smart TV client fails to receive a playback session response due to an injected network partition, the Netflix client library automatically retries the request with exponential backoff and jitter using the original session handshake key.</li>
@@ -96,7 +93,20 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

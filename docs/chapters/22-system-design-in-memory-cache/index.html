@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="22---system-design-distributed-in-memory-cache-redis-cluster">22 - System Design: Distributed In-Memory Cache (Redis Cluster)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="22---system-design-distributed-in-memory-cache-redis-cluster">22 - System Design: Distributed In-Memory Cache (Redis Cluster)</h1>
 <blockquote>
-<p><strong>Executive Summary:</strong> Disk storage operates in milliseconds ($1\text{–}10\text{ ms}$), whereas main memory (RAM) operates in nanoseconds ($100\text{ ns}$) and local network transfers take sub-milliseconds ($0.5\text{ ms}$). A distributed in-memory cache bridges this $10,000\times$ speed gap. Designing a production-grade distributed cache like <strong>Redis Cluster</strong> or <strong>Memcached</strong> requires understanding single-threaded I/O multiplexing (<code>epoll</code>), $O(1)$ LRU memory eviction, 16,384-slot hash sharding, and durability persistence via point-in-time snapshots (RDB) and append-only logs (AOF).</p>
+<p><strong>Executive Summary:</strong> Disk storage operates in milliseconds (<span class="math-inline">1–10 ms</span>), whereas main memory (RAM) operates in nanoseconds (<span class="math-inline">100 ns</span>) and local network transfers take sub-milliseconds (<span class="math-inline">0.5 ms</span>). A distributed in-memory cache bridges this <span class="math-inline">10,000×</span> speed gap. Designing a production-grade distributed cache like <strong>Redis Cluster</strong> or <strong>Memcached</strong> requires understanding single-threaded I/O multiplexing (<code>epoll</code>), <span class="math-inline">O(1)</span> LRU memory eviction, 16,384-slot hash sharding, and durability persistence via point-in-time snapshots (RDB) and append-only logs (AOF).</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../22-system-design-in-memory-cache/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/22-system-design-in-memory-cache/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network socket I/O multiplexing (<code>epoll</code> / <code>kqueue</code>).</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside, Write-Through, Write-Behind.</li>
-<li><a href="../11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: LRU, LFU, TTLs, and cache stampede mitigations.</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Sharding key-spaces across multi-node clusters.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network socket I/O multiplexing (<code>epoll</code> / <code>kqueue</code>).</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside, Write-Through, Write-Behind.</li>
+<li><a href="../../chapters/11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: LRU, LFU, TTLs, and cache stampede mitigations.</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Sharding key-spaces across multi-node clusters.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -76,7 +76,7 @@
 <tr>
 <td style="text-align:left"><strong>LRU Eviction</strong></td>
 <td style="text-align:left">Throwing away the sticky note untouched for the longest time</td>
-<td style="text-align:left">Evicting tail node from doubly-linked list in $O(1)$ time</td>
+<td style="text-align:left">Evicting tail node from doubly-linked list in <span class="math-inline">O(1)</span> time</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>TTL Expiration</strong></td>
@@ -86,7 +86,7 @@
 <tr>
 <td style="text-align:left"><strong>Hash Slots (16,384)</strong></td>
 <td style="text-align:left">Dividing case files into 16,384 standard color-coded folders</td>
-<td style="text-align:left">$\text{CRC16}(\text{key}) \pmod{16384}$ partitioning</td>
+<td style="text-align:left"><span class="math-inline">CRC16(key) ±od{16384}</span> partitioning</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>RDB Snapshots</strong></td>
@@ -104,15 +104,15 @@
 <h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
 <h3 id="the-physical-limits-of-disk-io">The Physical Limits of Disk I/O</h3>
 <ul>
-<li>A modern NVMe SSD can deliver $\approx 50,000\text{–}100,000\text{ IOPS}$.</li>
+<li>A modern NVMe SSD can deliver <span class="math-inline">≈ 50,000–100,000 IOPS</span>.</li>
 <li>However, an internet platform with 100,000,000 active users generates millions of database queries per second.</li>
 <li>If every request hits the disk, disk queue depths explode, read latencies spike from 2 ms to 2,000 ms, and the database crashes under I/O starvation.</li>
 </ul>
 <h3 id="how-a-distributed-cache-solves-this">How a Distributed Cache Solves This</h3>
 <ul>
-<li><strong>Microsecond Response Time</strong>: Serving data directly from RAM yields $0.1\text{–}0.5\text{ ms}$ read latency.</li>
-<li><strong>Massive Concurrency</strong>: A single Redis shard comfortably handles $&gt;100,000\text{ operations/second}$ on a single CPU core.</li>
-<li><strong>Horizontal Elasticity</strong>: A cluster of 50 shards handles $&gt;5,000,000\text{ operations/second}$ while offloading $95%\dots 99%$ of traffic from the primary database.</li>
+<li><strong>Microsecond Response Time</strong>: Serving data directly from RAM yields <span class="math-inline">0.1–0.5 ms</span> read latency.</li>
+<li><strong>Massive Concurrency</strong>: A single Redis shard comfortably handles <span class="math-inline">&gt;100,000 operations/second</span> on a single CPU core.</li>
+<li><strong>Horizontal Elasticity</strong>: A cluster of 50 shards handles <span class="math-inline">&gt;5,000,000 operations/second</span> while offloading <span class="math-inline">95%… 99%</span> of traffic from the primary database.</li>
 </ul>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
@@ -121,7 +121,7 @@
 <p><img src="./assets/in_memory_cache.gif" alt="Distributed In-Memory Cache" /></p>
 <hr />
 <h3 id="internal-node-architecture--sharding-flow">Internal Node Architecture &amp; Sharding Flow</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph ClientLayer[&quot;Client &amp; Routing Layer&quot;]
         App[&quot;App Server / Microservice&quot;]
         Router[&quot;Smart Client (Hashes CRC16(key) % 16384)&quot;]
@@ -159,35 +159,36 @@
     style Master1 fill:#161b22,stroke:#3fb950,stroke-width:2px;
     style Master2 fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style Master3 fill:#161b22,stroke:#d29922,stroke-width:2px;
-    style Replica1 fill:#161b22,stroke:#8b949e,stroke-width:1px;
-</code></pre>
+    style Replica1 fill:#161b22,stroke:#8b949e,stroke-width:1px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's calculate the hardware specifications and network capacity for a 10-node caching cluster:</p>
 <h3 id="1-latency-physics-comparison">1. Latency Physics Comparison</h3>
-<p>$$\text{L1 / L2 CPU Cache} \approx 0.5\text{–}2\text{ ns}$$
-$$\text{Main Memory (RAM) Access} \approx 100\text{ ns} = 0.0001\text{ ms}$$
-$$\text{NVMe SSD Read} \approx 100\ \mu\text{s} = 0.1\text{ ms}$$
-$$\text{Spinning Mechanical HDD Read} \approx 10,000\ \mu\text{s} = 10\text{ ms}$$
-RAM is <strong>1,000x faster than NVMe SSDs</strong> and <strong>100,000x faster than traditional hard drives!</strong></p>
+<div class="math-block">L1 / L2 CPU Cache ≈ 0.5–2 ns</div>
+<div class="math-block">Main Memory (RAM) Access ≈ 100 ns = 0.0001 ms</div>
+<div class="math-block">NVMe SSD Read ≈ 100 μs = 0.1 ms</div>
+<div class="math-block">Spinning Mechanical HDD Read ≈ 10,000 μs = 10 ms</div>
+<p>RAM is <strong>1,000x faster than NVMe SSDs</strong> and <strong>100,000x faster than traditional hard drives!</strong></p>
 <h3 id="2-network-nic-bottleneck-calculation">2. Network NIC Bottleneck Calculation</h3>
 <p>Many engineers assume CPU is the bottleneck in Redis. <strong>It is almost always the network card (NIC)!</strong></p>
 <ul>
-<li>Suppose a single Redis master serves 1 KB value payloads over a 10 Gbps network interface:
-$$\text{10 Gbps} \approx 1.25\text{ Gigabytes/sec} = 1,250,000\text{ KB/sec}$$</li>
-<li>Maximum theoretical throughput before saturating the 10 Gbps network pipe:
-$$\text{Max Throughput} = \frac{1,250,000\text{ KB/s}}{1\text{ KB/req}} \approx \mathbf{1,250,000\text{ requests/second}}$$
-At 1.25 million requests/second, the network interface is 100% pegged, regardless of available CPU!</li>
+<li>Suppose a single Redis master serves 1 KB value payloads over a 10 Gbps network interface:</li>
 </ul>
+<div class="math-block">10 Gbps ≈ 1.25 Gigabytes/sec = 1,250,000 KB/sec</div>
+<ul>
+<li>Maximum theoretical throughput before saturating the 10 Gbps network pipe:</li>
+</ul>
+<div class="math-block">Max Throughput = (1,250,000 KB/s) / (1 KB/req) ≈ 1,250,000 requests/second</div>
+<p>At 1.25 million requests/second, the network interface is 100% pegged, regardless of available CPU!</p>
 <h3 id="3-memory-sizing-for-200-million-keys">3. Memory Sizing for 200 Million Keys</h3>
 <ul>
-<li>Keys: $200,000,000\text{ items}$.</li>
-<li>Average key size: $32\text{ bytes}$. Average value size: $250\text{ bytes}$.</li>
-<li>Redis internal overhead per entry (dictEntry + robj + SDS + jemalloc padding): $\approx 50\text{ bytes}$.</li>
-<li>Total per item: $32 + 250 + 50 = 332\text{ bytes}$.
-$$\text{Total Memory} = 200,000,000 \times 332\text{ bytes} \approx \mathbf{66.4\text{ GB of RAM}}$$
-A 3-node cluster with 32 GB RAM per node provides 96 GB total RAM, running comfortably below $70%$ memory utilization.</li>
+<li>Keys: <span class="math-inline">200,000,000 items</span>.</li>
+<li>Average key size: <span class="math-inline">32 bytes</span>. Average value size: <span class="math-inline">250 bytes</span>.</li>
+<li>Redis internal overhead per entry (dictEntry + robj + SDS + jemalloc padding): <span class="math-inline">≈ 50 bytes</span>.</li>
+<li>Total per item: <span class="math-inline">32 + 250 + 50 = 332 bytes</span>.</li>
 </ul>
+<div class="math-block">Total Memory = 200,000,000 × 332 bytes ≈ 66.4 GB of RAM</div>
+<p>A 3-node cluster with 32 GB RAM per node provides 96 GB total RAM, running comfortably below <span class="math-inline">70%</span> memory utilization.</p>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-why-is-redis-single-threaded-for-execution">1. Why is Redis Single-Threaded for Execution?</h3>
@@ -202,8 +203,10 @@ A 3-node cluster with 32 GB RAM per node provides 96 GB total RAM, running comfo
 <h3 id="2-the-16384-hash-slot-sharding-mechanism">2. The 16,384 Hash Slot Sharding Mechanism</h3>
 <p>Unlike arbitrary consistent hashing rings where clients walk clockwise:</p>
 <ul>
-<li>Redis Cluster partitions the universe into exactly <strong>16,384 Hash Slots</strong> ($[0\dots 16383]$):
-$$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
+<li>Redis Cluster partitions the universe into exactly <strong>16,384 Hash Slots</strong> (<span class="math-inline">[0… 16383]</span>):</li>
+</ul>
+<div class="math-block">slot = CRC16(key) ±od{16384}</div>
+<ul>
 <li>Nodes in the cluster divide the slots among themselves:
 <ul>
 <li>Node A holds slots <code>0 – 5460</code></li>
@@ -295,7 +298,7 @@ $$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
 <p><strong>The Huge <code>fork()</code> Memory Spike (Copy-on-Write OOM)</strong>:</p>
 <ul>
 <li><em>Pitfall</em>: Running Redis on a server with 30 GB of data on a 32 GB RAM instance. When RDB snapshotting triggers, the Linux kernel executes <code>fork()</code>.</li>
-<li><em>Result</em>: If high write volume occurs during the snapshot, Linux Copy-on-Write allocates duplicate memory pages. The memory footprint climbs past 32 GB, triggering Linux <code>OOM-Killer</code>, which abruptly sends <code>SIGKILL</code> to <code>redis-server</code>! Always keep memory utilization $\le 60\text{–}70%$ of physical RAM on persisting nodes.</li>
+<li><em>Result</em>: If high write volume occurs during the snapshot, Linux Copy-on-Write allocates duplicate memory pages. The memory footprint climbs past 32 GB, triggering Linux <code>OOM-Killer</code>, which abruptly sends <code>SIGKILL</code> to <code>redis-server</code>! Always keep memory utilization <span class="math-inline">≤ 60–70%</span> of physical RAM on persisting nodes.</li>
 </ul>
 </li>
 <li>
@@ -311,7 +314,7 @@ $$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
 <h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
 <p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/22-system-design-in-memory-cache/demo.py"><code>demo.py</code></a> implements:</p>
 <ol>
-<li>An $O(1)$ LRU Cache Node with Doubly-Linked List and Hash Map pointers.</li>
+<li>An <span class="math-inline">O(1)</span> LRU Cache Node with Doubly-Linked List and Hash Map pointers.</li>
 <li>TTL expiration mechanisms (lazy evaluation on read + automatic deletion).</li>
 <li>Append-Only File (AOF) write-ahead logging and recovery replay on server reboot.</li>
 <li>Consistent Hash Ring sharding keys across a multi-node cache cluster.</li>
@@ -332,9 +335,9 @@ $$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
 <h3 id="q1-how-does-redis-achieve-high-performance-despite-being-single-threaded">Q1: &quot;How does Redis achieve high performance despite being single-threaded?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Testing candidate's understanding of operating system primitives and concurrency trade-offs.</p>
 <p><strong>Model Answer</strong>:
-&quot;Redis achieves $&gt;100,000$ operations per second on a single thread due to four architectural reasons:</p>
+&quot;Redis achieves <span class="math-inline">&gt;100,000</span> operations per second on a single thread due to four architectural reasons:</p>
 <ol>
-<li><strong>Pure RAM Execution</strong>: All primary operations manipulate data directly in main memory ($100\text{ ns}$ access time), eliminating disk seek and block erase latency.</li>
+<li><strong>Pure RAM Execution</strong>: All primary operations manipulate data directly in main memory (<span class="math-inline">100 ns</span> access time), eliminating disk seek and block erase latency.</li>
 <li><strong>I/O Multiplexing (<code>epoll</code> / <code>kqueue</code>)</strong>: Instead of allocating a thread per client (which wastes memory and incurs heavy context-switching overhead), a single thread uses OS-level event polling to monitor non-blocking sockets, processing requests as bytes arrive.</li>
 <li><strong>No Lock Contention</strong>: Multi-threaded memory access requires mutexes and synchronization primitives. Under high concurrency, lock acquisition overhead and thread context switching degrade CPU throughput. Redis's single-threaded model eliminates race conditions, deadlocks, and locking overhead completely.</li>
 <li><strong>Optimized Low-Level Data Structures</strong>: Redis uses custom, cache-friendly C data structures like Simple Dynamic Strings (SDS), Skiplists, and ZipLists.&quot;</li>
@@ -369,13 +372,15 @@ $$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
 <p><strong>Model Answer</strong>:
 &quot;Redis Cluster does not use a central proxy. Instead, it uses <strong>16,384 fixed Hash Slots</strong>:</p>
 <ol>
-<li>When a key is accessed, the slot is determined by:
-$$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
+<li>When a key is accessed, the slot is determined by:</li>
+</ol>
+<div class="math-block">slot = CRC16(key) ±od{16384}</div>
+<ol start="2">
 <li>The 16,384 slots are divided among master nodes (e.g. Master 1 gets 0–5460, Master 2 gets 5461–10922, etc.).</li>
 <li><strong>Smart Client Routing</strong>:
 <ul>
 <li>Modern Redis client libraries (like <code>jedis</code> or <code>redis-py-cluster</code>) fetch and cache the slot-to-node topology map upon startup.</li>
-<li>The client computes the slot locally and routes the query directly to the correct master IP in $O(1)$ time.</li>
+<li>The client computes the slot locally and routes the query directly to the correct master IP in <span class="math-inline">O(1)</span> time.</li>
 <li>If a slot was migrated to another node during rebalancing, the old node returns a <code>MOVED &lt;new_slot&gt; &lt;new_ip&gt;</code> redirect. The client updates its internal slot map and replays the request automatically.&quot;</li>
 </ul>
 </li>
@@ -399,7 +404,7 @@ $$\text{slot} = \text{CRC16}(\text{key}) \pmod{16384}$$</li>
 <ol>
 <li>It randomly samples 20 keys with active TTLs.</li>
 <li>It evicts all expired keys in that sample.</li>
-<li>If more than 25% of the sampled keys (i.e. $&gt;5$ keys) were expired, it immediately repeats the process.</li>
+<li>If more than 25% of the sampled keys (i.e. <span class="math-inline">&gt;5</span> keys) were expired, it immediately repeats the process.</li>
 </ol>
 </li>
 <li>To prevent blocking the main event loop, this active sweep has a strict <strong>time limit (typically 25 ms)</strong>. If the limit is reached, it yields control back to serving client traffic, preventing CPU starvation.&quot;</li>
@@ -422,12 +427,12 @@ In the next 50 milliseconds, 5,000 parallel application requests miss the cache 
 <details>
 <summary><b>1. Why does executing <code>KEYS *</code> in a production Redis instance with 50M keys cause a severe site outage?</b></summary>
 <br>
-Because Redis is <b>single-threaded</b> for command execution. <code>KEYS *</code> traverses the entire dictionary in $O(N)$ time, blocking the event loop for several seconds. During that time, all other incoming client requests are blocked from executing, leading to client connection timeouts and cascading API failures. Always use <code>SCAN</code>.
+Because Redis is <b>single-threaded</b> for command execution. <code>KEYS *</code> traverses the entire dictionary in <span class="math-inline">O(N)</span> time, blocking the event loop for several seconds. During that time, all other incoming client requests are blocked from executing, leading to client connection timeouts and cascading API failures. Always use <code>SCAN</code>.
 </details>
 <details>
 <summary><b>2. How many hash slots does Redis Cluster have, and why is this number fixed?</b></summary>
 <br>
-Redis Cluster has exactly <b>16,384 hash slots</b>. The slot number is fixed to allow cluster nodes to exchange slot allocation maps via lightweight 2 KB heartbeat gossip bit-vectors ($16,384 / 8 = 2,048\text{ bytes}$), keeping inter-node network gossip overhead minimal.
+Redis Cluster has exactly <b>16,384 hash slots</b>. The slot number is fixed to allow cluster nodes to exchange slot allocation maps via lightweight 2 KB heartbeat gossip bit-vectors (<span class="math-inline">16,384 / 8 = 2,048 bytes</span>), keeping inter-node network gossip overhead minimal.
 </details>
 <details>
 <summary><b>3. What happens if you run Redis with <code>maxmemory</code> set, but without an eviction policy (<code>noeviction</code>)?</b></summary>
@@ -445,15 +450,28 @@ When memory limit is reached, Redis will refuse to accept any new mutating write
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside and read-through caching.</li>
-<li><a href="../11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: LRU, LFU, and stampede defenses.</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Partitioning hash keys across clusters.</li>
-<li><a href="../21-system-design-url-shortener/index.html">21 - System Design: URL Shortener</a>: Leveraging Redis for sub-millisecond URL redirections.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside and read-through caching.</li>
+<li><a href="../../chapters/11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: LRU, LFU, and stampede defenses.</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Partitioning hash keys across clusters.</li>
+<li><a href="../../chapters/21-system-design-url-shortener/index.html">21 - System Design: URL Shortener</a>: Leveraging Redis for sub-millisecond URL redirections.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

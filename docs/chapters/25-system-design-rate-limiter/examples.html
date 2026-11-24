@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-distributed-rate-limiter">Real-World Production Deep Dives: Distributed Rate Limiter</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-distributed-rate-limiter">Real-World Production Deep Dives: Distributed Rate Limiter</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Google (Doorman &amp; Cloud Armor)</strong>, <strong>Netflix (Zuul &amp; Concurrency Limits)</strong>, <strong>Cloudflare (eBPF/XDP)</strong>, and <strong>Stripe (Redis Lua)</strong> implement distributed rate limiting and overload protection at multi-million QPS scale.</p>
 </blockquote>
@@ -96,11 +96,11 @@
 <li>If Netflix sets a hard-coded rate limit of 5,000 RPS for a service:
 <ul>
 <li>If a database node slows down, the service can only process 2,500 RPS before thread pools choke. The static rate limiter still lets 5,000 RPS through, causing the service to crash.</li>
-<li>Netflix replaced static RPS limits with <strong>Adaptive Concurrency Limits</strong> based on <strong>Little's Law</strong>:
-$$\text{Concurrency} = \text{Throughput} \times \text{Latency}$$</li>
+<li>Netflix replaced static RPS limits with <strong>Adaptive Concurrency Limits</strong> based on <strong>Little's Law</strong>:</li>
 </ul>
 </li>
 </ul>
+<div class="math-block">Concurrency = Throughput × Latency</div>
 <h4 id="b-priority-shedding">B. Priority Shedding</h4>
 <p>When congestion occurs, Netflix sheds traffic according to strict priority tiers:</p>
 <ol>
@@ -195,7 +195,11 @@ $$\text{Concurrency} = \text{Throughput} \times \text{Latency}$$</li>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

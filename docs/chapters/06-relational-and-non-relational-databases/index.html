@@ -22,16 +22,16 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="06--relational-sql-vs-non-relational-nosql-databases">06 · Relational (SQL) vs Non-Relational (NoSQL) Databases</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="06--relational-sql-vs-non-relational-nosql-databases">06 · Relational (SQL) vs Non-Relational (NoSQL) Databases</h1>
 <blockquote>
 <p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational for Storage)</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../06-relational-and-non-relational-databases/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/06-relational-and-non-relational-databases/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
-<p>A <strong>relational (SQL) database</strong> is like a formal financial spreadsheet with strict rules: every row must follow the exact same column structure, every ID must point to a real record (<strong>foreign keys</strong>), and a transaction either succeeds $100%$ or rolls back completely (<strong>ACID</strong>).</p>
+<p>A <strong>relational (SQL) database</strong> is like a formal financial spreadsheet with strict rules: every row must follow the exact same column structure, every ID must point to a real record (<strong>foreign keys</strong>), and a transaction either succeeds <span class="math-inline">100%</span> or rolls back completely (<strong>ACID</strong>).</p>
 <p>A <strong>non-relational (NoSQL) database</strong> is like a collection of labeled storage boxes: you can throw in flexible JSON documents of any shape, store simple key-value pairs at lightning speed, or scale horizontally across 50 servers without fighting schema constraints.</p>
 <hr />
 <h2 id="everyday-analogy-the-strict-financial-ledger-vs-the-labeled-cardboard-boxes">🍕 Everyday analogy: The Strict Financial Ledger vs The Labeled Cardboard Boxes</h2>
@@ -97,7 +97,7 @@
 <p align="center">
   <img src="./assets/sql_vs_nosql.gif" alt="SQL vs NoSQL Architecture Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Req[&quot;💾 Data Storage Requirement&quot;] --&gt; Query{&quot;What is your data model and access pattern?&quot;}
 
     Query --&gt;|Complex JOINs, Financial ledger, ACID transactions| SQL[&quot;🗄️ Relational / SQL&lt;br/&gt;(PostgreSQL, MySQL)&lt;br/&gt;• Strong consistency&lt;br/&gt;• Normalization &amp; foreign keys&quot;]
@@ -108,16 +108,15 @@
 
     Query --&gt;|High-throughput write streams, Time-series, IoT| Wide[&quot;📊 Wide-Column / Columnar&lt;br/&gt;(Cassandra, ClickHouse)&lt;br/&gt;• Append-only writes&lt;br/&gt;• Column aggregation&quot;]
 
-    Query --&gt;|Deeply interconnected social graphs, Fraud rings| Graph[&quot;🕸️ Graph Database&lt;br/&gt;(Neo4j, Amazon Neptune)&lt;br/&gt;• Nodes &amp; Edges&lt;br/&gt;• Index-free adjacency&quot;]
-</code></pre>
+    Query --&gt;|Deeply interconnected social graphs, Fraud rings| Graph[&quot;🕸️ Graph Database&lt;br/&gt;(Neo4j, Amazon Neptune)&lt;br/&gt;• Nodes &amp; Edges&lt;br/&gt;• Index-free adjacency&quot;]</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
 <h3 id="data-representation-normalized-sql-vs-denormalized-nosql">Data Representation: Normalized SQL vs Denormalized NoSQL</h3>
 <p>Suppose you are querying a user profile and their 3 shipping addresses:</p>
 <h4 id="1-relational-sql-normalized-across-2-tables">1. Relational SQL (Normalized across 2 tables)</h4>
 <ul>
-<li><code>users</code> table: 1 row ($120\text{ bytes}$)</li>
-<li><code>addresses</code> table: 3 rows ($3 \times 150\text{ bytes} = 450\text{ bytes}$)</li>
+<li><code>users</code> table: 1 row (<span class="math-inline">120 bytes</span>)</li>
+<li><code>addresses</code> table: 3 rows (<span class="math-inline">3 × 150 bytes = 450 bytes</span>)</li>
 <li><strong>Query:</strong> <code>SELECT * FROM users JOIN addresses ON users.id = addresses.user_id WHERE users.id = 42;</code></li>
 <li><strong>Execution Cost:</strong> 2 B-Tree index lookups + in-memory join hash table construction.</li>
 </ul>
@@ -188,7 +187,7 @@
 <h4 id="3-key-value-stores-redis-memcached">3. Key-Value Stores: Redis, Memcached</h4>
 <ul>
 <li>Stores arbitrary values mapped to a unique key string.</li>
-<li>In-memory execution delivers reads and writes in <strong>sub-millisecond ($&lt; 0.5\text{ ms}$)</strong> time.</li>
+<li>In-memory execution delivers reads and writes in <strong>sub-millisecond (<span class="math-inline">&lt; 0.5 ms</span>)</strong> time.</li>
 <li>Best for: User session tokens, shopping carts, rate-limiting counters.</li>
 </ul>
 <h4 id="4-wide-column--columnar-apache-cassandra-scylladb-clickhouse">4. Wide-Column / Columnar: Apache Cassandra, ScyllaDB, ClickHouse</h4>
@@ -221,7 +220,7 @@
 <li>
 <p><strong>Premature NoSQL Adoption (&quot;SQL doesn't scale&quot;):</strong></p>
 <ul>
-<li><em>The Myth:</em> Many junior engineers assume PostgreSQL cannot scale beyond 1 million users. In reality, modern PostgreSQL on standard cloud hardware easily handles $10,000+\text{ RPS}$ and tens of millions of records.</li>
+<li><em>The Myth:</em> Many junior engineers assume PostgreSQL cannot scale beyond 1 million users. In reality, modern PostgreSQL on standard cloud hardware easily handles <span class="math-inline">10,000+ RPS</span> and tens of millions of records.</li>
 <li><em>The Trap:</em> Moving to MongoDB too early means you lose foreign keys, transactions, and unique constraints. You end up writing buggy, complex validation code in your application layer to mimic what Postgres does automatically.</li>
 </ul>
 </li>
@@ -319,7 +318,7 @@ python demo.py
 <ul>
 <li>Cassandra never modifies data in-place on disk.</li>
 <li>Every write is appended sequentially to an append-only commit log on disk, and inserted into an in-memory sorted structure called a <strong>MemTable</strong>.</li>
-<li>Because sequential disk appends are $100\times$ faster than random seeks, Cassandra absorbs massive write streams without latency spikes. Periodically, MemTables are flushed to disk as immutable <strong>SSTables</strong>.</li>
+<li>Because sequential disk appends are <span class="math-inline">100×</span> faster than random seeks, Cassandra absorbs massive write streams without latency spikes. Periodically, MemTables are flushed to disk as immutable <strong>SSTables</strong>.</li>
 </ul>
 </li>
 </ol>
@@ -333,7 +332,7 @@ python demo.py
 <li><strong>Example: An Uber or DoorDash Architecture:</strong>
 <ol>
 <li><strong>PostgreSQL:</strong> Handles User Authentication, Payment Accounts, and Billing Invoices (mandates ACID).</li>
-<li><strong>Redis:</strong> Holds real-time driver locations, session tokens, and rate limits (requires $&lt; 1\text{ ms}$ in-memory latency).</li>
+<li><strong>Redis:</strong> Holds real-time driver locations, session tokens, and rate limits (requires <span class="math-inline">&lt; 1 ms</span> in-memory latency).</li>
 <li><strong>Apache Cassandra / ScyllaDB:</strong> Stores ride history telemetry coordinates emitted every 3 seconds from 5 million cars (massive write stream).</li>
 <li><strong>Elasticsearch:</strong> Powers search boxes with fuzzy matching for restaurant menus and addresses.</li>
 <li><strong>ClickHouse:</strong> Powers the internal business analytics dashboard calculating hourly revenue across cities.</li>
@@ -348,7 +347,7 @@ python demo.py
 </ol>
 <details>
 <summary>View Answer</summary>
-<p>A <strong>partial failure (violation of Atomicity)</strong>. If the system deducts $100 from Account A, and the server crashes or the network drops before the $100 is added to Account B, the $100 has permanently vanished into thin air. A relational database with ACID transactions guarantees that either both accounts update or neither updates.</p>
+<p>A <strong>partial failure (violation of Atomicity)</strong>. If the system deducts &lt;span class=&quot;math-inline&quot;&gt;100 from Account A, and the server crashes or the network drops before the &lt;/span&gt;100 is added to Account B, the $100 has permanently vanished into thin air. A relational database with ACID transactions guarantees that either both accounts update or neither updates.</p>
 </details>
 <hr />
 <ol start="2">
@@ -379,14 +378,27 @@ In columnar databases, all <code>age</code> values are stored contiguously on di
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../07-database-replication/index.html">07 · Database replication</a>: How SQL and NoSQL databases scale reads and survive hardware failures.</li>
-<li><a href="../08-database-partitioning/index.html">08 · Database partitioning</a>: How to shard databases when data exceeds a single server.</li>
-<li><a href="../09-storage-engines-and-indexing/index.html">09 · Storage engines &amp; indexes</a>: The B-Tree and LSM-Tree mechanics powering these engines.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 · Database replication</a>: How SQL and NoSQL databases scale reads and survive hardware failures.</li>
+<li><a href="../../chapters/08-database-partitioning/index.html">08 · Database partitioning</a>: How to shard databases when data exceeds a single server.</li>
+<li><a href="../../chapters/09-storage-engines-and-indexing/index.html">09 · Storage engines &amp; indexes</a>: The B-Tree and LSM-Tree mechanics powering these engines.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

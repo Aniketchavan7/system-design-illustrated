@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="Hardware Latency &amp; Scale Reference">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">Hardware Latency &amp; Scale Reference</text>
+  <text x="32" y="58" class="sub">Orders of magnitude separating CPU cache, RAM, NVMe storage, and cross-region networks</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="32" y="95" width="250" height="50" rx="6" fill="#ecfdf5" stroke="#15803d" stroke-width="1.5"/>
+  <text x="157.0" y="116.0" text-anchor="middle" class="box-t">L1 / L2 CPU Cache</text>
+  <text x="157.0" y="134.0" text-anchor="middle" class="box-s">0.5 - 7 ns (Same heartbeat)</text>
+  <rect x="32" y="158" width="360" height="50" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="212.0" y="179.0" text-anchor="middle" class="box-t">Main Memory (RAM)</text>
+  <text x="212.0" y="197.0" text-anchor="middle" class="box-s">100 ns (100,000x faster than HDD)</text>
+  <rect x="32" y="221" width="510" height="50" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="287.0" y="242.0" text-anchor="middle" class="box-t">NVMe SSD Random Read</text>
+  <text x="287.0" y="260.0" text-anchor="middle" class="box-s">20 - 100 microseconds (0.1 ms)</text>
+  <rect x="32" y="284" width="670" height="50" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <text x="367.0" y="305.0" text-anchor="middle" class="box-t">Spinning HDD / Single Region Network</text>
+  <text x="367.0" y="323.0" text-anchor="middle" class="box-s">5 - 10 ms disk seek / datacenter hop</text>
+  <rect x="32" y="347" width="836" height="40" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="450.0" y="372.0" text-anchor="middle" class="white-t">Cross-Continent Fiber RTT (US &lt;-&gt; Europe)  |  70 - 150 ms (~10^8 ns)</text>
+  <rect x="580" y="95" width="288" height="176" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="724.0" y="179.0" text-anchor="middle" class="box-t">Quick Interview Math</text>
+  <text x="724.0" y="197.0" text-anchor="middle" class="box-s">1M req/day ~ 12 QPS  |  1B/day ~ 12k QPS  |  Peak = 2x-3x Avg</text>
+</svg>

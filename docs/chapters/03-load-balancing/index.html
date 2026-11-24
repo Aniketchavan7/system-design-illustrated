@@ -22,25 +22,24 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="03--load-balancing">03 · Load Balancing</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/simulator.html">Traffic &amp; server failure simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="03--load-balancing">03 · Load Balancing</h1>
 <blockquote>
-<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../02-domain-name-system/index.html">02 · DNS</a></p>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../../chapters/02-domain-name-system/index.html">02 · DNS</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../03-load-balancing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/03-load-balancing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>A single computer can only handle so much traffic before its CPU catches fire or runs out of RAM. Rather than buying an impossibly expensive supercomputer (<strong>vertical scaling</strong>), engineers run dozens of cheap computers in parallel (<strong>horizontal scaling</strong>).</p>
 <p>A <strong>load balancer</strong> sits in front of that fleet of servers. When a user sends a request, the load balancer picks one available server, forwards the work, and returns the response. Once it detects a backend failure, it can stop sending new work there. Users may see errors if requests were already in flight or the remaining servers are overloaded.</p>
 <h2 id="first-pass">First pass</h2>
-<p>In the <a href="../02-domain-name-system/index.html#first-pass">DNS lesson</a>, the browser found the site's public address. Traffic has grown, so that address now leads to a <strong>load balancer</strong> in front of three Trail Notes servers. The browser still sends <code>GET /guide</code> over HTTPS.</p>
-<pre><code class="language-mermaid">flowchart LR
+<p>In the <a href="../../chapters/02-domain-name-system/index.html#first-pass">DNS lesson</a>, the browser found the site's public address. Traffic has grown, so that address now leads to a <strong>load balancer</strong> in front of three Trail Notes servers. The browser still sends <code>GET /guide</code> over HTTPS.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     B[Browser] --&gt;|HTTPS GET /guide| L[Load balancer]
     L --&gt; A[Server A]
     L --&gt; C[Server B]
-    L --&gt; D[Server C]
-</code></pre>
+    L --&gt; D[Server C]</pre></figure>
 <p>The <a href="#routing-animation">routing animation</a> follows a request from a client through the load balancer to a healthy server. <strong>Text walkthrough.</strong> The browser sends a request to the public endpoint. The load balancer chooses an eligible server and forwards it. That server returns the page through the load balancer. If a health check marks a server unavailable, new requests go to other servers. Requests already sent to the failed server may still fail. The animation illustrates routing. Use the separate workload below for the calculation.</p>
 <p><strong>Predict.</strong> Each server can sustain <strong>900 requests per second</strong> for this mix of work. The site receives a steady <strong>2,000 requests per second</strong>. Once Server C is out of rotation, can the remaining servers keep up? Assume traffic is spread evenly and the backends are the capacity limit.</p>
 <details>
@@ -91,7 +90,7 @@
 <p>On a cache miss the browser asks its resolver for the public address, then connects to the load balancer. With a valid cached answer it can go straight to the connection. The balancer sends <code>GET /guide</code> to a backend, and the backend returns the HTML through the balancer. Server C's in-flight work may fail. After failure detection, the balancer sends new work to A and B. They can serve <strong>1,800 requests per second</strong>, so steady demand exceeds capacity by <strong>200 per second</strong>. Bring spare capacity online if available. In the meantime, protect the guide request by shedding enough optional work to stay within capacity.</p>
 </details>
 <p>Use the existing <a href="#run-the-demo">Python simulator</a> to see how the balancer routes requests after ejection. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Load Balancing</strong> and explain why a healthy route alone cannot cover a capacity shortfall.</p>
-<p><strong>Continue learning</strong> · <a href="../10-caching-patterns/index.html#trail-notes-exercise">Cache popular guides</a>, <a href="../17-message-queues/index.html#trail-notes-exercise">queue background jobs</a>, and <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/advanced/multi-region-recovery.md#trail-notes-exercise">practice regional failover</a>.</p>
+<p><strong>Continue learning</strong> · <a href="../../chapters/10-caching-patterns/index.html#trail-notes-exercise">Cache popular guides</a>, <a href="../../chapters/17-message-queues/index.html#trail-notes-exercise">queue background jobs</a>, and <a href="../../guides/multi-region-recovery.html#trail-notes-exercise">practice regional failover</a>.</p>
 <hr />
 <h2 id="technical-reference">Technical reference</h2>
 <p>Explore Layer 4 and Layer 7 routing, health checks, balancing algorithms, and failure modes.</p>
@@ -143,14 +142,14 @@
 <h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
 <p>Suppose your e-commerce application runs on <strong>one server</strong>:</p>
 <ul>
-<li>A single high-end server can process roughly <strong>$1,000\text{ requests per second (RPS)}$</strong>.</li>
-<li>On Black Friday, a flash sale begins and <strong>$15,000\text{ RPS}$</strong> hit your server.</li>
+<li>A single high-end server can process roughly <strong><span class="math-inline">1,000 requests per second (RPS)</span></strong>.</li>
+<li>On Black Friday, a flash sale begins and <strong><span class="math-inline">15,000 RPS</span></strong> hit your server.</li>
 <li>The operating system's connection queue overflows, memory runs out, the kernel starts killing processes (<code>OOM Killer</code>), and your entire website goes completely black for all users.</li>
-<li>Furthermore, if a maintenance engineer reboots that single server, you have <strong>$100%$ downtime</strong>.</li>
+<li>Furthermore, if a maintenance engineer reboots that single server, you have <strong><span class="math-inline">100%</span> downtime</strong>.</li>
 </ul>
 <p>A load balancer solves this by:</p>
 <ol>
-<li><strong>Distributing load:</strong> Spreading $15,000\text{ RPS}$ across 20 servers so each handles a comfortable $750\text{ RPS}$.</li>
+<li><strong>Distributing load:</strong> Spreading <span class="math-inline">15,000 RPS</span> across 20 servers so each handles a comfortable <span class="math-inline">750 RPS</span>.</li>
 <li><strong>Zero-downtime rolling deploys:</strong> You can take down 2 servers at a time for upgrades while the remaining 18 keep serving customers.</li>
 <li><strong>High availability &amp; self-healing:</strong> When a server crashes, the load balancer's health probe detects the failure within seconds and stops routing traffic to it.</li>
 </ol>
@@ -159,7 +158,7 @@
 <p align="center">
   <img src="./assets/load_balancer.gif" alt="Requests move from the client through the load balancer to Server 1 or 2 while failed Server 3 is skipped" width="100%" />
 </p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Clients[&quot;Inbound Traffic&quot;]
         C1[&quot;📱 Mobile App&quot;]
         C2[&quot;💻 Desktop Browser&quot;]
@@ -180,8 +179,7 @@
 
     LB --&gt;|1. Route request| S1
     LB --&gt;|2. Route request| S2
-    LB -.-&gt;|Bypassed: Ejected from active pool| S3
-</code></pre>
+    LB -.-&gt;|Bypassed: Ejected from active pool| S3</pre></figure>
 <ol>
 <li>Clients send requests to the public IP of the Load Balancer.</li>
 <li>The Load Balancer executes a balancing algorithm (e.g. Round-Robin or Least Connections).</li>
@@ -193,15 +191,15 @@
 <p>Let's calculate how many backend servers you need to survive peak load:</p>
 <h3 id="1-capacity-sizing-math">1. Capacity Sizing Math</h3>
 <ul>
-<li><strong>Peak Traffic:</strong> $20,000\text{ requests/sec (RPS)}$.</li>
-<li><strong>Server Benchmark:</strong> 1 standard compute instance (4 vCPU, 16 GB RAM) comfortably handles <strong>$800\text{ RPS}$</strong> at $60%$ CPU utilization (leaving safety margin for CPU spikes).
-$$\text{Base Servers Needed} = \frac{20,000\text{ RPS}}{800\text{ RPS/server}} = 25\text{ servers}$$</li>
+<li><strong>Peak Traffic:</strong> <span class="math-inline">20,000 requests/sec (RPS)</span>.</li>
+<li><strong>Server Benchmark:</strong> 1 standard compute instance (4 vCPU, 16 GB RAM) comfortably handles <strong><span class="math-inline">800 RPS</span></strong> at <span class="math-inline">60%</span> CPU utilization (leaving safety margin for CPU spikes).</li>
 </ul>
-<h3 id="2-n2-redundancy-fault-tolerance">2. $N+2$ Redundancy (Fault Tolerance)</h3>
+<div class="math-block">Base Servers Needed = (20,000 RPS) / (800 RPS/server) = 25 servers</div>
+<h3 id="2-span-classmath-inlinen2span-redundancy-fault-tolerance">2. <span class="math-inline">N+2</span> Redundancy (Fault Tolerance)</h3>
 <ul>
-<li>If 2 servers experience sudden hardware failure or restart during peak traffic, you still need full capacity:
-$$\text{Total Production Pool} = 25 + 2 = 27\text{ servers}$$</li>
+<li>If 2 servers experience sudden hardware failure or restart during peak traffic, you still need full capacity:</li>
 </ul>
+<div class="math-block">Total Production Pool = 25 + 2 = 27 servers</div>
 <hr />
 <h2 id="how-it-works-deep-dive-into-load-balancing">⚙️ How it works: Deep Dive into Load Balancing</h2>
 <h3 id="1-layer-4-vs-layer-7-load-balancing">1. Layer 4 vs Layer 7 Load Balancing</h3>
@@ -222,7 +220,7 @@ $$\text{Total Production Pool} = 25 + 2 = 27\text{ servers}$$</li>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Latency &amp; Overhead</strong></td>
-<td style="text-align:left">Ultra-low latency ($&lt; 0.1\text{ ms}$), millions of RPS</td>
+<td style="text-align:left">Ultra-low latency (<span class="math-inline">&lt; 0.1 ms</span>), millions of RPS</td>
 <td style="text-align:left">Slightly higher CPU overhead (decrypts TLS, parses HTTP)</td>
 </tr>
 <tr>
@@ -233,7 +231,7 @@ $$\text{Total Production Pool} = 25 + 2 = 27\text{ servers}$$</li>
 <tr>
 <td style="text-align:left"><strong>Routing Intelligence</strong></td>
 <td style="text-align:left">Packet forwarding only (cannot route by URL path)</td>
-<td style="text-align:left">Smart routing: <code>/api/users</code> $\to$ User Svc, <code>/video</code> $\to$ Media Svc</td>
+<td style="text-align:left">Smart routing: <code>/api/users</code> <span class="math-inline">→</span> User Svc, <code>/video</code> <span class="math-inline">→</span> Media Svc</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Session Tracking</strong></td>
@@ -250,14 +248,14 @@ $$\text{Total Production Pool} = 25 + 2 = 27\text{ servers}$$</li>
 <hr />
 <h3 id="2-the-5-core-balancing-algorithms">2. The 5 Core Balancing Algorithms</h3>
 <ol>
-<li><strong>Round-Robin:</strong> Requests are distributed sequentially: Server 1 $\to$ Server 2 $\to$ Server 3 $\to$ Server 1. Simple and stateless, but assumes all servers have identical hardware and all requests take identical time to process.</li>
+<li><strong>Round-Robin:</strong> Requests are distributed sequentially: Server 1 <span class="math-inline">→</span> Server 2 <span class="math-inline">→</span> Server 3 <span class="math-inline">→</span> Server 1. Simple and stateless, but assumes all servers have identical hardware and all requests take identical time to process.</li>
 <li><strong>Weighted Round-Robin:</strong> Servers are assigned capacity weights (e.g. Server A has 8 vCPUs, Server B has 4 vCPUs). Server A gets twice as many requests as Server B.</li>
 <li><strong>Least Connections:</strong> Forwards the new request to whichever server currently has the <strong>fewest active open TCP/HTTP connections</strong>. Ideal for workloads with high processing time variance (e.g., image processing or complex database reports).</li>
-<li><strong>Weighted Least Connections:</strong> Calculates normalized score:
-$$\text{Score} = \frac{\text{Active Connections}}{\text{Server Weight}}$$
-Selects the server with the lowest score.</li>
-<li><strong>IP Hash:</strong> Computes <code>hash(client_ip) % num_servers</code>. Guarantees that requests from the same user IP consistently land on the same server (session affinity).</li>
+<li><strong>Weighted Least Connections:</strong> Calculates normalized score:</li>
 </ol>
+<div class="math-block">Score = (Active Connections) / (Server Weight)</div>
+<p>Selects the server with the lowest score.
+5. <strong>IP Hash:</strong> Computes <code>hash(client_ip) % num_servers</code>. Guarantees that requests from the same user IP consistently land on the same server (session affinity).</p>
 <hr />
 <h3 id="3-active-vs-passive-health-checks">3. Active vs Passive Health Checks</h3>
 <ul>
@@ -268,7 +266,7 @@ Selects the server with the lowest score.</li>
 <h3 id="4-high-availability-for-the-load-balancer-itself">4. High Availability for the Load Balancer Itself</h3>
 <p><em>&quot;If the load balancer distributes traffic so servers don't fail, what happens when the load balancer itself crashes?&quot;</em></p>
 <p>In production, you never run a single load balancer machine. You run a <strong>High Availability Pair</strong>:</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     DNS[&quot;🌐 DNS Anycast (IP: 198.51.100.1)&quot;]
 
     subgraph LBCluster[&quot;Load Balancer HA Pair&quot;]
@@ -278,10 +276,9 @@ Selects the server with the lowest score.</li>
     end
 
     DNS --&gt; LB1
-    LB1 -.-&gt;|&quot;If Primary crashes, Secondary claims Virtual IP in &lt; 1s&quot;| LB2
-</code></pre>
+    LB1 -.-&gt;|&quot;If Primary crashes, Secondary claims Virtual IP in &lt; 1s&quot;| LB2</pre></figure>
 <ol>
-<li><strong>VRRP (Virtual Router Redundancy Protocol) / Keepalived:</strong> An Active and a Standby load balancer share a single <strong>Virtual IP (VIP)</strong>. The Standby listens to a continuous heartbeat from the Primary. If the Primary misses 3 heartbeats ($&lt; 1\text{ second}$), the Standby instantly assumes ownership of the Virtual IP via ARP broadcast.</li>
+<li><strong>VRRP (Virtual Router Redundancy Protocol) / Keepalived:</strong> An Active and a Standby load balancer share a single <strong>Virtual IP (VIP)</strong>. The Standby listens to a continuous heartbeat from the Primary. If the Primary misses 3 heartbeats (<span class="math-inline">&lt; 1 second</span>), the Standby instantly assumes ownership of the Virtual IP via ARP broadcast.</li>
 <li><strong>DNS Anycast:</strong> Global cloud providers advertise the load balancer IP from dozens of edge locations simultaneously using BGP.</li>
 </ol>
 <hr />
@@ -302,7 +299,7 @@ Selects the server with the lowest score.</li>
 <td style="text-align:center">Ultra Low</td>
 <td style="text-align:center">❌ No</td>
 <td style="text-align:center">❌ Poorly</td>
-<td style="text-align:left">Homogeneous microservices with fast ($&lt; 20\text{ms}$) requests</td>
+<td style="text-align:left">Homogeneous microservices with fast (<span class="math-inline">&lt; 20ms</span>) requests</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Weighted Round-Robin</strong></td>
@@ -341,7 +338,7 @@ Selects the server with the lowest score.</li>
 <p><strong>Relying on &quot;Sticky Sessions&quot; (Session Affinity) instead of stateless architecture:</strong></p>
 <ul>
 <li><em>Why it hurts:</em> The load balancer forces user A to always hit Server 1. If 5 power users land on Server 1, Server 1 gets overloaded while others sit idle. Worse: when Server 1 is rebooted during deployment, all those users are abruptly logged out!</li>
-<li><em>The Fix:</em> <strong>Make servers completely stateless</strong>. Store session tokens in a distributed in-memory cache like Redis (<a href="../10-caching-patterns/index.html">module 10</a>) or use signed JWTs. Any server can then handle any request.</li>
+<li><em>The Fix:</em> <strong>Make servers completely stateless</strong>. Store session tokens in a distributed in-memory cache like Redis (<a href="../../chapters/10-caching-patterns/index.html">module 10</a>) or use signed JWTs. Any server can then handle any request.</li>
 </ul>
 </li>
 <li>
@@ -354,7 +351,7 @@ Selects the server with the lowest score.</li>
 <li>
 <p><strong>Not terminating TLS at the Load Balancer (SSL Offloading):</strong></p>
 <ul>
-<li><em>Why it hurts:</em> If every individual backend microservice must negotiate TLS handshakes and decrypt RSA/ECDSA keys, you waste up to $25%$ of your application server CPU capacity on cryptography.</li>
+<li><em>Why it hurts:</em> If every individual backend microservice must negotiate TLS handshakes and decrypt RSA/ECDSA keys, you waste up to <span class="math-inline">25%</span> of your application server CPU capacity on cryptography.</li>
 <li><em>The Fix:</em> Terminate TLS at the load balancer or API gateway, and communicate with backend servers over high-speed private virtual networks (VPC).</li>
 </ul>
 </li>
@@ -412,7 +409,7 @@ python demo.py
 <ul>
 <li>Two load balancers run in parallel sharing a floating <strong>Virtual IP (VIP)</strong> via <strong>VRRP (Virtual Router Redundancy Protocol)</strong> or <strong>Keepalived</strong>.</li>
 <li>The Primary actively processes all traffic while broadcasting heartbeats to the Secondary.</li>
-<li>If the Primary crashes, the Secondary detects missing heartbeats and claims the Virtual IP via ARP spoofing in $&lt; 500\text{ ms}$, taking over traffic with zero DNS changes.</li>
+<li>If the Primary crashes, the Secondary detects missing heartbeats and claims the Virtual IP via ARP spoofing in <span class="math-inline">&lt; 500 ms</span>, taking over traffic with zero DNS changes.</li>
 </ul>
 </li>
 <li><strong>DNS Anycast &amp; Equal-Cost Multi-Path (Global Redundancy):</strong>
@@ -432,7 +429,7 @@ python demo.py
 <ol>
 <li><strong>Traffic Hot-Spotting:</strong> If a few high-activity enterprise users are pinned to Server 1, Server 1 CPU is maxed out while Servers 2, 3, and 4 sit idle.</li>
 <li><strong>Broken Autoscaling &amp; Deployments:</strong> When you scale down or perform a rolling deployment by rebooting a server, all users pinned to that server have their sessions abruptly wiped out and are forcibly logged out.</li>
-<li><strong>The Solution:</strong> Keep servers <strong>$100%$ stateless</strong>. Store session data in a shared distributed cache (Redis / Memcached) or encode identity in cryptographically signed <strong>JSON Web Tokens (JWT)</strong>. Any server can now handle any request from any client at any moment.</li>
+<li><strong>The Solution:</strong> Keep servers <strong><span class="math-inline">100%</span> stateless</strong>. Store session data in a shared distributed cache (Redis / Memcached) or encode identity in cryptographically signed <strong>JSON Web Tokens (JWT)</strong>. Any server can now handle any request from any client at any moment.</li>
 </ol>
 </details>
 <hr />
@@ -440,20 +437,20 @@ python demo.py
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <ul>
-<li><strong>Health Check Mechanism:</strong> The load balancer sends an HTTP request (<code>GET /healthz</code>) every $T$ seconds. A server must respond with <code>200 OK</code> within a timeout window (e.g. 2 seconds). If it fails $K$ consecutive probes (e.g. 3 fails), it is ejected from the routing table (<strong>unhealthy threshold</strong>). When it recovers and passes $M$ consecutive probes (e.g. 2 passes), it is re-added (<strong>healthy threshold</strong>).</li>
+<li><strong>Health Check Mechanism:</strong> The load balancer sends an HTTP request (<code>GET /healthz</code>) every <span class="math-inline">T</span> seconds. A server must respond with <code>200 OK</code> within a timeout window (e.g. 2 seconds). If it fails <span class="math-inline">K</span> consecutive probes (e.g. 3 fails), it is ejected from the routing table (<strong>unhealthy threshold</strong>). When it recovers and passes <span class="math-inline">M</span> consecutive probes (e.g. 2 passes), it is re-added (<strong>healthy threshold</strong>).</li>
 <li><strong>The Health Check Stampede (Cascading Failure):</strong>
 <ul>
 <li>If the health check endpoint runs a live database query (<code>SELECT 1 FROM orders</code>), and the database experiences high load, database queries slow down.</li>
 <li>Health checks begin timing out across the cluster.</li>
 <li>The load balancer mistakenly assumes the servers are dead and starts ejecting them.</li>
-<li>The remaining surviving servers receive $100%$ of the user traffic, which overloads their CPU and causes their health checks to time out too.</li>
+<li>The remaining surviving servers receive <span class="math-inline">100%</span> of the user traffic, which overloads their CPU and causes their health checks to time out too.</li>
 <li>Within 60 seconds, <strong>every single server in the cluster is ejected</strong>, resulting in a complete global outage!</li>
 </ul>
 </li>
 <li><strong>Mitigation:</strong>
 <ul>
 <li>Health check endpoints must be lightweight and decoupled from heavy database queries.</li>
-<li>Implement a <strong>minimum healthy threshold</strong> (e.g. &quot;Never eject more than $50%$ of the server fleet, even if all health checks fail&quot;) to prevent full cluster shutdown.</li>
+<li>Implement a <strong>minimum healthy threshold</strong> (e.g. &quot;Never eject more than <span class="math-inline">50%</span> of the server fleet, even if all health checks fail&quot;) to prevent full cluster shutdown.</li>
 </ul>
 </li>
 </ul>
@@ -494,14 +491,27 @@ You should use <strong>Least Connections</strong> instead. Least Connections ins
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: The TCP and HTTP connections terminated by the load balancer.</li>
-<li><a href="../02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How DNS routes traffic across multiple load balancer IPs.</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: How API gateways extend load balancers with authentication and rate limiting.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>: The TCP and HTTP connections terminated by the load balancer.</li>
+<li><a href="../../chapters/02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How DNS routes traffic across multiple load balancer IPs.</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: How API gateways extend load balancers with authentication and rate limiting.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

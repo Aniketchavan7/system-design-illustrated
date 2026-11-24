@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="12---content-delivery-networks-cdns--edge-caching">12 - Content Delivery Networks (CDNs) &amp; Edge Caching</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="12---content-delivery-networks-cdns--edge-caching">12 - Content Delivery Networks (CDNs) &amp; Edge Caching</h1>
 <blockquote>
-<p><strong>Executive Summary:</strong> The speed of light in vacuum is $300,000\text{ km/s}$, but in optical fiber it is roughly $200,000\text{ km/s}$. A data packet traveling from Tokyo to an origin server in Virginia and back spans $\sim 21,600\text{ km}$, imposing an unavoidable physical minimum round-trip time (RTT) of $\approx 108\text{ ms}$—before any router queueing, TLS handshakes, or server processing. Content Delivery Networks (CDNs) solve this fundamental physics limit by deploying hundreds of Points of Presence (PoPs) worldwide, caching static and semi-dynamic content within milliseconds of end users via Anycast BGP routing.</p>
+<p><strong>Executive Summary:</strong> The speed of light in vacuum is <span class="math-inline">300,000 km/s</span>, but in optical fiber it is roughly <span class="math-inline">200,000 km/s</span>. A data packet traveling from Tokyo to an origin server in Virginia and back spans <span class="math-inline">~ 21,600 km</span>, imposing an unavoidable physical minimum round-trip time (RTT) of <span class="math-inline">≈ 108 ms</span>—before any router queueing, TLS handshakes, or server processing. Content Delivery Networks (CDNs) solve this fundamental physics limit by deploying hundreds of Points of Presence (PoPs) worldwide, caching static and semi-dynamic content within milliseconds of end users via Anycast BGP routing.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../12-content-delivery-networks/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/12-content-delivery-networks/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP 3-way handshakes, TLS handshakes, RTT, and packet loss effects.</li>
-<li><a href="../02-domain-name-system/index.html">02 - Domain Name System (DNS)</a>: CNAME records, Anycast routing, and GeoDNS resolution.</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside and read-through caching fundamentals.</li>
-<li><a href="../11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: TTLs, cache stampedes, and invalidation strategies.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP 3-way handshakes, TLS handshakes, RTT, and packet loss effects.</li>
+<li><a href="../../chapters/02-domain-name-system/index.html">02 - Domain Name System (DNS)</a>: CNAME records, Anycast routing, and GeoDNS resolution.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside and read-through caching fundamentals.</li>
+<li><a href="../../chapters/11-cache-eviction-and-invalidation/index.html">11 - Cache Eviction &amp; Invalidation</a>: TTLs, cache stampedes, and invalidation strategies.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -103,15 +103,15 @@
 <h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
 <h3 id="without-a-cdn">Without a CDN</h3>
 <ol>
-<li><strong>The Physics Problem (High Latency)</strong>: A user in Sydney, Australia accessing a website hosted in Frankfurt, Germany experiences $\sim 300\text{ ms}$ RTT. Establishing a TCP connection and TLS 1.3 session requires at least 2 round-trips ($600\text{ ms}$), followed by multiple round-trips for HTML, CSS, JavaScript, and fonts before the screen renders ($2,000\text{–}4,000\text{ ms}$ total page load).</li>
-<li><strong>Origin Bandwidth Exhaustion &amp; Costs</strong>: A single viral 5 MB video watched by 2,000,000 users consumes $10\text{ Terabytes}$ of bandwidth directly from the origin server, risking network saturation and massive cloud egress bills.</li>
+<li><strong>The Physics Problem (High Latency)</strong>: A user in Sydney, Australia accessing a website hosted in Frankfurt, Germany experiences <span class="math-inline">~ 300 ms</span> RTT. Establishing a TCP connection and TLS 1.3 session requires at least 2 round-trips (<span class="math-inline">600 ms</span>), followed by multiple round-trips for HTML, CSS, JavaScript, and fonts before the screen renders (<span class="math-inline">2,000–4,000 ms</span> total page load).</li>
+<li><strong>Origin Bandwidth Exhaustion &amp; Costs</strong>: A single viral 5 MB video watched by 2,000,000 users consumes <span class="math-inline">10 Terabytes</span> of bandwidth directly from the origin server, risking network saturation and massive cloud egress bills.</li>
 <li><strong>DDoS Vulnerability</strong>: Volumetric Layer 7 DDoS attacks (e.g., 500,000 HTTP requests/sec) hit the origin servers directly, crashing application databases and reverse proxies.</li>
 </ol>
 <h3 id="with-a-cdn">With a CDN</h3>
 <ol>
 <li><strong>Sub-10ms First Byte (TTFB)</strong>: Edge PoPs terminate TCP and TLS connections within 5–15 ms of the client's local ISP. Cached assets are served directly from edge NVMe drives.</li>
 <li><strong>95%+ Origin Offload</strong>: The origin server only serves the asset once per edge PoP. Subsequent millions of users are served entirely by the CDN.</li>
-<li><strong>Massive Global DDoS Absorption</strong>: Modern CDN networks (Cloudflare, Akamai, CloudFront) have $&gt;100\text{–}300\text{ Tbps}$ of global edge capacity, absorbing volumetric attacks at the edge without origin degradation.</li>
+<li><strong>Massive Global DDoS Absorption</strong>: Modern CDN networks (Cloudflare, Akamai, CloudFront) have <span class="math-inline">&gt;100–300 Tbps</span> of global edge capacity, absorbing volumetric attacks at the edge without origin degradation.</li>
 </ol>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
@@ -120,7 +120,7 @@
 <p><img src="./assets/cdn_edge.gif" alt="CDN Edge Caching Animation" /></p>
 <hr />
 <h3 id="global-request-flow-anycast-bgp-to-origin-shield">Global Request Flow: Anycast BGP to Origin Shield</h3>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor User as 👤 Tokyo User
     participant DNS as 🌐 Anycast DNS
@@ -128,7 +128,7 @@
     participant Shield as 🛡️ Origin Shield (US-West)
     participant Origin as 🏢 Origin Server (US-East)
 
-    User-&gt;&gt;DNS: Resolve 'example.com'
+    User-&gt;&gt;DNS: Resolve &#x27;example.com&#x27;
     DNS--&gt;&gt;User: Returns Anycast IP (routes to Tokyo PoP)
     
     rect rgb(22, 27, 34)
@@ -145,56 +145,51 @@
     Note over User, Edge: Edge Cache HIT Scenario (Next 100,000 Users)
     User-&gt;&gt;Edge: GET /static/bundle.js (3ms)
     Edge--&gt;&gt;User: 200 OK (Age: 42, X-Cache: HIT) [0 Origin Traffic!]
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's calculate the latency and financial impact of deploying a CDN for an international SaaS application:</p>
 <h3 id="latency-math-tokyo-user-to-us-east-origin">Latency Math: Tokyo User to US-East Origin</h3>
 <ul>
-<li>
-<p>Physical straight-line distance: $\approx 10,800\text{ km}$.</p>
-</li>
-<li>
-<p>Cable distance with routing zig-zags: $\approx 13,000\text{ km}$.</p>
-</li>
-<li>
-<p>Fiber speed of light ($c_{\text{glass}} = 200,000\text{ km/s}$):
-$$\text{One-way propagation delay} = \frac{13,000}{200,000} \approx 65\text{ ms} \implies \text{RTT} \approx 130\text{ ms}$$</p>
-</li>
+<li>Physical straight-line distance: <span class="math-inline">≈ 10,800 km</span>.</li>
+<li>Cable distance with routing zig-zags: <span class="math-inline">≈ 13,000 km</span>.</li>
+<li>Fiber speed of light (<span class="math-inline">c<sub>glass</sub> = 200,000 km/s</span>):</li>
+</ul>
+<div class="math-block">One-way propagation delay = (13,000) / (200,000) ≈ 65 ms ⇒ RTT ≈ 130 ms</div>
+<ul>
 <li>
 <p><strong>Without CDN</strong>:</p>
 <ul>
-<li>DNS resolution: $130\text{ ms}$</li>
-<li>TCP Handshake (1 RTT): $130\text{ ms}$</li>
-<li>TLS 1.3 Handshake (1 RTT): $130\text{ ms}$</li>
-<li>HTTP GET + Response: $130\text{ ms} + 20\text{ ms}$ (server processing)</li>
-<li><strong>Total Time to First Byte (TTFB)</strong>: $540\text{ ms}$!</li>
+<li>DNS resolution: <span class="math-inline">130 ms</span></li>
+<li>TCP Handshake (1 RTT): <span class="math-inline">130 ms</span></li>
+<li>TLS 1.3 Handshake (1 RTT): <span class="math-inline">130 ms</span></li>
+<li>HTTP GET + Response: <span class="math-inline">130 ms + 20 ms</span> (server processing)</li>
+<li><strong>Total Time to First Byte (TTFB)</strong>: <span class="math-inline">540 ms</span>!</li>
 </ul>
 </li>
 <li>
 <p><strong>With CDN (Tokyo Edge PoP 15 km away)</strong>:</p>
 <ul>
-<li>Local ISP RTT: $3\text{ ms}$</li>
-<li>TCP + TLS 1.3 terminated at Tokyo Edge: $6\text{ ms}$</li>
-<li>Edge Cache HIT: $1\text{ ms}$</li>
-<li><strong>Total Time to First Byte (TTFB)</strong>: <strong>$7\text{ ms}$ (98.7% latency reduction!)</strong></li>
+<li>Local ISP RTT: <span class="math-inline">3 ms</span></li>
+<li>TCP + TLS 1.3 terminated at Tokyo Edge: <span class="math-inline">6 ms</span></li>
+<li>Edge Cache HIT: <span class="math-inline">1 ms</span></li>
+<li><strong>Total Time to First Byte (TTFB)</strong>: <strong><span class="math-inline">7 ms</span> (98.7% latency reduction!)</strong></li>
 </ul>
 </li>
 </ul>
 <h3 id="cost-math-aws-egress-savings">Cost Math: AWS Egress Savings</h3>
 <ul>
-<li>Monthly Static Traffic: $100\text{ Terabytes}$ ($100,000\text{ GB}$).</li>
+<li>Monthly Static Traffic: <span class="math-inline">100 Terabytes</span> (<span class="math-inline">100,000 GB</span>).</li>
 <li><strong>Direct AWS EC2 Egress Cost</strong>:
 <ul>
-<li>First 10 TB @ $0.085/GB = $850</li>
-<li>Next 90 TB @ $0.070/GB = $6,300</li>
+<li>First 10 TB @ &lt;span class=&quot;math-inline&quot;&gt;0.085/GB = &lt;/span&gt;850</li>
+<li>Next 90 TB @ &lt;span class=&quot;math-inline&quot;&gt;0.070/GB = &lt;/span&gt;6,300</li>
 <li>Total Monthly Cloud Egress: <strong>$7,150 / month</strong>.</li>
 </ul>
 </li>
 <li><strong>With 96% CDN Edge Offload</strong>:
 <ul>
-<li>Origin egress drops from $100\text{ TB}$ to $4\text{ TB}$.</li>
+<li>Origin egress drops from <span class="math-inline">100 TB</span> to <span class="math-inline">4 TB</span>.</li>
 <li>Cloudfront / Cloudflare CDN egress: ~$1,200 / month.</li>
 <li><strong>Net Savings</strong>: <strong>~$5,600 / month saved</strong> while accelerating user page loads by 10x.</li>
 </ul>
@@ -244,7 +239,7 @@ $$\text{One-way propagation delay} = \frac{13,000}{200,000} \approx 65\text{ ms}
 <tr>
 <td style="text-align:left"><code>max-age=N</code></td>
 <td style="text-align:left">Browser &amp; CDN</td>
-<td style="text-align:left">Asset is considered fresh for $N$ seconds.</td>
+<td style="text-align:left">Asset is considered fresh for <span class="math-inline">N</span> seconds.</td>
 </tr>
 <tr>
 <td style="text-align:left"><code>s-maxage=N</code></td>
@@ -299,7 +294,7 @@ $$\text{One-way propagation delay} = \frac{13,000}{200,000} \approx 65\text{ ms}
 <ul>
 <li>Origin attaches header: <code>Surrogate-Key: product-123 e-commerce-catalog</code>.</li>
 <li>When product 123 changes, backend sends API request: <code>PURGE /tags/product-123</code>.</li>
-<li>CDN instantly invalidates all associated cached URLs across all global PoPs in $&lt;150\text{ ms}$.</li>
+<li>CDN instantly invalidates all associated cached URLs across all global PoPs in <span class="math-inline">&lt;150 ms</span>.</li>
 </ul>
 </li>
 </ol>
@@ -377,7 +372,7 @@ $$\text{One-way propagation delay} = \frac{13,000}{200,000} \approx 65\text{ ms}
 <hr />
 <h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
 <ul>
-<li><strong>Cloudflare</strong>: Global network of 330+ cities running Anycast BGP. Handles $\approx 20%$ of all Internet traffic with Workers running V8 isolates directly at edge PoPs.</li>
+<li><strong>Cloudflare</strong>: Global network of 330+ cities running Anycast BGP. Handles <span class="math-inline">≈ 20%</span> of all Internet traffic with Workers running V8 isolates directly at edge PoPs.</li>
 <li><strong>Fastly</strong>: Built on Varnish Software. Known for sub-150ms instantaneous global cache purges using Surrogate-Keys and Edge Dictionary APIs.</li>
 <li><strong>AWS CloudFront</strong>: Deeply integrated with S3 and AWS Shield. Uses Regional Edge Caches (Origin Shielding) to minimize egress fees from AWS regions.</li>
 <li><strong>Netflix Open Connect</strong>: Netflix's proprietary CDN, placing custom hardware storage appliances (OCAs) directly inside local ISP networks worldwide to stream 4K video with zero backbone transit costs.</li>
@@ -476,15 +471,28 @@ It indicates that the client or CDN's cached copy is still fresh after checking 
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP, TLS, and packet mechanics.</li>
-<li><a href="../02-domain-name-system/index.html">02 - Domain Name System</a>: Anycast DNS and geographic resolution.</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Application-level caching patterns.</li>
-<li><a href="../24-system-design-video-streaming/index.html">24 - System Design: Video Streaming</a>: Leveraging global CDN edge networks for petabyte-scale video delivery.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP, TLS, and packet mechanics.</li>
+<li><a href="../../chapters/02-domain-name-system/index.html">02 - Domain Name System</a>: Anycast DNS and geographic resolution.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Application-level caching patterns.</li>
+<li><a href="../../chapters/24-system-design-video-streaming/index.html">24 - System Design: Video Streaming</a>: Leveraging global CDN edge networks for petabyte-scale video delivery.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

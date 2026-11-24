@@ -44,6 +44,10 @@ A real-time search autocomplete system operates under extreme performance constr
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/typeahead_trie.svg" alt="Sub-50ms Search Autocomplete & Trie Top-K Pipeline" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph ClientPath["1. Real-Time Query Path (Sub-20ms)"]

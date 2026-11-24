@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-43-system-design--distributed-job--task-scheduler">Module 43: System Design — Distributed Job &amp; Task Scheduler</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-43-system-design--distributed-job--task-scheduler">Module 43: System Design — Distributed Job &amp; Task Scheduler</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a large-scale Distributed Job &amp; Task Scheduler (Google Chronos, Netflix Conductor, Quartz, Celery), covering distributed cron coordination, delayed execution engines (Hashed Time Wheels &amp; Redis ZSETs), worker failure failover, and idempotent task execution.</p>
 </blockquote>
@@ -30,10 +30,10 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling distributed job schedulers, review these core modules:</p>
 <ul>
-<li><a href="../15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a> (Raft, leader coordination, split-brain avoidance)</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (Delayed queues, dead-letter queues, worker groups)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Heartbeats, failure detection, exponential retry)</li>
-<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent task execution)</li>
+<li><a href="../../chapters/15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a> (Raft, leader coordination, split-brain avoidance)</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (Delayed queues, dead-letter queues, worker groups)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Heartbeats, failure detection, exponential retry)</li>
+<li><a href="../../chapters/32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent task execution)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -55,7 +55,7 @@
 <tr>
 <td style="text-align:left"><strong>Rotating Clock Gear (60 Second Tick)</strong></td>
 <td style="text-align:left">Hashed Timing Wheel / Tick Loop</td>
-<td style="text-align:left">Constant-time $O(1)$ timer wheel advancing execution pointers.</td>
+<td style="text-align:left">Constant-time <span class="math-inline">O(1)</span> timer wheel advancing execution pointers.</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Scheduled Work Order Envelope</strong></td>
@@ -94,7 +94,10 @@
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/distributed_cron.svg" alt="Distributed Job Scheduler & Fault-Tolerant Lease Locks" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph ControlPlane[&quot;1. Scheduler Coordination Plane (High Availability)&quot;]
         Leader[&quot;Scheduler Leader (Elected via Raft/Etcd)&quot;]
         Follower[&quot;Scheduler Standby Replica&quot;]
@@ -120,28 +123,27 @@
         
         Worker1 --&gt;|&quot;Send Heartbeat &amp; Result&quot;| Leader
         Worker2 --&gt;|&quot;Send Heartbeat &amp; Result&quot;| Leader
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
 <p>Consider a scheduler managing <strong>100 Million Jobs Daily</strong> (e.g., Uber trip receipts, payment retries, daily summaries):</p>
 <ul>
 <li><strong>Throughput Sizing</strong>:
 <ul>
-<li>$100\text{M} / 86,400 \approx 1,160\text{ jobs scheduled &amp; executed/second}$.</li>
-<li>Peak dispatch bursts (e.g., Top of the Hour at midnight): <strong>$25,000\text{ jobs/second}$</strong>.</li>
+<li><span class="math-inline">100M / 86,400 ≈ 1,160 jobs scheduled &amp; executed/second</span>.</li>
+<li>Peak dispatch bursts (e.g., Top of the Hour at midnight): <strong><span class="math-inline">25,000 jobs/second</span></strong>.</li>
 </ul>
 </li>
 <li><strong>Job Record Sizing</strong>:
 <ul>
-<li>Average job record: Job ID (8 bytes) + Next Run Timestamp (8 bytes) + Recurrence Cron (16 bytes) + Target Handler URI (64 bytes) + Payload JSON (500 bytes) $\approx 600\text{ bytes}$.</li>
-<li>Active scheduled jobs (10 million in queue): $10\text{M} \times 600\text{ bytes} \approx 6.0\text{ Gigabytes}$.</li>
+<li>Average job record: Job ID (8 bytes) + Next Run Timestamp (8 bytes) + Recurrence Cron (16 bytes) + Target Handler URI (64 bytes) + Payload JSON (500 bytes) <span class="math-inline">≈ 600 bytes</span>.</li>
+<li>Active scheduled jobs (10 million in queue): <span class="math-inline">10M × 600 bytes ≈ 6.0 Gigabytes</span>.</li>
 </ul>
 </li>
 <li><strong>Redis Sorted Set Memory</strong>:
 <ul>
 <li>Store scheduled execution timestamps as scores: <code>ZADD delayed_jobs &lt;timestamp_ms&gt; &lt;job_id&gt;</code>.</li>
-<li>10 million entries in Redis ZSET: $10\text{M} \times 64\text{ bytes} \approx 640\text{ Megabytes}$ of RAM!</li>
+<li>10 million entries in Redis ZSET: <span class="math-inline">10M × 64 bytes ≈ 640 Megabytes</span> of RAM!</li>
 <li>Redis can query and pop due jobs (<code>ZRANGEBYSCORE delayed_jobs 0 &lt;now_ms&gt;</code>) in sub-millisecond execution times.</li>
 </ul>
 </li>
@@ -160,9 +162,9 @@
 <li><strong>Hierarchical Hashed Timing Wheel (George Varghese &amp; Tony Lauck Algorithm)</strong>:
 <ul>
 <li>An array of circular buckets representing time units (e.g., a 60-slot second wheel, a 60-slot minute wheel, a 24-slot hour wheel).</li>
-<li>A tick pointer advances every second ($O(1)$ time complexity).</li>
+<li>A tick pointer advances every second (<span class="math-inline">O(1)</span> time complexity).</li>
 <li>When the pointer lands on slot 14, all tasks attached to slot 14's linked list are executed immediately!</li>
-<li>Incurs <strong>zero sort overhead</strong> ($O(1)$ insertion and $O(1)$ retrieval).</li>
+<li>Incurs <strong>zero sort overhead</strong> (<span class="math-inline">O(1)</span> insertion and <span class="math-inline">O(1)</span> retrieval).</li>
 </ul>
 </li>
 </ul>
@@ -201,9 +203,9 @@
 </tr>
 <tr>
 <td style="text-align:left"><strong>Retrieval Complexity</strong></td>
-<td style="text-align:left">$O(N)$ scan of crontab</td>
-<td style="text-align:left">$O(\log N + M)$ sorted set range</td>
-<td style="text-align:left">Constant $O(1)$ circular bucket tick</td>
+<td style="text-align:left"><span class="math-inline">O(N)</span> scan of crontab</td>
+<td style="text-align:left"><span class="math-inline">O(\log N + M)</span> sorted set range</td>
+<td style="text-align:left">Constant <span class="math-inline">O(1)</span> circular bucket tick</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Fault Tolerance</strong></td>
@@ -248,12 +250,12 @@
 <li>The worker executing the job uses an atomic database lock or Redis idempotency check (<code>SETNX job_exec_id &quot;LOCKED&quot;</code>).</li>
 <li>If a network blip causes the scheduler to re-dispatch the job to a second worker, the second worker recognizes the execution ID and returns immediately without repeating side-effects.</li>
 </ol>
-<h3 id="q2-how-does-a-hashed-timing-wheel-achieve-o1-time-complexity-for-scheduling-delayed-tasks">Q2: How does a Hashed Timing Wheel achieve $O(1)$ time complexity for scheduling delayed tasks?</h3>
-<p><strong>Model Answer</strong>: A Timing Wheel is a circular buffer of $N$ slots, where each slot represents a unit of time (e.g., 1 second). A hardware or software timer increments a circular pointer every tick (<code>tick = (tick + 1) % N</code>).</p>
+<h3 id="q2-how-does-a-hashed-timing-wheel-achieve-span-classmath-inlineo1span-time-complexity-for-scheduling-delayed-tasks">Q2: How does a Hashed Timing Wheel achieve <span class="math-inline">O(1)</span> time complexity for scheduling delayed tasks?</h3>
+<p><strong>Model Answer</strong>: A Timing Wheel is a circular buffer of <span class="math-inline">N</span> slots, where each slot represents a unit of time (e.g., 1 second). A hardware or software timer increments a circular pointer every tick (<code>tick = (tick + 1) % N</code>).</p>
 <ul>
-<li>When a job is scheduled for $T$ seconds in the future, its target slot is calculated in $O(1)$ time: $	ext{slot} = (	ext{current_tick} + T) \pmod N$.</li>
-<li>The job is appended to the linked list at that slot in $O(1)$ time.</li>
-<li>On every tick, the scheduler executes all tasks in the current slot linked list without scanning or sorting the remaining millions of tasks, achieving strictly $O(1)$ amortized insertion and retrieval.</li>
+<li>When a job is scheduled for <span class="math-inline">T</span> seconds in the future, its target slot is calculated in <span class="math-inline">O(1)</span> time: <span class="math-inline">slot = (current_tick + T) ±od N</span>.</li>
+<li>The job is appended to the linked list at that slot in <span class="math-inline">O(1)</span> time.</li>
+<li>On every tick, the scheduler executes all tasks in the current slot linked list without scanning or sorting the remaining millions of tasks, achieving strictly <span class="math-inline">O(1)</span> amortized insertion and retrieval.</li>
 </ul>
 <h3 id="q3-what-happens-when-the-active-scheduler-leader-crashes-while-jobs-are-executing">Q3: What happens when the active Scheduler Leader crashes while jobs are executing?</h3>
 <p><strong>Model Answer</strong>:</p>
@@ -265,7 +267,7 @@
 <h3 id="q4-how-do-you-prevent-thundering-herd-spikes-when-thousands-of-jobs-are-scheduled-for-midnight">Q4: How do you prevent &quot;Thundering Herd&quot; spikes when thousands of jobs are scheduled for midnight?</h3>
 <p><strong>Model Answer</strong>:</p>
 <ol>
-<li><strong>Automated Schedule Jitter</strong>: When a cron expression specifies midnight (<code>0 0 * * *</code>), the scheduling engine automatically adds a deterministic pseudorandom jitter offset: $	ext{offset} = 	ext{hash}(	ext{job_id}) \pmod{300	ext{ seconds}}$.</li>
+<li><strong>Automated Schedule Jitter</strong>: When a cron expression specifies midnight (<code>0 0 * * *</code>), the scheduling engine automatically adds a deterministic pseudorandom jitter offset: <span class="math-inline">offset = hash(job_id) ±od{300 seconds}</span>.</li>
 <li><strong>Backpressure Rate Limiting</strong>: The scheduler dispatches tasks through a token-bucket rate limiter that caps dispatch velocity to match worker pool concurrency capacity.</li>
 <li><strong>Priority Queue Separation</strong>: High-priority real-time business jobs (e.g., billing transfers) are placed in isolated queues so low-priority analytical reports cannot starve critical workflows.</li>
 </ol>
@@ -320,7 +322,20 @@ D) By running tasks only on weekends.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

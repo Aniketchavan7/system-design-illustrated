@@ -57,6 +57,10 @@ In high-concurrency production systems, executing transactions without strict is
 
 ## 🖼️ Picture It: The 4 SQL Standard Isolation Levels
 
+<p align="center">
+  <img src="./assets/isolation_levels.svg" alt="SQL Isolation Spectrum & Concurrency Anomalies" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Levels["The Isolation Spectrum (Weakest to Strongest)"]
@@ -205,7 +209,7 @@ Database transactions hold row-level locks and occupy a dedicated connection fro
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 - **Two-Phase Locking (2PL)** is a **concurrency control mechanism** on a *single database* ensuring Serializable isolation: transactions acquire locks during the growing phase and release them during the shrinking phase.
-- **Two-Phase Commit (2PC)** is an **atomic distributed consensus protocol** across *multiple independent databases/nodes* (Prepare phase $	o$ Commit phase) ensuring all nodes commit or all abort.
+- **Two-Phase Commit (2PC)** is an **atomic distributed consensus protocol** across *multiple independent databases/nodes* (Prepare phase $\to$ Commit phase) ensuring all nodes commit or all abort.
 They are completely different concepts despite sharing the "Two-Phase" name!
 
 </details>

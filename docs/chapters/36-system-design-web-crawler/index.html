@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-36-system-design--distributed-web-crawler">Module 36: System Design — Distributed Web Crawler</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-36-system-design--distributed-web-crawler">Module 36: System Design — Distributed Web Crawler</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a large-scale Distributed Web Crawler (Googlebot style), covering the URL Frontier, Politeness Queues, Bloom Filter deduplication, DNS pre-resolution, and SimHash content deduplication.</p>
 </blockquote>
@@ -30,10 +30,10 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling the distributed web crawler, review these core modules:</p>
 <ul>
-<li><a href="../02-domain-name-system/index.html">02 - Domain Name System</a> (DNS resolution, caching, and DNS lookup latency)</li>
-<li><a href="../08-database-partitioning/index.html">08 - Database Partitioning</a> (Sharding crawled document repositories)</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Distributing target hosts across crawler nodes)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Worker crashes, timeouts, and spider traps)</li>
+<li><a href="../../chapters/02-domain-name-system/index.html">02 - Domain Name System</a> (DNS resolution, caching, and DNS lookup latency)</li>
+<li><a href="../../chapters/08-database-partitioning/index.html">08 - Database Partitioning</a> (Sharding crawled document repositories)</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Distributing target hosts across crawler nodes)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Worker crashes, timeouts, and spider traps)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -93,14 +93,17 @@
 <h2 id="the-problem-it-solves">The Problem It Solves</h2>
 <p>The World Wide Web contains tens of billions of publicly accessible web pages:</p>
 <ol>
-<li><strong>Immense Scale</strong>: Crawling 1 billion web pages per month requires fetching $\approx 400$ pages per second continuously 24/7.</li>
+<li><strong>Immense Scale</strong>: Crawling 1 billion web pages per month requires fetching <span class="math-inline">≈ 400</span> pages per second continuously 24/7.</li>
 <li><strong>Politeness Requirements</strong>: A crawler that fires 100 simultaneous requests at a small mom-and-pop blog is indistinguishable from a Distributed Denial of Service (DDoS) attack.</li>
 <li><strong>Spider Traps</strong>: Infinite dynamic calendar links (<code>/calendar?year=2026&amp;month=13&amp;day=...</code>) or circular redirects can trap a crawler forever, exhausting memory and disk.</li>
 <li><strong>Duplicate Content</strong>: Over 30% of web content consists of mirrored pages, syndicated news stories, or URL parameter variations (<code>?ref=twitter</code>). Storing duplicate copies wastes petabytes of storage.</li>
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/web_crawler_frontier.svg" alt="Distributed Web Crawler & URL Frontier" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Frontier[&quot;1. URL Frontier (Prioritization &amp; Politeness)&quot;]
         SeedURLs[&quot;Seed URLs&quot;] --&gt; IngressQueue[&quot;Priority Queues (F1, F2...)&quot;]
         IngressQueue --&gt; PrioritySelector[&quot;Priority Bias Selector&quot;]
@@ -126,34 +129,33 @@
         ExtractLinks --&gt; URLFilter{&quot;Seen URL Filter (Bloom Filter)&quot;}
         URLFilter --&gt;|&quot;Already Seen&quot;| DropURL[&quot;Drop URL&quot;]
         URLFilter --&gt;|&quot;New URL&quot;| IngressQueue
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
 <p>Consider crawling <strong>1 Billion Web Pages per month</strong>:</p>
 <ul>
 <li><strong>Throughput Required</strong>:
 <ul>
-<li>1 Billion pages / $(30\text{ days} \times 86,400\text{ s}) \approx 386\text{ pages/second}$.</li>
-<li>Peak crawl throughput ($2\times$): $\approx 800\text{ pages/second}$.</li>
+<li>1 Billion pages / <span class="math-inline">(30 days × 86,400 s) ≈ 386 pages/second</span>.</li>
+<li>Peak crawl throughput (<span class="math-inline">2×</span>): <span class="math-inline">≈ 800 pages/second</span>.</li>
 </ul>
 </li>
 <li><strong>Bandwidth Sizing</strong>:
 <ul>
-<li>Average web page size (HTML + metadata): $100\text{ KB}$.</li>
-<li>Ingress bandwidth: $800\text{ pages/s} \times 100\text{ KB} = 80\text{ MB/s} = 640\text{ Mbps}$ continuous network ingress.</li>
+<li>Average web page size (HTML + metadata): <span class="math-inline">100 KB</span>.</li>
+<li>Ingress bandwidth: <span class="math-inline">800 pages/s × 100 KB = 80 MB/s = 640 Mbps</span> continuous network ingress.</li>
 </ul>
 </li>
 <li><strong>Storage Sizing (1 Month Retention)</strong>:
 <ul>
-<li>Total raw HTML storage: $1\text{B} \times 100\text{ KB} = 100\text{ Terabytes/month}$.</li>
-<li>Compressed storage (gzip $\approx 3\times$ reduction): $\approx 33\text{ TB/month}$.</li>
+<li>Total raw HTML storage: <span class="math-inline">1B × 100 KB = 100 Terabytes/month</span>.</li>
+<li>Compressed storage (gzip <span class="math-inline">≈ 3×</span> reduction): <span class="math-inline">≈ 33 TB/month</span>.</li>
 </ul>
 </li>
 <li><strong>Bloom Filter for URL Deduplication</strong>:
 <ul>
-<li>Tracking 1 billion URLs with a false-positive rate $p = 0.01$ (1%):</li>
-<li>Bits required: $m = -\frac{n \ln p}{(\ln 2)^2} \approx \frac{1\text{B} \times 4.605}{0.48} \approx 9.6\text{ billion bits} \approx 1.2\text{ GB}$ of RAM!</li>
+<li>Tracking 1 billion URLs with a false-positive rate <span class="math-inline">p = 0.01</span> (1%):</li>
+<li>Bits required: <span class="math-inline">m = -(n \ln p) / ((\ln 2)^2) ≈ (1B × 4.605) / (0.48) ≈ 9.6 billion bits ≈ 1.2 GB</span> of RAM!</li>
 <li>1.2 GB of RAM easily fits inside a single server or Redis instance.</li>
 </ul>
 </li>
@@ -163,7 +165,7 @@
 <h3 id="1-the-url-frontier-design">1. The URL Frontier Design</h3>
 <p>Mercator-style URL Frontiers split queue management into two distinct layers:</p>
 <ul>
-<li><strong>Prioritization Layer (Prioritizer)</strong>: Multiple queues ($F_1, F_2, \dots, F_k$) where higher priority is given to authoritative domains (Wikipedia, BBC) and frequently updated pages.</li>
+<li><strong>Prioritization Layer (Prioritizer)</strong>: Multiple queues (<span class="math-inline">F<sub>1</sub>, F<sub>2</sub>, …, F<sub>k</sub></span>) where higher priority is given to authoritative domains (Wikipedia, BBC) and frequently updated pages.</li>
 <li><strong>Politeness Layer (Politeness Queues)</strong>:
 <ul>
 <li>URLs are partitioned into separate queues by host domain (<code>host = parse_domain(url)</code>).</li>
@@ -174,14 +176,14 @@
 <h3 id="2-url-normalization">2. URL Normalization</h3>
 <p>Before checking if a URL has been seen, it must be canonicalized:</p>
 <ul>
-<li>Convert scheme and host to lowercase: <code>HTTP://Example.com/</code> $\rightarrow$ <code>http://example.com/</code></li>
+<li>Convert scheme and host to lowercase: <code>HTTP://Example.com/</code> <span class="math-inline">→</span> <code>http://example.com/</code></li>
 <li>Strip default ports: <code>:80</code> on HTTP, <code>:443</code> on HTTPS.</li>
-<li>Remove tracking fragments and query parameters: <code>/page#section</code> $\rightarrow$ <code>/page</code>, strip <code>?utm_source=...</code>.</li>
-<li>Resolve relative paths: <code>/news/../sports/index.html</code> $\rightarrow$ <code>/sports/index.html</code>.</li>
+<li>Remove tracking fragments and query parameters: <code>/page#section</code> <span class="math-inline">→</span> <code>/page</code>, strip <code>?utm_source=...</code>.</li>
+<li>Resolve relative paths: <code>/news/../sports/index.html</code> <span class="math-inline">→</span> <code>/sports/index.html</code>.</li>
 </ul>
 <h3 id="3-spider-trap-avoidance">3. Spider Trap Avoidance</h3>
 <ul>
-<li><strong>Path Depth Limit</strong>: Reject URLs with depth $&gt; 10$ (<code>/a/b/c/d/e/f/g/h/i/j/k</code>).</li>
+<li><strong>Path Depth Limit</strong>: Reject URLs with depth <span class="math-inline">&gt; 10</span> (<code>/a/b/c/d/e/f/g/h/i/j/k</code>).</li>
 <li><strong>Robots Exclusion Standard</strong>: Check <code>/robots.txt</code> before crawling any path.</li>
 <li><strong>Strict Fetch Timeouts</strong>: Set aggressive socket timeouts (e.g., 5 seconds) to avoid hanging on slow HTTP streams.</li>
 </ul>
@@ -226,7 +228,7 @@
 <hr />
 <h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
 <ol>
-<li><strong>DNS Bottleneck</strong>: Making a synchronous DNS query for every single URL introduces a $20 - 100\text{ ms}$ latency penalty per link. <em>Rule: Maintain a dedicated local in-memory DNS cache (e.g., dnsmasq or custom DNS pool) with pre-resolved IP mappings.</em></li>
+<li><strong>DNS Bottleneck</strong>: Making a synchronous DNS query for every single URL introduces a <span class="math-inline">20 - 100 ms</span> latency penalty per link. <em>Rule: Maintain a dedicated local in-memory DNS cache (e.g., dnsmasq or custom DNS pool) with pre-resolved IP mappings.</em></li>
 <li><strong>Ignoring <code>robots.txt</code></strong>: Crawling web servers without checking <code>robots.txt</code> violates web conventions and can result in legal notices and immediate IP blacklisting. Cache <code>robots.txt</code> per host with a 24-hour TTL.</li>
 <li><strong>Exact-Match Content Comparison</strong>: Checking if page HTML is 100% identical via SHA-256 fails because minor changes (e.g., dynamic timestamps or copyright years) alter the cryptographic hash. <em>Use 64-bit SimHash or MinHash to detect near-duplicate pages.</em></li>
 </ol>
@@ -255,17 +257,17 @@
 <h3 id="q2-how-do-you-detect-and-avoid-spider-traps">Q2: How do you detect and avoid &quot;Spider Traps&quot;?</h3>
 <p><strong>Model Answer</strong>: Spider traps are websites generating infinite URLs dynamically (e.g., infinite calendar pages or recursive directory links). We combat traps using multiple heuristic filters:</p>
 <ol>
-<li><strong>URL Length &amp; Depth Capping</strong>: Discard URLs exceeding 255 characters or path depth $&gt; 8$ segments.</li>
+<li><strong>URL Length &amp; Depth Capping</strong>: Discard URLs exceeding 255 characters or path depth <span class="math-inline">&gt; 8</span> segments.</li>
 <li><strong>Repeating Pattern Detection</strong>: Regular expression filters detecting repeating path segments (<code>/blog/archive/blog/archive/...</code>).</li>
 <li><strong>Per-Host Page Limits</strong>: Cap the maximum number of pages crawled per domain (e.g., 50,000 pages max per site).</li>
 <li><strong>Content-Based Near-Duplicate Detection</strong>: Using SimHash to identify when structurally identical pages are being dynamically generated.</li>
 </ol>
 <h3 id="q3-why-is-a-bloom-filter-preferred-over-a-hash-set-for-tracking-visited-urls">Q3: Why is a Bloom Filter preferred over a Hash Set for tracking visited URLs?</h3>
-<p><strong>Model Answer</strong>: Scale. Tracking 10 billion URLs in a standard Python/Java Hash Set (each URL $\approx 80\text{ bytes}$) requires at least $800\text{ GB}$ to $1.2\text{ TB}$ of RAM due to object pointer overhead.
+<p><strong>Model Answer</strong>: Scale. Tracking 10 billion URLs in a standard Python/Java Hash Set (each URL <span class="math-inline">≈ 80 bytes</span>) requires at least <span class="math-inline">800 GB</span> to <span class="math-inline">1.2 TB</span> of RAM due to object pointer overhead.
 A <strong>Bloom Filter</strong> is an in-memory bit array with multiple cryptographic hash functions:</p>
 <ul>
-<li>Requires only $\approx 9.6\text{ bits}$ per item for a 1% false positive rate.</li>
-<li>10 billion URLs require only $\approx 12\text{ GB}$ of RAM.</li>
+<li>Requires only <span class="math-inline">≈ 9.6 bits</span> per item for a 1% false positive rate.</li>
+<li>10 billion URLs require only <span class="math-inline">≈ 12 GB</span> of RAM.</li>
 <li>While a Bloom filter can have false positives (falsely assuming a new URL was visited), in web crawling a 0.5% skip rate is completely acceptable compared to the 98% savings in memory infrastructure.</li>
 </ul>
 <h3 id="q4-how-do-you-identify-duplicate-or-near-duplicate-web-pages-across-different-domains">Q4: How do you identify duplicate or near-duplicate web pages across different domains?</h3>
@@ -274,8 +276,8 @@ A <strong>Bloom Filter</strong> is an in-memory bit array with multiple cryptogr
 <li>Tokenize document text into words/n-grams.</li>
 <li>Hash each word into a 64-bit binary vector.</li>
 <li>Compute a weighted sum vector across all words (incrementing bit positions for 1s, decrementing for 0s).</li>
-<li>The final 64-bit SimHash fingerprint has the mathematical property that documents with 90%+ identical content differ by only a few bits (Hamming distance $\le 3$).</li>
-<li>Matching documents with Hamming distance $\le 3$ flags near-duplicates (e.g., republished syndicated news articles) without performing full text comparison.</li>
+<li>The final 64-bit SimHash fingerprint has the mathematical property that documents with 90%+ identical content differ by only a few bits (Hamming distance <span class="math-inline">≤ 3</span>).</li>
+<li>Matching documents with Hamming distance <span class="math-inline">≤ 3</span> flags near-duplicates (e.g., republished syndicated news articles) without performing full text comparison.</li>
 </ol>
 <h3 id="q5-how-do-you-handle-dns-lookup-bottlenecks-when-fetching-hundreds-of-pages-per-second">Q5: How do you handle DNS lookup bottlenecks when fetching hundreds of pages per second?</h3>
 <p><strong>Model Answer</strong>: Standard synchronous DNS resolution takes 20ms to 100ms per domain, which paralyzes crawler worker threads. We resolve this by:</p>
@@ -315,7 +317,7 @@ A) By converting relative paths, lowercase schemes, and removing query fragments
 B) By deleting foreign characters.<br/>
 C) By compressing URLs with gzip.<br/>
 D) By purchasing new domain names.<br/><br/>
-<b>Answer: A</b>. Normalization canonicalizes URLs (`HTTP://Site.com/a#sec` $\rightarrow$ `http://site.com/a`) so duplicates hit the cache.
+<b>Answer: A</b>. Normalization canonicalizes URLs (`HTTP://Site.com/a#sec` <span class="math-inline">→</span> `http://site.com/a`) so duplicates hit the cache.
 </details>
 <details>
 <summary><b>5. In a Bloom Filter, what does a positive result ("Found") indicate?</b></summary>
@@ -328,7 +330,20 @@ D) The server is down.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

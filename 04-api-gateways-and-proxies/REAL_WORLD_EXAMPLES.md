@@ -47,7 +47,7 @@
 
 #### A. Asynchronous Non-Blocking Event Loops (Netty)
 - Netflix completely rebuilt Zuul on top of **Netty**.
-- Instead of one thread per connection, Zuul 2 uses a small pool of event-loop threads (typically $2 	imes 	ext{CPU cores}$).
+- Instead of one thread per connection, Zuul 2 uses a small pool of event-loop threads (typically $2 \times \text{CPU cores}$).
 - When an upstream request is dispatched to a backend microservice, Zuul registers an asynchronous callback and frees the event-loop thread immediately to service other client traffic.
 - **Connection Capacity**: Single instances easily sustain **50,000+ open idle client connections** with predictable CPU utilization.
 

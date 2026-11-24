@@ -46,6 +46,10 @@ Single-server cron daemons (`crontab`) fail at enterprise scale due to critical 
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/distributed_cron.svg" alt="Distributed Job Scheduler & Fault-Tolerant Lease Locks" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph ControlPlane["1. Scheduler Coordination Plane (High Availability)"]
@@ -168,7 +172,7 @@ python demo.py
 
 ### Q2: How does a Hashed Timing Wheel achieve $O(1)$ time complexity for scheduling delayed tasks?
 **Model Answer**: A Timing Wheel is a circular buffer of $N$ slots, where each slot represents a unit of time (e.g., 1 second). A hardware or software timer increments a circular pointer every tick (`tick = (tick + 1) % N`).
-- When a job is scheduled for $T$ seconds in the future, its target slot is calculated in $O(1)$ time: $	ext{slot} = (	ext{current\_tick} + T) \pmod N$.
+- When a job is scheduled for $T$ seconds in the future, its target slot is calculated in $O(1)$ time: $\text{slot} = (\text{current\_tick} + T) \pmod N$.
 - The job is appended to the linked list at that slot in $O(1)$ time.
 - On every tick, the scheduler executes all tasks in the current slot linked list without scanning or sorting the remaining millions of tasks, achieving strictly $O(1)$ amortized insertion and retrieval.
 
@@ -180,7 +184,7 @@ python demo.py
 
 ### Q4: How do you prevent "Thundering Herd" spikes when thousands of jobs are scheduled for midnight?
 **Model Answer**:
-1. **Automated Schedule Jitter**: When a cron expression specifies midnight (`0 0 * * *`), the scheduling engine automatically adds a deterministic pseudorandom jitter offset: $	ext{offset} = 	ext{hash}(	ext{job\_id}) \pmod{300	ext{ seconds}}$.
+1. **Automated Schedule Jitter**: When a cron expression specifies midnight (`0 0 * * *`), the scheduling engine automatically adds a deterministic pseudorandom jitter offset: $\text{offset} = \text{hash}(\text{job\_id}) \pmod{300\text{ seconds}}$.
 2. **Backpressure Rate Limiting**: The scheduler dispatches tasks through a token-bucket rate limiter that caps dispatch velocity to match worker pool concurrency capacity.
 3. **Priority Queue Separation**: High-priority real-time business jobs (e.g., billing transfers) are placed in isolated queues so low-priority analytical reports cannot starve critical workflows.
 

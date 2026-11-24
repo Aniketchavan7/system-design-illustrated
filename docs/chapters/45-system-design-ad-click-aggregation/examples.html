@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-ad-click-aggregation">Real-World Production Implementations: Ad Click Aggregation</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-ad-click-aggregation">Real-World Production Implementations: Ad Click Aggregation</h1>
 <p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, and <strong>Meta</strong> process, aggregate, and attribute trillions of streaming events daily.</p>
 <hr />
 <h2 id="1-google-google-ads--photon-real-time-streaming-architecture">1. Google: Google Ads &amp; Photon Real-Time Streaming Architecture</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google generates over <strong>$200 Billion annually</strong> in ad revenue from Google Search, YouTube, and the Google Display Network. Because advertisers are billed per click, Google developed <strong>Photon</strong>, a globally distributed streaming system designed for continuous high-throughput event aggregation.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     UserSearch[&quot;Google Search User (Clicks Sponsored Ad)&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
     GFE --&gt; AdRedirect[&quot;Ad Redirect Tracking Gateway&quot;]
     
@@ -43,8 +43,7 @@
     DatacenterB --&gt; DeduplicationEngine
     
     DeduplicationEngine --&gt; SpannerBilling[(&quot;Google Cloud Spanner (Billing Ledger)&quot;)]
-    DeduplicationEngine --&gt; BigtableDashboard[(&quot;Bigtable (Advertiser Analytics)&quot;)]
-</code></pre>
+    DeduplicationEngine --&gt; BigtableDashboard[(&quot;Bigtable (Advertiser Analytics)&quot;)]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Photon Active-Active Multi-Datacenter Streaming</strong>:
@@ -69,7 +68,7 @@
 <h2 id="2-netflix-keystone-real-time-event-streaming-pipeline">2. Netflix: Keystone Real-Time Event Streaming Pipeline</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Netflix's streaming infrastructure relies on <strong>Keystone</strong>, a real-time event streaming pipeline processing over <strong>1.5 Trillion events per day</strong> (tens of petabytes daily), supporting telemetry, user interaction analytics, and personalized recommendation updates.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     ClientApp[&quot;Netflix Client (TV / Phone / Web)&quot;] --&gt; Zuul[&quot;Netflix Zuul 2 Gateway&quot;]
     Zuul --&gt; KeystoneFront[&quot;Keystone Edge Proxy (Netty)&quot;]
     
@@ -79,8 +78,7 @@
     FlinkEngine --&gt; TimeWindows[&quot;Tumbling &amp; Sliding Window Aggregation&quot;]
     
     TimeWindows --&gt; Elasticsearch[(&quot;Elasticsearch (Real-Time Dashboards)&quot;)]
-    TimeWindows --&gt; IcebergWarehouse[(&quot;Apache Iceberg / S3 Data Lake&quot;)]
-</code></pre>
+    TimeWindows --&gt; IcebergWarehouse[(&quot;Apache Iceberg / S3 Data Lake&quot;)]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Apache Flink Stream Aggregation</strong>:
@@ -102,7 +100,20 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

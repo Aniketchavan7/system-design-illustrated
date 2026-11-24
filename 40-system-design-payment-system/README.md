@@ -45,6 +45,10 @@ Payment systems operate under the strictest regulatory and correctness requireme
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/double_entry_ledger.svg" alt="Payment Execution, Reconciliation & Double-Entry Ledger" width="100%" />
+</p>
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -165,7 +169,7 @@ python demo.py
 
 ### Q1: Why is Double-Entry Bookkeeping mandatory in payment systems instead of updating account balances directly?
 **Model Answer**: Directly updating balances (`UPDATE accounts SET balance = balance - 50`) creates a single point of failure with zero auditability. If an update fails mid-way, money appears or vanishes without trace.
-**Double-Entry Bookkeeping** enforces that every movement of money is recorded as an immutable journal entry with matching Debits and Credits ($\sum 	ext{Debits} = \sum 	ext{Credits}$). 
+**Double-Entry Bookkeeping** enforces that every movement of money is recorded as an immutable journal entry with matching Debits and Credits ($\sum \text{Debits} = \sum \text{Credits}$). 
 1. It guarantees that money cannot be created or destroyed out of thin air.
 2. It provides an unalterable audit trail for financial regulators (SOX, GAAP).
 3. Any balance discrepancy can be diagnosed by checking the mathematical sum of historical entries.

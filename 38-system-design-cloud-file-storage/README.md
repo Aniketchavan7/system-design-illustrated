@@ -46,6 +46,10 @@ A global cloud storage service handles petabytes of user data across hundreds of
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/chunked_sync_engine.svg" alt="Block-Level Cloud File Sync & Delta Deduplication" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph ClientLayer["Client Desktop / Mobile"]

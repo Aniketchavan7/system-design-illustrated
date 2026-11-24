@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-news-feed-systems">Real-World Production Implementations: News Feed Systems</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-news-feed-systems">Real-World Production Implementations: News Feed Systems</h1>
 <p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Twitter/X</strong>, and <strong>Meta (Facebook/Instagram)</strong> architect, optimize, and scale real-time feed pipelines.</p>
 <hr />
 <h2 id="1-google-the-youtube-home-feed--google-discover-architecture">1. Google: The YouTube Home Feed &amp; Google Discover Architecture</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google serves personalized content feeds to billions of users daily across the <strong>YouTube Home Feed</strong> and <strong>Google Discover</strong>. Unlike simple chronological social timelines, Google's feed architecture is heavily driven by real-time neural network candidate generation and ranking.</p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     User[&quot;Google / YouTube User&quot;] --&gt; Ingress[&quot;Edge Gateway (GFE)&quot;]
     Ingress --&gt; FeedEngine[&quot;Feed Orchestration Engine&quot;]
     
@@ -50,15 +50,14 @@
     FeedEngine --&gt; CandidateGeneration
     CandidateGeneration --&gt; HeavyRanking
     HeavyRanking --&gt; ReRanking
-    ReRanking --&gt; User
-</code></pre>
+    ReRanking --&gt; User</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Two-Tower Neural Candidate Generation</strong>:
 <ul>
 <li>Compresses billions of candidate videos/articles into high-dimensional vector embeddings.</li>
 <li>The &quot;User Tower&quot; encodes user history, and the &quot;Item Tower&quot; encodes content features.</li>
-<li>Using Approximate Nearest Neighbor (ANN) search via <strong>ScaNN</strong> (Scalable Nearest Neighbors), Google retrieves the top 1,000 candidates in $&lt; 10\text{ ms}$.</li>
+<li>Using Approximate Nearest Neighbor (ANN) search via <strong>ScaNN</strong> (Scalable Nearest Neighbors), Google retrieves the top 1,000 candidates in <span class="math-inline">&lt; 10 ms</span>.</li>
 </ul>
 </li>
 <li><strong>Freshness &amp; Exploration vs Exploitation</strong>:
@@ -76,7 +75,7 @@
 <h2 id="2-netflix-the-personalized-homepage--dynamic-row-generation">2. Netflix: The Personalized Homepage &amp; Dynamic Row Generation</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>When a subscriber opens Netflix, the homepage is an intelligent feed composed of personalized horizontal rows (<em>&quot;Continue Watching&quot;</em>, <em>&quot;Top 10 in your Country&quot;</em>, <em>&quot;Trending Now&quot;</em>, <em>&quot;Because you watched Stranger Things&quot;</em>).</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Subscriber[&quot;Subscriber App (Smart TV / Mobile)&quot;] --&gt; Zuul[&quot;Netflix Zuul Gateway&quot;]
     Zuul --&gt; HomeFeedSvc[&quot;Homepage Feed Orchestration Service&quot;]
     
@@ -88,8 +87,7 @@
     ArtworkEngine --&gt; EVCache[(&quot;EVCache (Pre-Computed Feed Store)&quot;)]
     
     EVCache --&gt; HomeFeedSvc
-    HomeFeedSvc --&gt; Subscriber
-</code></pre>
+    HomeFeedSvc --&gt; Subscriber</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Two-Tier Ranking (Row &amp; Title Ranking)</strong>:
@@ -113,7 +111,7 @@
 <h2 id="3-twitter--x-timelines-at-scale--the-snowflake-id-pipeline">3. Twitter / X: Timelines at Scale &amp; The Snowflake ID Pipeline</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Twitter was the earliest pioneer of the Fan-out on Write pipeline. Handling over 500 million tweets per day with a median fanout of hundreds of followers, Twitter developed dedicated services for timeline generation (<strong>Timeline Service</strong> and <strong>Fanout Service</strong>).</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     User[&quot;Twitter User&quot;] --&gt;|&quot;POST /tweet&quot;| Tweeter[&quot;Tweeter Ingress Service&quot;]
     Tweeter --&gt;|&quot;Write Tweet&quot;| Manhattan[(&quot;Manhattan / MySQL Post DB&quot;)]
     Tweeter --&gt;|&quot;Publish Event&quot;| Kafka[&quot;Kafka Event Stream&quot;]
@@ -129,8 +127,7 @@
     HomeTimelineSvc --&gt; RedisClusters
     HomeTimelineSvc --&gt; CelebStore
     HomeTimelineSvc --&gt; Mixer[&quot;Timeline Mixer (K-Way Merge &amp; Ranking)&quot;]
-    Mixer --&gt; ReturnTimeline[&quot;Hydrated Feed (IDs + Cache)&quot;]
-</code></pre>
+    Mixer --&gt; ReturnTimeline[&quot;Hydrated Feed (IDs + Cache)&quot;]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>The Earlybird In-Memory Search &amp; Feed Cache</strong>:
@@ -141,7 +138,7 @@
 </li>
 <li><strong>The Celebrity (Heavy Hitter) Hybrid Fanout</strong>:
 <ul>
-<li>Accounts with $&gt; 20,000$ followers bypass the fanout queue.</li>
+<li>Accounts with <span class="math-inline">&gt; 20,000</span> followers bypass the fanout queue.</li>
 <li>When a user loads their timeline, the <strong>Timeline Mixer</strong> queries the user's personal timeline cache and dynamically fetches tweets from followed celebrities, performing an in-memory merge sort.</li>
 </ul>
 </li>
@@ -150,12 +147,25 @@
 <h2 id="4-meta-facebook--instagram-tao-graph--multi-stage-ml-ranking">4. Meta (Facebook / Instagram): TAO Graph &amp; Multi-Stage ML Ranking</h2>
 <ul>
 <li><strong>TAO (The Associations and Objects Store)</strong>: Meta's globally distributed graph data store built on MySQL and Memcached, serving billions of read queries per second with sub-5ms latency.</li>
-<li><strong>DLRM (Deep Learning Recommendation Model)</strong>: Evaluates hundreds of engagement signals ($P(\text{click}), P(\text{like}), P(\text{comment}), P(\text{share})$) to deliver a personalized engagement-maximizing news feed.</li>
+<li><strong>DLRM (Deep Learning Recommendation Model)</strong>: Evaluates hundreds of engagement signals (<span class="math-inline">P(click), P(like), P(comment), P(share)</span>) to deliver a personalized engagement-maximizing news feed.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

@@ -22,27 +22,27 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="18---event-sourcing--cqrs-command-query-responsibility-segregation">18 - Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="18---event-sourcing--cqrs-command-query-responsibility-segregation">18 - Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Traditional CRUD systems mutate state in place (<code>UPDATE users SET email = '...'</code>), destroying historical intent, temporal context, and audit trails. <strong>Event Sourcing</strong> persists every state mutation as an immutable, append-only domain event (<code>EmailUpdated</code>, <code>MoneyDeposited</code>). <strong>CQRS</strong> (Command Query Responsibility Segregation) structurally splits the architecture into two independent models: a write-optimized <strong>Command Side</strong> enforcing business invariants, and a read-optimized <strong>Query Side</strong> maintaining denormalized materialized projections. Together, they provide complete auditability, time-travel debugging, and unconstrained read scalability.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../18-event-sourcing-and-cqrs/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/18-event-sourcing-and-cqrs/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: CRUD operations, write-ahead logs (WAL), and read-heavy vs write-heavy workloads.</li>
-<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous projections.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Append-only logs, consumer groups, and event streaming.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: CRUD operations, write-ahead logs (WAL), and read-heavy vs write-heavy workloads.</li>
+<li><a href="../../chapters/14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across asynchronous projections.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Append-only logs, consumer groups, and event streaming.</li>
 <li><strong>Domain-Driven Design (DDD)</strong>: Aggregates, Domain Events, and Commands.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
 <p>Imagine your bank account:</p>
 <ul>
-<li><strong>Traditional CRUD</strong>: The bank keeps a single sticky note with your balance written in pencil: <code>&quot;$140&quot;</code>. When you deposit $50, the teller erases $140 and writes <code>&quot;$190&quot;</code>. If someone asks: <em>&quot;Why is the balance $190? Did you deposit money or did an employer pay you?&quot;</em>, the sticky note has zero answers.</li>
+<li><strong>Traditional CRUD</strong>: The bank keeps a single sticky note with your balance written in pencil: <code>&quot;$140&quot;</code>. When you deposit &lt;span class=&quot;math-inline&quot;&gt;50, the teller erases &lt;/span&gt;140 and writes <code>&quot;$190&quot;</code>. If someone asks: <em>&quot;Why is the balance $190? Did you deposit money or did an employer pay you?&quot;</em>, the sticky note has zero answers.</li>
 <li><strong>Event Sourcing</strong>: The bank gives you a printed transaction passbook. Every deposit, withdrawal, and fee is permanently stamped in ink line-by-line. Your balance isn't a static number; it is simply the sum of every line in your passbook!</li>
 <li><strong>CQRS</strong>: The bank keeps the master ink passbook in a locked vault (Write Model), while displaying your current balance on a high-speed digital ATM screen (Read Model).</li>
 </ul>
@@ -111,7 +111,7 @@
 <h3 id="how-event-sourcing--cqrs-solves-this">How Event Sourcing &amp; CQRS Solves This</h3>
 <ol>
 <li><strong>100% Complete Audit Trail</strong>: Because events are append-only and never deleted, you have an unalterable forensic record of every single business transaction that ever occurred.</li>
-<li><strong>Infinite Read Scalability</strong>: The Command side only does fast $O(1)$ appends to the event store. The Query side maintains multiple specialized read models—e.g., Elasticsearch for full-text search, Redis for real-time balances, and Neo4j for social graphs—all populated asynchronously from the same event stream.</li>
+<li><strong>Infinite Read Scalability</strong>: The Command side only does fast <span class="math-inline">O(1)</span> appends to the event store. The Query side maintains multiple specialized read models—e.g., Elasticsearch for full-text search, Redis for real-time balances, and Neo4j for social graphs—all populated asynchronously from the same event stream.</li>
 <li><strong>Time-Travel Debugging</strong>: You can run an aggregate's state backwards or replay events up to any specific millisecond in the past to reproduce production bugs with exact precision.</li>
 </ol>
 <hr />
@@ -121,7 +121,7 @@
 <p><img src="./assets/event_sourcing_cqrs.gif" alt="Event Sourcing and CQRS" /></p>
 <hr />
 <h3 id="end-to-end-cqrs-flowchart">End-to-End CQRS Flowchart</h3>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     subgraph CommandSide[&quot;1. Command Side (Write Model)&quot;]
         ClientWrite[&quot;👤 Client&quot;] --&gt;|1. Submit Command| CmdHandler[&quot;Command Handler&lt;br/&gt;(Validates Invariants)&quot;]
         CmdHandler --&gt;|2. Append Event| Store[(&quot;📜 Event Store&lt;br/&gt;(Append-Only Log)&quot;)]
@@ -139,8 +139,7 @@
 
     style CommandSide fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style EventBus fill:#161b22,stroke:#d29922,stroke-width:2px;
-    style QuerySide fill:#161b22,stroke:#3fb950,stroke-width:2px;
-</code></pre>
+    style QuerySide fill:#161b22,stroke:#3fb950,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's look at the performance math of Event Sourcing write throughput vs. Snapshotting intervals:</p>
@@ -150,26 +149,26 @@
 <code>UPDATE orders SET status = 'SHIPPED', updated_at = NOW() WHERE id = 99824;</code>
 <ul>
 <li>Requires B-tree index lookup, acquiring row-level locks, updating table blocks, updating secondary index pages, and writing to WAL.</li>
-<li><strong>Cost</strong>: $\approx 5\text{–}15\text{ ms}$ per write.</li>
+<li><strong>Cost</strong>: <span class="math-inline">≈ 5–15 ms</span> per write.</li>
 </ul>
 </li>
 <li><strong>Event Sourcing Append</strong>:
 <code>INSERT INTO event_store (stream_id, version, type, payload) VALUES ('order-99824', 4, 'OrderShipped', '...');</code>
 <ul>
 <li>Pure sequential append to disk. No locks on read tables.</li>
-<li><strong>Cost</strong>: $\approx 0.5\text{–}1.0\text{ ms}$ per write (<strong>10x faster!</strong>).</li>
+<li><strong>Cost</strong>: <span class="math-inline">≈ 0.5–1.0 ms</span> per write (<strong>10x faster!</strong>).</li>
 </ul>
 </li>
 </ul>
 <h3 id="2-snapshotting-frequency-math">2. Snapshotting Frequency Math</h3>
-<p>Suppose a popular e-commerce inventory item undergoes $1,000,000$ stock adjustments per year:</p>
+<p>Suppose a popular e-commerce inventory item undergoes <span class="math-inline">1,000,000</span> stock adjustments per year:</p>
 <ul>
-<li><strong>Without Snapshots</strong>: To load the item aggregate into memory, the server must fetch and fold all $1,000,000$ events from the event store. At $1\ \mu\text{s}$ per event, replay takes <strong>$1.0\text{ second}$</strong>, causing massive API latency.</li>
+<li><strong>Without Snapshots</strong>: To load the item aggregate into memory, the server must fetch and fold all <span class="math-inline">1,000,000</span> events from the event store. At <span class="math-inline">1 μs</span> per event, replay takes <strong><span class="math-inline">1.0 second</span></strong>, causing massive API latency.</li>
 <li><strong>With Snapshots every 1,000 events</strong>:
 <ul>
-<li>The aggregate loads the latest pre-computed snapshot (e.g., at version $999,000$).</li>
-<li>It only needs to replay the remaining $1,000$ events since the snapshot.</li>
-<li>Replay time drops from $1,000\text{ ms}$ to <strong>$1.0\text{ ms}$ (99.9% faster recovery!)</strong>.</li>
+<li>The aggregate loads the latest pre-computed snapshot (e.g., at version <span class="math-inline">999,000</span>).</li>
+<li>It only needs to replay the remaining <span class="math-inline">1,000</span> events since the snapshot.</li>
+<li>Replay time drops from <span class="math-inline">1,000 ms</span> to <strong><span class="math-inline">1.0 ms</span> (99.9% faster recovery!)</strong>.</li>
 </ul>
 </li>
 </ul>
@@ -181,7 +180,7 @@
 <h4 id="optimistic-concurrency-control-occ">Optimistic Concurrency Control (OCC)</h4>
 <p>When two users concurrently attempt to modify the same account:</p>
 <ol>
-<li>Both read the current stream version ($V = 4$).</li>
+<li>Both read the current stream version (<span class="math-inline">V = 4</span>).</li>
 <li>User A appends <code>MoneyWithdrawn</code> with <code>version = 5</code>. The write succeeds.</li>
 <li>User B attempts to append <code>MoneyWithdrawn</code> with <code>version = 5</code>.</li>
 <li>The database primary key constraint <code>(stream_id, version)</code> rejects User B's insert with a unique constraint violation!</li>
@@ -219,12 +218,12 @@
 <tr>
 <td style="text-align:left"><strong>Write Performance</strong></td>
 <td style="text-align:left">Slower (locking, normalized updates)</td>
-<td style="text-align:left"><strong>Fastest ($O(1)$ sequential appends)</strong></td>
+<td style="text-align:left"><strong>Fastest (<span class="math-inline">O(1)</span> sequential appends)</strong></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Read Complexity</strong></td>
 <td style="text-align:left">Complex SQL JOINs across tables</td>
-<td style="text-align:left"><strong>Trivial $O(1)$ flat denormalized queries</strong></td>
+<td style="text-align:left"><strong>Trivial <span class="math-inline">O(1)</span> flat denormalized queries</strong></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Consistency</strong></td>
@@ -337,12 +336,12 @@ We handle schema evolution using three production patterns:</p>
 <h3 id="q5-what-are-snapshots-in-event-sourcing-and-how-do-they-prevent-performance-degradation-as-logs-grow">Q5: &quot;What are Snapshots in Event Sourcing, and how do they prevent performance degradation as logs grow?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Checking performance optimization and memory bounding skills.</p>
 <p><strong>Model Answer</strong>:
-&quot;In Event Sourcing, loading an entity requires replaying all historical events from version 1 to version $N$. For long-lived aggregates (like an active bank account with 50,000 transactions), replaying 50,000 events on every single command takes hundreds of milliseconds, crippling write throughput.</p>
+&quot;In Event Sourcing, loading an entity requires replaying all historical events from version 1 to version <span class="math-inline">N</span>. For long-lived aggregates (like an active bank account with 50,000 transactions), replaying 50,000 events on every single command takes hundreds of milliseconds, crippling write throughput.</p>
 <p><strong>Snapshots solve this</strong>:</p>
 <ul>
-<li>Every $K$ events (e.g., every 500 events), a background worker takes a serialized snapshot of the aggregate's internal state and stores it alongside <code>snapshot_version = 500</code>.</li>
-<li>When the aggregate needs to load, it directly loads the snapshot at version 500 in $O(1)$ time, and then only replays the subsequent events (e.g. from version 501 to 523).</li>
-<li>This caps aggregate load time to at most $K$ events, keeping command latency constant and bounded regardless of the aggregate's age.&quot;</li>
+<li>Every <span class="math-inline">K</span> events (e.g., every 500 events), a background worker takes a serialized snapshot of the aggregate's internal state and stores it alongside <code>snapshot_version = 500</code>.</li>
+<li>When the aggregate needs to load, it directly loads the snapshot at version 500 in <span class="math-inline">O(1)</span> time, and then only replays the subsequent events (e.g. from version 501 to 523).</li>
+<li>This caps aggregate load time to at most <span class="math-inline">K</span> events, keeping command latency constant and bounded regardless of the aggregate's age.&quot;</li>
 </ul>
 <hr />
 <h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
@@ -372,15 +371,28 @@ By checking the <code>expected_version</code>. The database enforces a unique co
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Transaction logs and storage engines.</li>
-<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across CQRS projections.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: The underlying streaming infrastructure for event stores.</li>
-<li><a href="../19-distributed-transactions/index.html">19 - Distributed Transactions</a>: Sagas and transactional outbox patterns.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Transaction logs and storage engines.</li>
+<li><a href="../../chapters/14-consistency-models/index.html">14 - Consistency Models</a>: Eventual consistency across CQRS projections.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: The underlying streaming infrastructure for event stores.</li>
+<li><a href="../../chapters/19-distributed-transactions/index.html">19 - Distributed Transactions</a>: Sagas and transactional outbox patterns.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

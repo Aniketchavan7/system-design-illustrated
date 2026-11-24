@@ -96,16 +96,16 @@ Netflix open-sourced the `concurrency-limits` library, replacing arbitrary stati
 
 #### The Algorithm Mechanics (Little's Law)
 According to Little's Law:
-$$L = \lambda 	imes W$$
-$$	ext{Concurrency} = 	ext{Throughput} 	imes 	ext{Latency}$$
+$$L = \lambda \times W$$
+$$\text{Concurrency} = \text{Throughput} \times \text{Latency}$$
 
 1. The service continuously monitors request round-trip time (RTT).
 2. It tracks the **Minimum RTT** observed during low-traffic periods (the physical baseline latency of the system).
 3. If current RTT begins to climb significantly above baseline, the system has entered **queueing delay** (congestion).
 4. The limiter dynamically contracts the permitted concurrency limit:
-   $$	ext{Limit}_{t+1} = 	ext{Limit}_t 	imes \beta \quad (	ext{Multiplicative Decrease})$$
+   $$\text{Limit}_{t+1} = \text{Limit}_t \times \beta \quad (\text{Multiplicative Decrease})$$
 5. When RTT recovers, it gradually increases the limit:
-   $$	ext{Limit}_{t+1} = 	ext{Limit}_t + \alpha \quad (	ext{Additive Increase})$$
+   $$\text{Limit}_{t+1} = \text{Limit}_t + \alpha \quad (\text{Additive Increase})$$
 
 #### Traffic Prioritization
 When throttling is active, Netflix drops low-priority background traffic first:
@@ -123,12 +123,12 @@ Google SRE solves the problem of a struggling server being killed by client retr
 Clients track the number of requests they sent in the last 2 minutes (`requests`) and the number of requests accepted by the server without error (`accepts`).
 Clients compute the probability of dropping their own request before sending it:
 
-$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}\right)$$
+$$P_{\text{drop}} = \max\left(0, \frac{\text{requests} - K \times \text{accepts}}{\text{requests} + 1}\right)$$
 
 - Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).
 - **How it behaves**:
-  - If the server accepts all requests, $	ext{requests} \approx 	ext{accepts}$, so $	ext{requests} - 2(	ext{accepts}) < 0 \implies P_{	ext{drop}} = 0$ (no throttling).
-  - If the server starts failing requests due to overload, $P_{	ext{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!
+  - If the server accepts all requests, $\text{requests} \approx \text{accepts}$, so $\text{requests} - 2(\text{accepts}) < 0 \implies P_{\text{drop}} = 0$ (no throttling).
+  - If the server starts failing requests due to overload, $P_{\text{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!
 
 ---
 

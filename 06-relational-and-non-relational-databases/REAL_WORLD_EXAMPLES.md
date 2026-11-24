@@ -35,13 +35,13 @@
 
 #### A. Google Cloud Spanner: Globally Distributed Relational ACID
 Spanner was the world's first globally distributed database to achieve both horizontal scale and strict serializability:
-- **TrueTime API**: Every Google data center contains dedicated **GPS receivers and Atomic Rubidium Clocks**. TrueTime exposes an API returning an uncertainty window: $[	ext{earliest}, 	ext{latest}]$, guaranteeing time uncertainty $\epsilon < 7	ext{ms}$.
+- **TrueTime API**: Every Google data center contains dedicated **GPS receivers and Atomic Rubidium Clocks**. TrueTime exposes an API returning an uncertainty window: $[\text{earliest}, \text{latest}]$, guaranteeing time uncertainty $\epsilon < 7\text{ms}$.
 - **Lock-Free Read Transactions**: Spanner uses TrueTime to assign globally monotonic commit timestamps. Readers read data at a past timestamp without acquiring *any* locks, completely eliminating lock contention between readers and writers.
 - **Two-Phase Commit over Paxos**: Distributed writes use Paxos groups to replicate state safely across continents, followed by 2PC across Paxos leaders for multi-table transactions.
 
 #### B. Google Bigtable: High-Throughput Wide-Column NoSQL
 - Bigtable organizes data into a sparse, distributed, persistent multi-dimensional sorted map:
-  $$	ext{(row:string, column:string, time:int64)} 	o 	ext{string}$$
+  $$\text{(row:string, column:string, time:int64)} \to \text{string}$$
 - **Data Model**: Rows are maintained in lexicographical order.
 - **High-Write Ingestion**: High-velocity analytics (e.g., crawler pages, time-series telemetry) write directly to append-only logs and memory tables (MemTables) without coordination locks, achieving millions of writes per second per cluster.
 

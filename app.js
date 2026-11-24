@@ -15,8 +15,9 @@
   let isFlipped = false;
   let isShuffled = false;
 
-  // Review status storage
+  // Review status and theme storage
   const STORAGE_KEY = 'sys_design_flashcards_state_v1';
+  const THEME_KEY = 'sys_design_flashcards_theme_v1';
   let cardStates = {};
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -54,7 +55,7 @@
     linkReadmeBack: document.getElementById('link-readme-back'),
     linkExamplesBack: document.getElementById('link-examples-back'),
     linkDemoBack: document.getElementById('link-demo-back'),
-    
+
     // Progress
     progressText: document.getElementById('progress-text'),
     progressPercentage: document.getElementById('progress-percentage'),
@@ -68,55 +69,99 @@
     btnReview: document.getElementById('btn-review'),
     btnShuffle: document.getElementById('btn-shuffle'),
     btnReset: document.getElementById('btn-reset'),
+    btnTheme: document.getElementById('btn-theme'),
     searchInput: document.getElementById('search-input'),
     categoryChips: document.getElementById('category-chips'),
     statusFilters: document.getElementById('status-filters')
   };
 
-  // 2. Lightweight Markdown Typesetting Helper
-  function formatMarkdown(text) {
-    if (!text) return '';
+  // 2. Markdown Typesetting Helper (handles headings, mixed lists, inline code, links, emphasis)
+  function formatInline(text) {
     let escaped = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-
-    // Format code spans
     escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Format bold
     escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // Format italic
     escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // Format markdown links
-    escaped = escaped.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="inline-link">$1</a>');
-
-    // Split paragraphs
-    const blocks = escaped.split(/\n\n+/);
-    return blocks.map(block => {
-      block = block.trim();
-      if (!block) return '';
-
-      const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-      // Check for bullet list
-      const isBullet = lines.every(l => l.startsWith('- ') || l.startsWith('* '));
-      if (isBullet) {
-        const lis = lines.map(l => `<li>${l.substring(2)}</li>`).join('');
-        return `<ul>${lis}</ul>`;
-      }
-
-      // Check for numbered list
-      const isNumbered = lines.every(l => /^\d+\.\s+/.test(l));
-      if (isNumbered) {
-        const lis = lines.map(l => `<li>${l.replace(/^\d+\.\s+/, '')}</li>`).join('');
-        return `<ol>${lis}</ol>`;
-      }
-
-      // Normal paragraph
-      return `<p>${lines.join('<br>')}</p>`;
-    }).filter(Boolean).join('');
+    escaped = escaped.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener" class="inline-link">$1</a>'
+    );
+    return escaped;
   }
 
-  // 3. Storage Helpers
+  function formatMarkdown(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    const out = [];
+    let listType = null;
+    let listItems = [];
+    let paraLines = [];
+
+    function flushList() {
+      if (listType && listItems.length > 0) {
+        const tag = listType;
+        out.push(`<${tag}>${listItems.map(item => `<li>${formatInline(item)}</li>`).join('')}</${tag}>`);
+      }
+      listType = null;
+      listItems = [];
+    }
+
+    function flushPara() {
+      if (paraLines.length > 0) {
+        out.push(`<p>${paraLines.map(formatInline).join('<br>')}</p>`);
+        paraLines = [];
+      }
+    }
+
+    for (const raw of lines) {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        flushList();
+        flushPara();
+        continue;
+      }
+
+      const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
+      if (headingMatch) {
+        flushList();
+        flushPara();
+        out.push(`<h4 class="card-subheading">${formatInline(headingMatch[1])}</h4>`);
+        continue;
+      }
+
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        flushPara();
+        if (listType !== 'ul') {
+          flushList();
+          listType = 'ul';
+        }
+        listItems.push(trimmed.substring(2).trim());
+        continue;
+      }
+
+      const numMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+      if (numMatch) {
+        flushPara();
+        if (listType !== 'ol') {
+          flushList();
+          listType = 'ol';
+        }
+        listItems.push(numMatch[1].trim());
+        continue;
+      }
+
+      flushList();
+      paraLines.push(trimmed);
+    }
+
+    flushList();
+    flushPara();
+    return out.join('');
+  }
+
+  // 3. Storage & Theme Helpers
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cardStates));
@@ -133,28 +178,66 @@
     saveState();
   }
 
-  // 4. Filtering & Searching
+  function applyTheme(theme) {
+    if (theme === 'paper') {
+      document.documentElement.setAttribute('data-theme', 'paper');
+      if (dom.btnTheme) dom.btnTheme.textContent = 'Obsidian Theme';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      if (dom.btnTheme) dom.btnTheme.textContent = 'Paper Theme';
+    }
+  }
+
+  function toggleTheme() {
+    const next = document.documentElement.getAttribute('data-theme') === 'paper' ? 'obsidian' : 'paper';
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {}
+  }
+
+  function updateCategoryCounts() {
+    if (!dom.categoryChips) return;
+    const counts = {};
+    for (const card of rawCards) {
+      counts[card.category_id] = (counts[card.category_id] || 0) + 1;
+    }
+    dom.categoryChips.querySelectorAll('.category-chip').forEach(chip => {
+      const cat = chip.dataset.cat;
+      const badge = chip.querySelector('.chip-count');
+      if (!badge) return;
+      badge.textContent = cat === 'all' ? rawCards.length : (counts[cat] || 0);
+    });
+  }
+
+  // 4. Environment & Site Path Resolution
+  const isFileProto = window.location.protocol === 'file:';
+  const pathname = window.location.pathname.replace(/\\/g, '/').toLowerCase();
+  const isDocsFile = pathname.includes('/docs/') || pathname.endsWith('/flashcards.html');
+  const isGitHubPages = !isFileProto && window.location.hostname.endsWith('.github.io');
+  const inDocsSite = isDocsFile || isGitHubPages;
+  const coursePrefix = inDocsSite ? './' : './docs/';
+  const repoBase = 'https://github.com/Aniketchavan7/system-design-illustrated/blob/main/';
+
+  // 5. Filtering & Searching
   function applyFilters() {
     filteredCards = cards.filter(card => {
-      // Category filter
       if (activeCategory !== 'all' && card.category_id !== activeCategory) {
         return false;
       }
-      // Status filter
       const st = getCardStatus(card.id);
       if (activeStatus !== 'all' && st !== activeStatus) {
         return false;
       }
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const searchable = (
-          card.title + ' ' + 
-          card.eli5 + ' ' + 
+          card.title + ' ' +
+          card.eli5 + ' ' +
           card.analogy + ' ' +
-          card.category + ' ' + 
-          card.google_example + ' ' + 
-          card.netflix_example + ' ' + 
+          card.category + ' ' +
+          card.google_example + ' ' +
+          card.netflix_example + ' ' +
           card.interview_question + ' ' +
           card.interview_answer
         ).toLowerCase();
@@ -169,7 +252,7 @@
     updateProgress();
   }
 
-  // 5. Rendering
+  // 6. Rendering
   function renderCard() {
     if (dom.card.classList.contains('flipped')) {
       dom.card.classList.remove('flipped');
@@ -223,15 +306,16 @@
     dom.interviewQ.textContent = card.interview_question;
     dom.interviewA.innerHTML = formatMarkdown(card.interview_answer);
 
-    // Deep Links
-    const isFile = window.location.protocol === 'file:';
-    const isDocs = window.location.pathname.replace(/\\/g, '/').toLowerCase().includes('/docs');
-    const localBase = isDocs ? '../' : './';
-    const repoBase = 'https://github.com/Aniketchavan7/system-design-illustrated/blob/main/';
-
-    const readmeUrl = isFile ? `${localBase}${card.folder}/README.md` : `${repoBase}${card.folder}/README.md`;
-    const examplesUrl = isFile ? `${localBase}${card.folder}/REAL_WORLD_EXAMPLES.md` : `${repoBase}${card.folder}/REAL_WORLD_EXAMPLES.md`;
-    const demoUrl = isFile ? `${localBase}${card.folder}/demo.py` : `${repoBase}${card.folder}/demo.py`;
+    // Deep Links: stay inside local rendered chapters when available, fallback smoothly
+    const readmeUrl = (inDocsSite || !isFileProto)
+      ? `${coursePrefix}chapters/${card.folder}/index.html`
+      : `./${card.folder}/README.md`;
+    const examplesUrl = (inDocsSite || !isFileProto)
+      ? `${coursePrefix}chapters/${card.folder}/examples.html`
+      : `./${card.folder}/REAL_WORLD_EXAMPLES.md`;
+    const demoUrl = isFileProto
+      ? `${isDocsFile ? '../' : './'}${card.folder}/demo.py`
+      : `${repoBase}${card.folder}/demo.py`;
 
     dom.linkReadme.href = readmeUrl;
     dom.linkExamples.href = examplesUrl;
@@ -241,7 +325,13 @@
     dom.linkExamplesBack.href = examplesUrl;
     dom.linkDemoBack.href = demoUrl;
 
-    // Counter
+    if (inDocsSite || !isFileProto) {
+      dom.linkReadme.removeAttribute('target');
+      dom.linkExamples.removeAttribute('target');
+      dom.linkReadmeBack.removeAttribute('target');
+      dom.linkExamplesBack.removeAttribute('target');
+    }
+
     dom.progressText.textContent = `Card ${currentIndex + 1} of ${filteredCards.length}`;
   }
 
@@ -270,7 +360,6 @@
     const card = filteredCards[currentIndex];
     setCardStatus(card.id, 'mastered');
     renderCard();
-    // Auto-advance smoothly
     if (currentIndex < filteredCards.length - 1) {
       setTimeout(nextCard, 200);
     }
@@ -281,7 +370,6 @@
     const card = filteredCards[currentIndex];
     setCardStatus(card.id, 'review');
     renderCard();
-    // Auto-advance smoothly
     if (currentIndex < filteredCards.length - 1) {
       setTimeout(nextCard, 200);
     }
@@ -295,7 +383,7 @@
         [cards[i], cards[j]] = [cards[j], cards[i]];
       }
       dom.btnShuffle.style.background = 'var(--ink-primary)';
-      dom.btnShuffle.style.color = '#000000';
+      dom.btnShuffle.style.color = 'var(--ink-inverse)';
       dom.btnShuffle.style.borderColor = 'var(--ink-primary)';
     } else {
       cards = [...rawCards];
@@ -317,22 +405,18 @@
   function updateProgress() {
     const total = cards.length;
     let masteredCount = 0;
-    let reviewCount = 0;
 
     cards.forEach(c => {
-      const s = getCardStatus(c.id);
-      if (s === 'mastered') masteredCount++;
-      else if (s === 'review') reviewCount++;
+      if (getCardStatus(c.id) === 'mastered') masteredCount++;
     });
 
-    const percent = Math.round((masteredCount / total) * 100);
+    const percent = total ? Math.round((masteredCount / total) * 100) : 0;
     dom.progressPercentage.textContent = `${masteredCount}/${total} Mastered (${percent}%)`;
     dom.progressFill.style.width = `${percent}%`;
   }
 
-  // 6. Event Listeners
+  // 7. Event Listeners
   dom.cardContainer.addEventListener('click', (e) => {
-    // Avoid flipping when clicking outbound links
     if (e.target.closest('a')) return;
     flipCard();
   });
@@ -364,13 +448,13 @@
 
   dom.btnShuffle.addEventListener('click', shuffleDeck);
   dom.btnReset.addEventListener('click', resetProgress);
+  if (dom.btnTheme) dom.btnTheme.addEventListener('click', toggleTheme);
 
   dom.searchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value;
     applyFilters();
   });
 
-  // Category filter chips
   dom.categoryChips.addEventListener('click', (e) => {
     const chip = e.target.closest('.category-chip');
     if (!chip) return;
@@ -380,7 +464,6 @@
     applyFilters();
   });
 
-  // Status filters
   dom.statusFilters.addEventListener('click', (e) => {
     const pill = e.target.closest('.status-pill');
     if (!pill) return;
@@ -390,7 +473,6 @@
     applyFilters();
   });
 
-  // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (document.activeElement === dom.searchInput) return;
 
@@ -418,7 +500,6 @@
     }
   });
 
-  // Touch swipe support for mobile
   let touchStartX = 0;
   let touchEndX = 0;
 
@@ -439,27 +520,37 @@
     }
   }
 
-  // Set header link destinations for web vs local
-  const isFileProto = window.location.protocol === 'file:';
-  const isDocsDir = window.location.pathname.replace(/\\/g, '/').toLowerCase().includes('/docs');
+  // Set header link destinations across GitHub Pages, local HTTP, and file://
   const guideLink = document.getElementById('link-study-guide');
-  if (isFileProto && guideLink) {
-    guideLink.href = isDocsDir ? '../STUDY_GUIDE.md' : './STUDY_GUIDE.md';
-  }
   const csEl = document.getElementById('link-cheatsheet');
   const fcEl = document.getElementById('link-flowcharts');
   const contribEl = document.getElementById('link-contribute');
   const redditEl = document.getElementById('link-reddit');
-  if (contribEl && isFileProto) {
-    contribEl.href = isDocsDir ? '../CONTRIBUTING.md' : './CONTRIBUTING.md';
+  const courseLink = document.getElementById('link-course');
+  const libLink = document.getElementById('link-library');
+
+  const mdRoot = isDocsFile ? '../' : './';
+  if (inDocsSite || !isFileProto) {
+    if (guideLink) guideLink.href = `${coursePrefix}guides/study-guide.html`;
+    if (csEl) csEl.href = `${coursePrefix}guides/cheatsheet.html`;
+    if (fcEl) fcEl.href = `${coursePrefix}guides/decision-flowcharts.html`;
+    if (contribEl) contribEl.href = `${coursePrefix}guides/contributing.html`;
+  } else {
+    if (guideLink) guideLink.href = `${mdRoot}STUDY_GUIDE.md`;
+    if (csEl) csEl.href = `${mdRoot}CHEATSHEET.md`;
+    if (fcEl) fcEl.href = `${mdRoot}DECISION_FLOWCHARTS.md`;
+    if (contribEl) contribEl.href = `${mdRoot}CONTRIBUTING.md`;
   }
-  if (csEl) {
-    csEl.href = isFileProto ? (isDocsDir ? '../CHEATSHEET.md' : './CHEATSHEET.md') : 'https://github.com/Aniketchavan7/system-design-illustrated/blob/main/CHEATSHEET.md';
-  }
-  if (fcEl) {
-    fcEl.href = isFileProto ? (isDocsDir ? '../DECISION_FLOWCHARTS.md' : './DECISION_FLOWCHARTS.md') : 'https://github.com/Aniketchavan7/system-design-illustrated/blob/main/DECISION_FLOWCHARTS.md';
-  }
+  if (courseLink) courseLink.href = `${coursePrefix}index.html`.replace('./index.html', './');
+  if (libLink) libLink.href = `${coursePrefix}library.html`;
+  if (redditEl) redditEl.href = 'https://www.reddit.com/r/systemdesign/';
 
   // Initial Run
+  try {
+    applyTheme(localStorage.getItem(THEME_KEY) || 'obsidian');
+  } catch (e) {
+    applyTheme('obsidian');
+  }
+  updateCategoryCounts();
   applyFilters();
 })();

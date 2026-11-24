@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Runnable Postgres + RabbitMQ transactional outbox and idempotent consumer lab.">
+  <title>Order Processing Crash-Recovery Lab | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="hands-on-lab-event-driven-order-processing-with-transactional-outbox">🧪 Hands-On Lab: Event-Driven Order Processing with Transactional Outbox</h1>
+<blockquote>
+<p>Practical, runnable Docker Compose lab demonstrating the <strong>Transactional Outbox Pattern</strong>, <strong>At-Least-Once Delivery</strong>, and <strong>Idempotent Consumers</strong> using PostgreSQL 17 and RabbitMQ 4.</p>
+</blockquote>
+<hr />
+<h2 id="architectural-problem-solved">🎯 Architectural Problem Solved</h2>
+<p>When an application creates an order and sends a message to an event broker, two separate systems are involved (PostgreSQL + RabbitMQ).</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
+    subgraph Anti_Pattern [&quot;❌ The Dual-Write Anti-Pattern&quot;]
+        App1[&quot;⚙️ App Server&quot;] --&gt;|&quot;1. INSERT Order&quot;| DB1[(&quot;💾 PostgreSQL&quot;)]
+        App1 -.-&gt;|&quot;💥 CRASH! Message Never Sent&quot;| MQ1[&quot;📬 RabbitMQ&quot;]
+    end</pre></figure>
+<p>If the database write succeeds but the app crashes before publishing to RabbitMQ, the message is permanently lost. If we publish to RabbitMQ first and the database write fails, downstream workers fulfill non-existent orders.</p>
+<h3 id="the-solution-the-transactional-outbox-pattern">The Solution: The Transactional Outbox Pattern</h3>
+<p>Write the business entity (<code>orders</code>) and the event payload (<code>order_outbox</code>) in the <strong>same local ACID database transaction</strong>. A separate background relay worker reads the outbox table and reliably publishes to RabbitMQ.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
+    subgraph Outbox_Pattern [&quot;✅ The Transactional Outbox Pattern&quot;]
+        App[&quot;⚙️ App Server&quot;] --&gt;|&quot;1. Single Atomic ACID Tx&quot;| DB[(&quot;💾 PostgreSQL&lt;br/&gt;orders + order_outbox&quot;)]
+        Relay[&quot;👷 Relay Worker&quot;] --&gt;|&quot;2. Read Unpublished&lt;br/&gt;FOR UPDATE SKIP LOCKED&quot;| DB
+        Relay --&gt;|&quot;3. Publish with Confirms&quot;| MQ[&quot;📬 RabbitMQ&quot;]
+        Relay --&gt;|&quot;4. Mark published_at&quot;| DB
+        Consumer[&quot;👷 Fulfillment Consumer&quot;] --&gt;|&quot;5. Consume &amp; basic_ack&quot;| MQ
+        Consumer --&gt;|&quot;6. Commit idempotent INSERT&quot;| DB
+        Consumer --&gt;|&quot;7. Acknowledge delivery&quot;| MQ
+    end</pre></figure>
+<hr />
+<h2 id="run-the-verification">Run the verification</h2>
+<p>From the repository root, run these commands with a local container runtime that supports Docker Compose. The lab uses no hosted service and exposes no host ports.</p>
+<pre><code class="language-sh">cd labs/order-processing
+docker compose up -d --wait postgres rabbitmq
+docker compose run --rm --build lab verify
+docker compose down
+</code></pre>
+<p>The verifier uses a unique order and queue. It creates the same order twice, crashes the relay and the worker in separate processes, and checks the recovered database and queue state. The database volume retains order records between runs.</p>
+<h2 id="walk-through-the-failures">Walk through the failures</h2>
+<p>Start the services as shown above. Pick a fresh UUID each time you repeat this exercise.</p>
+<pre><code class="language-sh">docker compose run --rm --build lab create 00000000-0000-4000-8000-000000000001
+docker compose run --rm lab relay 00000000-0000-4000-8000-000000000001 --crash-after-publish
+docker compose run --rm lab status 00000000-0000-4000-8000-000000000001
+docker compose run --rm lab relay 00000000-0000-4000-8000-000000000001
+docker compose run --rm lab worker --crash-after-commit
+docker compose run --rm lab worker
+docker compose run --rm lab worker
+docker compose run --rm lab worker
+docker compose run --rm lab status 00000000-0000-4000-8000-000000000001
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Expected result</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relay exits with code 41</td>
+<td>RabbitMQ confirmed publication and the outbox remains pending</td>
+<td>The process exited before committing the outbox update. Rerunning the relay publishes a second copy.</td>
+</tr>
+<tr>
+<td>Worker exits with code 42</td>
+<td>PostgreSQL contains one fulfillment</td>
+<td>The process exited after committing but before acknowledging. RabbitMQ requeues the delivery.</td>
+</tr>
+<tr>
+<td>Worker runs again</td>
+<td>Two deliveries print “Skipped duplicate,” then the queue is empty</td>
+<td>Both copies carry the same order ID. The database unique constraint protects the fulfillment.</td>
+</tr>
+</tbody>
+</table>
+<p>An external side effect, such as calling a carrier, would need its own idempotency contract or a durable handoff. A production worker also needs bounded retries, a dead-letter policy, and monitoring for old unpublished rows.</p>
+<p><a href="../chapters/17-message-queues/index.html">Message queues</a> · <a href="../chapters/32-rest-api-design-and-idempotency/index.html">API idempotency</a> · <a href="https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE">PostgreSQL locking</a> · <a href="https://www.rabbitmq.com/docs/confirms">RabbitMQ confirms and acknowledgements</a></p>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

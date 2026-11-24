@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Visual decision trees for databases, consistency, caching, protocols, and distributed transactions.">
+  <title>Master Architectural Decision Flowcharts | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="system-design-master-decision-flowcharts">🔀 System Design Master Decision Flowcharts</h1>
+<blockquote>
+<p>Architectural decision trees, evaluation flowcharts, and trade-off matrices to navigate complex system design forks during technical interviews and production RFC designs.</p>
+</blockquote>
+<hr />
+<h2 id="table-of-contents">📑 Table of Contents</h2>
+<ol>
+<li><a href="#1-database-selection-master-flowchart">Database Selection Master Flowchart</a></li>
+<li><a href="#2-consistency-models--cap-theorem-flowchart">Consistency Models &amp; CAP Theorem Flowchart</a></li>
+<li><a href="#3-caching-strategy--eviction-flowchart">Caching Strategy &amp; Eviction Flowchart</a></li>
+<li><a href="#4-client-server-communication-protocol-flowchart">Client-Server Communication Protocol Flowchart</a></li>
+<li><a href="#5-message-queues-vs-event-streaming-flowchart">Message Queues vs. Event Streaming Flowchart</a></li>
+<li><a href="#6-distributed-transactions--concurrency-flowchart">Distributed Transactions &amp; Concurrency Flowchart</a></li>
+<li><a href="#7-api-rate-limiting-algorithm-flowchart">API Rate Limiting Algorithm Flowchart</a></li>
+<li><a href="#8-database-sharding--partition-key-flowchart">Database Sharding &amp; Partition Key Flowchart</a></li>
+<li><a href="#9-fault-tolerance--system-resilience-flowchart">Fault Tolerance &amp; System Resilience Flowchart</a></li>
+</ol>
+<hr />
+<h2 id="1-database-selection-master-flowchart">1. Database Selection Master Flowchart</h2>
+<p>Choosing the correct datastore is the single most critical architectural decision.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Data Storage Requirement&quot;]) --&gt; Q1{&quot;Is the data primarily&lt;br/&gt;structured tabular, document,&lt;br/&gt;graph, time-series, or analytical?&quot;}
+    
+    Q1 --&gt;|&quot;Analytical Queries &amp; Aggregations&lt;br/&gt;(SUM, AVG, GROUP BY over billions)&quot;| OLAP[&quot;Columnar OLAP Store&lt;br/&gt;(ClickHouse, BigQuery, Snowflake)&quot;]
+    Q1 --&gt;|&quot;Time-Stamped Numeric Readings&lt;br/&gt;(CPU %, metrics, sensor telemetry)&quot;| TSDB[&quot;Time-Series Database&lt;br/&gt;(Prometheus, TimescaleDB, InfluxDB)&quot;]
+    Q1 --&gt;|&quot;Deep Entity Relationships&lt;br/&gt;(Social graphs, fraud rings, knowledge graphs)&quot;| Graph[&quot;Graph Database&lt;br/&gt;(Neo4j, Amazon Neptune)&quot;]
+    Q1 --&gt;|&quot;Simple Lookup by Single Key&lt;br/&gt;(Sessions, tokens, cart, user profiles)&quot;| KV[&quot;Key-Value Store&lt;br/&gt;(Redis, DynamoDB, Memcached)&quot;]
+    Q1 --&gt;|&quot;Tabular Records or Unstructured Docs&quot;| Q2{&quot;Do you need strict multi-row&lt;br/&gt;ACID transactions &amp; foreign keys?&quot;}
+    
+    Q2 --&gt;|&quot;Yes (Financial ledgers, orders, ERP)&quot;| Q3{&quot;Does the data fit on a single node&lt;br/&gt;(&lt; 5TB) or require global horizontal scale?&quot;}
+    Q3 --&gt;|&quot;Fits on Single Node / Replicas&quot;| RDBMS[&quot;Relational Database (SQL)&lt;br/&gt;(PostgreSQL, MySQL)&quot;]
+    Q3 --&gt;|&quot;Global Scale / Distributed ACID&quot;| NewSQL[&quot;Distributed SQL (NewSQL)&lt;br/&gt;(Google Spanner, CockroachDB)&quot;]
+    
+    Q2 --&gt;|&quot;No (Flexible schema, write scale)&quot;| Q4{&quot;Is access pattern nested JSON&lt;br/&gt;or high-throughput write append?&quot;}
+    Q4 --&gt;|&quot;Nested Hierarchical JSON&quot;| Doc[&quot;Document Store&lt;br/&gt;(MongoDB, Couchbase)&quot;]
+    Q4 --&gt;|&quot;Massive Write Throughput (&gt; 50k/s)&lt;br/&gt;Time-ordered IoT / Logs&quot;| WideCol[&quot;Wide-Column Store&lt;br/&gt;(Apache Cassandra, ScyllaDB, Bigtable)&quot;]</pre></figure>
+<h3 id="database-decision-summary-matrix">Database Decision Summary Matrix</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Requirement</th>
+<th style="text-align:left">Recommended Technology</th>
+<th style="text-align:left">Why Pick It?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>ACID Financial Transactions</strong></td>
+<td style="text-align:left">PostgreSQL, MySQL</td>
+<td style="text-align:left">Strong consistency, foreign keys, rollback guarantees.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Global Distributed ACID</strong></td>
+<td style="text-align:left">Google Cloud Spanner, CockroachDB</td>
+<td style="text-align:left">Multi-region linearizability without manual sharding.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>High-Throughput Append Writes</strong></td>
+<td style="text-align:left">Apache Cassandra, ScyllaDB</td>
+<td style="text-align:left">Masterless peer-to-peer ring; zero single point of failure.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Sub-Millisecond Read Caching</strong></td>
+<td style="text-align:left">Redis, Memcached</td>
+<td style="text-align:left">Stored directly in RAM; <span class="math-inline">100k+ ops/sec</span> per node.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Flexible JSON Catalog</strong></td>
+<td style="text-align:left">MongoDB, DynamoDB</td>
+<td style="text-align:left">Dynamic schema, fast nested indexing, document model.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Social / Knowledge Graph</strong></td>
+<td style="text-align:left">Neo4j, Amazon Neptune</td>
+<td style="text-align:left">Traverses multi-hop edges (<span class="math-inline">N</span>-degrees) without expensive SQL joins.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Analytical Reporting &amp; BI</strong></td>
+<td style="text-align:left">ClickHouse, Snowflake, BigQuery</td>
+<td style="text-align:left">Columnar compression scans billions of rows in milliseconds.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-consistency-models--cap-theorem-flowchart">2. Consistency Models &amp; CAP Theorem Flowchart</h2>
+<p>Navigating consistency vs. availability during network partitions.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Distributed Data Replication&quot;]) --&gt; Q_Partition{&quot;Network Partition Occurs&lt;br/&gt;(Nodes cannot communicate)?&quot;}
+    
+    Q_Partition --&gt;|&quot;During Partition (CAP Theorem)&quot;| CAP_Choice{&quot;What is the business priority?&quot;}
+    CAP_Choice --&gt;|&quot;Financial / Booking Accuracy&lt;br/&gt;(Never return stale or duplicate state)&quot;| CP[&quot;CP System (Consistency + Partition)&lt;br/&gt;Reject or block writes until quorum reaches agreement&lt;br/&gt;(e.g., Google Spanner, Raft, etcd, ZooKeeper)&quot;]
+    CAP_Choice --&gt;|&quot;High Availability / Uptime&lt;br/&gt;(Always accept writes, resolve later)&quot;| AP[&quot;AP System (Availability + Partition)&lt;br/&gt;Accept local writes on both sides of partition&lt;br/&gt;(e.g., Cassandra, DynamoDB, DNS)&quot;]
+    
+    Q_Partition --&gt;|&quot;Without Partition (PACELC Theorem)&quot;| Normal_Choice{&quot;What is the trade-off in normal operation?&quot;}
+    Normal_Choice --&gt;|&quot;Prefer Lowest Read Latency&quot;| LatencyPref[&quot;PACELC: PA / EL&lt;br/&gt;Read from nearest local replica&lt;br/&gt;(Eventual Consistency)&quot;]
+    Normal_Choice --&gt;|&quot;Prefer Immediate Data Freshness&quot;| FreshnessPref[&quot;PACELC: PC / EC&lt;br/&gt;Synchronous replication before acknowledge&lt;br/&gt;(Linearizability / Strong Consistency)&quot;]
+    
+    FreshnessPref --&gt; Q_User{&quot;User Experience Requirement?&quot;}
+    Q_User --&gt;|&quot;User must see their own edits immediately&quot;| RAW[&quot;Read-After-Write Consistency&lt;br/&gt;Route user&#x27;s reads to Leader for 10s after write&quot;]
+    Q_User --&gt;|&quot;Never see time go backwards&quot;| Monotonic[&quot;Monotonic Read Consistency&lt;br/&gt;Pin user sessions to the same replica&quot;]</pre></figure>
+<hr />
+<h2 id="3-caching-strategy--eviction-flowchart">3. Caching Strategy &amp; Eviction Flowchart</h2>
+<p>Choosing when to load and update cache entries.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Application Data Access&quot;]) --&gt; Q_Type{&quot;Is the cache read-heavy&lt;br/&gt;or write-heavy?&quot;}
+    
+    Q_Type --&gt;|&quot;Read-Heavy (&gt; 80% Reads)&quot;| Q_Miss{&quot;Can the application tolerate&lt;br/&gt;cache misses on startup?&quot;}
+    Q_Miss --&gt;|&quot;Yes (Standard consumer traffic)&quot;| CacheAside[&quot;Cache-Aside (Lazy Loading)&lt;br/&gt;App checks Cache -&gt; On Miss, reads DB -&gt; Writes to Cache&quot;]
+    Q_Miss --&gt;|&quot;No (Predictable popular items)&quot;| RefreshAhead[&quot;Refresh-Ahead / Warm Cache&lt;br/&gt;Background worker re-populates cache before TTL expires&quot;]
+    
+    Q_Type --&gt;|&quot;Write-Heavy / Critical Durability&quot;| Q_Durability{&quot;Can data loss be tolerated&lt;br/&gt;in exchange for extreme write speed?&quot;}
+    Q_Durability --&gt;|&quot;No (Financial, orders, billing)&quot;| WriteThrough[&quot;Write-Through Cache&lt;br/&gt;App writes to Cache -&gt; Cache synchronously writes to DB&quot;]
+    Q_Durability --&gt;|&quot;Yes (Social likes, view counts, telemetry)&quot;| WriteBehind[&quot;Write-Behind (Write-Back)&lt;br/&gt;App writes to Cache instantly -&gt; Asynchronously batched to DB&quot;]
+    Q_Durability --&gt;|&quot;Data written once, rarely re-read&quot;| WriteAround[&quot;Write-Around Cache&lt;br/&gt;App writes directly to DB, bypassing cache entirely&quot;]
+
+    Start --&gt; Eviction{&quot;Cache Memory Full: Eviction Policy&quot;}
+    Eviction --&gt;|&quot;Recently accessed items likely needed again&quot;| LRU[&quot;LRU (Least Recently Used) - Default&quot;]
+    Eviction --&gt;|&quot;Popular historical items dominate&quot;| LFU[&quot;LFU (Least Frequently Used) / W-TinyLFU&quot;]
+    Eviction --&gt;|&quot;Strict expiration times&quot;| TTL[&quot;TTL-based Eviction&quot;]</pre></figure>
+<hr />
+<h2 id="4-client-server-communication-protocol-flowchart">4. Client-Server Communication Protocol Flowchart</h2>
+<p>Choosing the transport mechanism between clients and backend microservices.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Client-Server Communication&quot;]) --&gt; Q_Party{&quot;Who initiates the conversation?&quot;}
+    
+    Q_Party --&gt;|&quot;Client Requests, Server Responds&quot;| Q_Client{&quot;Who is the client?&quot;}
+    Q_Client --&gt;|&quot;Public Mobile App or Web Browser&quot;| REST[&quot;REST / HTTP 2 or 3&lt;br/&gt;Human-readable JSON, widespread tooling, edge CDN cacheable&quot;]
+    Q_Client --&gt;|&quot;Internal Microservice-to-Microservice&quot;| gRPC[&quot;gRPC over HTTP/2&lt;br/&gt;Binary Protobuf, typed contracts, multiplexing, ultra-fast&quot;]
+    
+    Q_Party --&gt;|&quot;Server Must Push Real-Time Data to Client&quot;| Q_Duplex{&quot;Does client need to send&lt;br/&gt;frequent messages back on same channel?&quot;}
+    Q_Duplex --&gt;|&quot;Yes (Bidirectional: Chat, Multiplayer gaming, Collab editing)&quot;| WebSockets[&quot;WebSockets&lt;br/&gt;Persistent full-duplex TCP connection, low per-frame overhead&quot;]
+    Q_Duplex --&gt;|&quot;No (One-Way Server Push: Live stock ticker, sports score, notifications)&quot;| SSE[&quot;Server-Sent Events (SSE)&lt;br/&gt;Lightweight text stream over standard HTTP, automatic reconnect&quot;]
+    
+    Q_Party --&gt;|&quot;Third-Party Server-to-Server Event Trigger&quot;| Webhooks[&quot;Webhooks (HTTP POST Callback)&lt;br/&gt;e.g., Stripe payment confirmation, GitHub PR notification&quot;]</pre></figure>
+<hr />
+<h2 id="5-message-queues-vs-event-streaming-flowchart">5. Message Queues vs. Event Streaming Flowchart</h2>
+<p>Choosing between message brokers and distributed commit logs.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Asynchronous Messaging Requirement&quot;]) --&gt; Q_Model{&quot;What is the consumption model?&quot;}
+    
+    Q_Model --&gt;|&quot;Task Dispatch to Worker Pool&lt;br/&gt;(Each task processed by EXACTLY ONE worker)&quot;| TaskQueue{&quot;Do tasks require strict ordering&lt;br/&gt;or complex routing?&quot;}
+    TaskQueue --&gt;|&quot;Complex topic exchange / routing headers&quot;| RabbitMQ[&quot;RabbitMQ / ActiveMQ&lt;br/&gt;AMQP, smart broker, message deleted once acknowledged&quot;]
+    TaskQueue --&gt;|&quot;Simple cloud serverless queue&quot;| SQS[&quot;AWS SQS / Google Cloud Tasks&lt;br/&gt;Managed, auto-scaling, dead-letter queues&quot;]
+    
+    Q_Model --&gt;|&quot;Event Log Stream&lt;br/&gt;(Multiple independent consumers read same stream)&quot;| Stream{&quot;Do you need historical replay&lt;br/&gt;or stream processing windows?&quot;}
+    Stream --&gt;|&quot;Yes (Event Sourcing, Flink, Data Lake, Analytics)&quot;| Kafka[&quot;Apache Kafka / Apache Pulsar&lt;br/&gt;Immutable append-only distributed commit log, retention by days&quot;]
+    Stream --&gt;|&quot;Ephemeral In-Memory Real-Time Broadcast&lt;br/&gt;(No persistence needed)&quot;| RedisPubSub[&quot;Redis Pub/Sub&lt;br/&gt;Fire-and-forget in-memory pub/sub for chat/presence&quot;]</pre></figure>
+<hr />
+<h2 id="6-distributed-transactions--concurrency-flowchart">6. Distributed Transactions &amp; Concurrency Flowchart</h2>
+<p>Managing transactional boundaries across microservices.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Multi-Service State Mutation&quot;]) --&gt; Q_Scope{&quot;Does the transaction span&lt;br/&gt;a single database or multiple services?&quot;}
+    
+    Q_Scope --&gt;|&quot;Single Database Engine&quot;| LocalACID[&quot;Local ACID Transaction&lt;br/&gt;(BEGIN -&gt; COMMIT / ROLLBACK)&quot;]
+    
+    Q_Scope --&gt;|&quot;Multiple Microservices / Databases&quot;| Q_Latency{&quot;Can services hold locks across network&lt;br/&gt;and accept high latency &amp; low availability?&quot;}
+    
+    Q_Latency --&gt;|&quot;Yes (Rare: Core banking clearing, strict atomic)&quot;| TwoPC[&quot;Two-Phase Commit (2PC) / XA&lt;br/&gt;Coordinator prepares, then commits. High lock contention!&quot;]
+    
+    Q_Latency --&gt;|&quot;No (Modern Microservices - Industry Standard)&quot;| SagaChoice{&quot;How complex is the workflow?&quot;}
+    SagaChoice --&gt;|&quot;Simple 2-3 step workflow&quot;| SagaChoreo[&quot;Saga: Choreography&lt;br/&gt;Services publish events to Kafka; next service listens.&lt;br/&gt;No central coordinator.&quot;]
+    SagaChoice --&gt;|&quot;Complex multi-step workflow with many fallbacks&quot;| SagaOrchestrator[&quot;Saga: Orchestration&lt;br/&gt;Central orchestrator (Temporal, Netflix Conductor)&lt;br/&gt;executes state machine and triggers compensating actions&quot;]</pre></figure>
+<hr />
+<h2 id="7-api-rate-limiting-algorithm-flowchart">7. API Rate Limiting Algorithm Flowchart</h2>
+<p>Selecting the right rate limiting algorithm.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;API Rate Limiting Requirement&quot;]) --&gt; Q_Bursts{&quot;Does the API need to support&lt;br/&gt;short burst traffic gracefully?&quot;}
+    
+    Q_Bursts --&gt;|&quot;Yes (Standard Web/Mobile APIs)&quot;| TokenBucket[&quot;Token Bucket (Industry Standard)&lt;br/&gt;Tokens added at constant rate; capacity allows short bursts.&lt;br/&gt;Used by Stripe, AWS, GitHub.&quot;]
+    
+    Q_Bursts --&gt;|&quot;No (Downstream service requires strictly stable, smoothed flow)&quot;| LeakyBucket[&quot;Leaky Bucket&lt;br/&gt;Requests queue in FIFO buffer and drip at strictly constant rate.&lt;br/&gt;Smooths traffic spikes.&quot;]
+    
+    Q_Bursts --&gt;|&quot;Strict sliding window boundary precision&quot;| Q_Memory{&quot;Can system afford memory for&lt;br/&gt;every single request timestamp?&quot;}
+    Q_Memory --&gt;|&quot;Yes (Ultra-accurate low-volume limits)&quot;| SlidingLog[&quot;Sliding Window Log&lt;br/&gt;Stores exact timestamps in Redis ZSET. 100% accurate, high RAM.&quot;]
+    Q_Memory --&gt;|&quot;No (High-volume planetary traffic)&quot;| SlidingCounter[&quot;Sliding Window Counter&lt;br/&gt;Approximates rate based on weighted sum of current + previous window.&lt;br/&gt;Low RAM, 99% accuracy.&quot;]</pre></figure>
+<hr />
+<h2 id="8-database-sharding--partition-key-flowchart">8. Database Sharding &amp; Partition Key Flowchart</h2>
+<p>Distributing data across database shards.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Database Sharding Strategy&quot;]) --&gt; Q_Query{&quot;What is the dominant query access pattern?&quot;}
+    
+    Q_Query --&gt;|&quot;Range Queries over sequential values&lt;br/&gt;(e.g., date ranges, alphabet ranges)&quot;| RangeSharding[&quot;Range-Based Sharding&lt;br/&gt;Shard 1: Jan-Mar, Shard 2: Apr-Jun.&lt;br/&gt;Risk: Extreme write hotspots on current date!&quot;]
+    
+    Q_Query --&gt;|&quot;Single Entity Point Lookups&lt;br/&gt;(e.g., user_id, order_id)&quot;| HashSharding{&quot;Do cluster nodes scale dynamically up/down?&quot;}
+    HashSharding --&gt;|&quot;Fixed static cluster&quot;| ModuloHash[&quot;Hash Modulo: hash(key) % N&lt;br/&gt;Adding nodes requires rehashing entire database!&quot;]
+    HashSharding --&gt;|&quot;Dynamic cluster adding/removing nodes&quot;| ConsistentHash[&quot;Consistent Hashing Ring with Vnodes&lt;br/&gt;Adding node moves only 1/N keys.&lt;br/&gt;Used by DynamoDB, Cassandra, Discord.&quot;]
+    
+    Q_Query --&gt;|&quot;Geographic / Regulatory Compliance&lt;br/&gt;(GDPR European data must stay in EU)&quot;| GeoSharding[&quot;Geo-Partitioning&lt;br/&gt;Keys tagged by country code (EU, US, APAC).&quot;]</pre></figure>
+<hr />
+<h2 id="9-fault-tolerance--system-resilience-flowchart">9. Fault Tolerance &amp; System Resilience Flowchart</h2>
+<p>Handling network failures, slow dependencies, and service outages.</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;Downstream Dependency Call Fails / Slows&quot;]) --&gt; Q_Transient{&quot;Is the failure transient&lt;br/&gt;(e.g., temporary network glitch, 503 error)?&quot;}
+    
+    Q_Transient --&gt;|&quot;Yes (Intermittent network blip)&quot;| RetryPattern[&quot;Exponential Backoff with Full Jitter&lt;br/&gt;Wait = min(cap, base * 2^attempt) + random_jitter.&lt;br/&gt;Prevents thundering herd retries.&quot;]
+    
+    Q_Transient --&gt;|&quot;No (Downstream service is continuously timing out / dead)&quot;| Q_FailFast{&quot;Should callers keep waiting on timeouts?&quot;}
+    Q_FailFast --&gt;|&quot;No (Protect upstream thread pools)&quot;| CircuitBreaker[&quot;Circuit Breaker Pattern&lt;br/&gt;Trip to OPEN after threshold failures.&lt;br/&gt;Fails fast in 0ms without making network call.&quot;]
+    
+    Start --&gt; Isolation{&quot;Prevent one tenant/feature from starving others&quot;}
+    Isolation --&gt; Bulkhead[&quot;Bulkhead Pattern&lt;br/&gt;Isolate thread pools &amp; connection limits per dependency/tenant.&lt;br/&gt;Failure in recommendations cannot crash checkout.&quot;]
+    
+    CircuitBreaker --&gt; Fallback[&quot;Graceful Fallback&lt;br/&gt;Return stale cached response or static default rather than 500 error.&quot;]</pre></figure>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

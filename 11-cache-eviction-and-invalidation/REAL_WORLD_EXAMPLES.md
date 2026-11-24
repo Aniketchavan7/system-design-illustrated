@@ -103,7 +103,7 @@ Consider a classic Cache-Aside race condition without coordination:
 - Caffeine uses a **Count-Min Sketch** with 4-bit counters:
   - Consumes only **8 bits of overhead per key**.
   - Maximum counter value is 15.
-  - **Periodic Aging**: When total accesses reach a sample size ($W$), all 4-bit counters are right-shifted by 1 ($	ext{halved}$). Historical frequency decays exponentially, allowing historical viral hits to make way for new trending data.
+  - **Periodic Aging**: When total accesses reach a sample size ($W$), all 4-bit counters are right-shifted by 1 ($\text{halved}$). Historical frequency decays exponentially, allowing historical viral hits to make way for new trending data.
 
 #### C. Segmented LRU (SLRU) in the Main Cache
 - Items that pass admission enter the **Probationary Segment** (20% of Main Cache).

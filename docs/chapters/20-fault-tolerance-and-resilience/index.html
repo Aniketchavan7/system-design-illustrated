@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="20---fault-tolerance--resilience-circuit-breakers-bulkheads--retries">20 - Fault Tolerance &amp; Resilience: Circuit Breakers, Bulkheads &amp; Retries</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="20---fault-tolerance--resilience-circuit-breakers-bulkheads--retries">20 - Fault Tolerance &amp; Resilience: Circuit Breakers, Bulkheads &amp; Retries</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In distributed architectures with hundreds of interconnected microservices, network partitions, slow dependencies, and service crashes are not edge cases—they are everyday mathematical certainties. Without defensive patterns, a single degraded downstream database or third-party API can trigger catastrophic <strong>cascading failures</strong> that crash an entire company's platform in seconds. Resilience engineering decouples failure domains using <strong>Timeouts</strong>, <strong>Circuit Breakers</strong> (fail-fast), <strong>Exponential Backoff with Full Jitter</strong> (anti-retry-storm), and <strong>Bulkheads</strong> (compartmentalized resource isolation).</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../20-fault-tolerance-and-resilience/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/20-fault-tolerance-and-resilience/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP connection timeouts, socket read timeouts, and thread pool blocking.</li>
-<li><a href="../03-load-balancing/index.html">03 - Load Balancing</a>: Active and passive health checks.</li>
-<li><a href="../05-rate-limiting/index.html">05 - Rate Limiting</a>: Protecting services from traffic surges.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous decoupling and Dead-Letter Queues.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP connection timeouts, socket read timeouts, and thread pool blocking.</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 - Load Balancing</a>: Active and passive health checks.</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 - Rate Limiting</a>: Protecting services from traffic surges.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous decoupling and Dead-Letter Queues.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -75,12 +75,12 @@
 <tr>
 <td style="text-align:left"><strong>Exponential Backoff</strong></td>
 <td style="text-align:left">Waiting longer between redial attempts when phone is busy</td>
-<td style="text-align:left">$T_{\text{wait}} = \text{Base} \times 2^{\text{attempt}}$</td>
+<td style="text-align:left"><span class="math-inline">T<sub>wait</sub> = Base × 2<sup>attempt</sup></span></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Jitter</strong></td>
 <td style="text-align:left">Arriving at a party at a slightly randomized time to avoid a traffic jam</td>
-<td style="text-align:left">Adding random noise $\text{Uniform}(0, T_{\text{wait}})$ to stagger retries</td>
+<td style="text-align:left">Adding random noise <span class="math-inline">Uniform(0, T<sub>wait</sub>)</span> to stagger retries</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Graceful Degradation</strong></td>
@@ -94,7 +94,7 @@
 <h3 id="the-anatomy-of-a-cascading-failure-storm">The Anatomy of a Cascading Failure Storm</h3>
 <p>Consider an e-commerce platform with 50 microservices:</p>
 <ol>
-<li>The <strong>Product Recommendations Service</strong> encounters a slow database query, causing its response time to spike from $10\text{ ms}$ to $5,000\text{ ms}$ ($5\text{ seconds}$).</li>
+<li>The <strong>Product Recommendations Service</strong> encounters a slow database query, causing its response time to spike from <span class="math-inline">10 ms</span> to <span class="math-inline">5,000 ms</span> (<span class="math-inline">5 seconds</span>).</li>
 <li>The upstream <strong>API Gateway</strong> has a pool of 200 worker threads.</li>
 <li>Because incoming customer requests take 5 seconds to complete, all 200 API Gateway threads are soon blocked, sitting completely idle while waiting for network socket responses.</li>
 <li>When a new customer visits the website to check out their shopping cart (which has <em>nothing to do</em> with recommendations), the API Gateway cannot even accept the TCP connection because <strong>all threads are exhausted!</strong></li>
@@ -102,18 +102,18 @@
 </ol>
 <h3 id="how-resilience-engineering-stops-the-bleeding">How Resilience Engineering Stops the Bleeding</h3>
 <ul>
-<li><strong>Timeouts</strong>: The gateway aborts calls after $500\text{ ms}$, freeing threads.</li>
-<li><strong>Circuit Breaker</strong>: After 5 consecutive timeouts, the breaker trips to <strong>OPEN</strong>. Subsequent requests fail fast in <strong>$0.05\text{ ms}$</strong> and return a cached default list without even touching the network!</li>
+<li><strong>Timeouts</strong>: The gateway aborts calls after <span class="math-inline">500 ms</span>, freeing threads.</li>
+<li><strong>Circuit Breaker</strong>: After 5 consecutive timeouts, the breaker trips to <strong>OPEN</strong>. Subsequent requests fail fast in <strong><span class="math-inline">0.05 ms</span></strong> and return a cached default list without even touching the network!</li>
 <li><strong>Bulkheads</strong>: The gateway allocates at most 10 threads to Recommendations, preserving 190 threads exclusively for Checkout and Payments.</li>
 </ul>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
 <h3 id="high-resolution-circuit-breaker-animation">High-Resolution Circuit Breaker Animation</h3>
-<p>Below is an animated trace of a Circuit Breaker transitioning from CLOSED $\rightarrow$ OPEN (fail-fast fallback) $\rightarrow$ HALF-OPEN (canary probe) $\rightarrow$ CLOSED:</p>
+<p>Below is an animated trace of a Circuit Breaker transitioning from CLOSED <span class="math-inline">→</span> OPEN (fail-fast fallback) <span class="math-inline">→</span> HALF-OPEN (canary probe) <span class="math-inline">→</span> CLOSED:</p>
 <p><img src="./assets/circuit_breaker.gif" alt="Circuit Breaker &amp; Resilience" /></p>
 <hr />
 <h3 id="circuit-breaker-3-state-finite-state-machine">Circuit Breaker 3-State Finite State Machine</h3>
-<pre><code class="language-mermaid">stateDiagram-v2
+<figure class="chapter-diagram"><pre class="mermaid">stateDiagram-v2
     [*] --&gt; Closed: Initial State
 
     Closed --&gt; Open: Error rate exceeds threshold&lt;br/&gt;(e.g., &gt;50% errors over 10s window)
@@ -133,36 +133,37 @@
         Downstream isolated.
         Zero network load sent.
         Protects upstream thread pools.
-    end note
-</code></pre>
+    end note</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's calculate thread pool exhaustion and retry storm blast radiuses:</p>
 <h3 id="1-thread-pool-exhaustion-math">1. Thread Pool Exhaustion Math</h3>
 <ul>
-<li><strong>API Gateway Thread Pool</strong>: $N = 100\text{ worker threads}$.</li>
-<li><strong>Normal Latency</strong>: $L = 20\text{ ms} = 0.02\text{ s}$.</li>
-<li><strong>Throughput Capacity (Little's Law)</strong>:
-$$\text{Throughput} = \frac{N}{L} = \frac{100}{0.02} = \mathbf{5,000\text{ requests/second}}$$</li>
-<li><strong>Downstream Slowdown</strong>: Downstream service slows down to $L = 2,000\text{ ms} = 2.0\text{ s}$.
-$$\text{Degraded Capacity} = \frac{100}{2.0} = \mathbf{50\text{ requests/second!}}$$
-If traffic is $200\text{ req/sec}$, the thread pool exhausts in <strong>$0.66\text{ seconds}$</strong>, causing site-wide HTTP 503 errors!</li>
+<li><strong>API Gateway Thread Pool</strong>: <span class="math-inline">N = 100 worker threads</span>.</li>
+<li><strong>Normal Latency</strong>: <span class="math-inline">L = 20 ms = 0.02 s</span>.</li>
+<li><strong>Throughput Capacity (Little's Law)</strong>:</li>
 </ul>
+<div class="math-block">Throughput = (N) / (L) = (100) / (0.02) = 5,000 requests/second</div>
+<ul>
+<li><strong>Downstream Slowdown</strong>: Downstream service slows down to <span class="math-inline">L = 2,000 ms = 2.0 s</span>.</li>
+</ul>
+<div class="math-block">Degraded Capacity = (100) / (2.0) = 50 requests/second!</div>
+<p>If traffic is <span class="math-inline">200 req/sec</span>, the thread pool exhausts in <strong><span class="math-inline">0.66 seconds</span></strong>, causing site-wide HTTP 503 errors!</p>
 <h3 id="2-the-disaster-of-immediate-retries-retry-storms">2. The Disaster of Immediate Retries (Retry Storms)</h3>
 <p>Suppose 10,000 users encounter a temporary database glitch:</p>
 <ul>
-<li><strong>Without Backoff</strong>: 10,000 clients immediately retry 3 times within 100 ms $\implies$ <strong>30,000 additional queries hammer the dying database</strong>, ensuring it never recovers!</li>
-<li><strong>With Full Jitter Backoff</strong>:
-$$t = \text{Uniform}(0, \min(M, B \times 2^{\text{attempt}}))$$
-Retries are scattered smoothly across a 10-second Gaussian timeline, reducing instantaneous load on the recovering database by <strong>98%</strong>.</li>
+<li><strong>Without Backoff</strong>: 10,000 clients immediately retry 3 times within 100 ms <span class="math-inline">⇒</span> <strong>30,000 additional queries hammer the dying database</strong>, ensuring it never recovers!</li>
+<li><strong>With Full Jitter Backoff</strong>:</li>
 </ul>
+<div class="math-block">t = Uniform(0, \min(M, B × 2<sup>attempt</sup>))</div>
+<p>Retries are scattered smoothly across a 10-second Gaussian timeline, reducing instantaneous load on the recovering database by <strong>98%</strong>.</p>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-the-anatomy-of-timeouts">1. The Anatomy of Timeouts</h3>
 <p>Never use a single generic &quot;timeout.&quot; Robust microservices define two distinct timeout boundaries:</p>
 <ol>
-<li><strong>Connect Timeout</strong>: Time allowed to complete the TCP 3-way handshake and TLS negotiation. Should be aggressive: <strong>$50\text{–}200\text{ ms}$</strong> in internal data centers.</li>
-<li><strong>Read / Socket Timeout</strong>: Time allowed between receiving individual data packets from the server. Typically set to <strong>$1,000\text{–}3,000\text{ ms}$</strong>.</li>
+<li><strong>Connect Timeout</strong>: Time allowed to complete the TCP 3-way handshake and TLS negotiation. Should be aggressive: <strong><span class="math-inline">50–200 ms</span></strong> in internal data centers.</li>
+<li><strong>Read / Socket Timeout</strong>: Time allowed between receiving individual data packets from the server. Typically set to <strong><span class="math-inline">1,000–3,000 ms</span></strong>.</li>
 </ol>
 <hr />
 <h3 id="2-circuit-breaker-mechanics">2. Circuit Breaker Mechanics</h3>
@@ -172,13 +173,13 @@ Retries are scattered smoothly across a 10-second Gaussian timeline, reducing in
 <ul>
 <li>Outbound calls pass through directly.</li>
 <li>Maintains a sliding time window (e.g. last 100 calls or last 10 seconds).</li>
-<li>If failure rate exceeds threshold (e.g., $50%$) or consecutive errors $\ge 5$, state flips to <strong>OPEN</strong>.</li>
+<li>If failure rate exceeds threshold (e.g., <span class="math-inline">50%</span>) or consecutive errors <span class="math-inline">≥ 5</span>, state flips to <strong>OPEN</strong>.</li>
 </ul>
 </li>
 <li><strong>OPEN</strong>:
 <ul>
 <li>Outbound calls are <strong>short-circuited immediately</strong> without opening a network socket.</li>
-<li>Returns a fallback response (or throws <code>CircuitBreakerOpenException</code>) in $&lt;100\ \mu\text{s}$.</li>
+<li>Returns a fallback response (or throws <code>CircuitBreakerOpenException</code>) in <span class="math-inline">&lt;100 μs</span>.</li>
 <li>Protects upstream memory and gives the downstream service breathing room to recover.</li>
 </ul>
 </li>
@@ -227,7 +228,7 @@ If the Recommendations service hangs, only its 5 threads block. The 20 payment t
 <tr>
 <td style="text-align:left"><strong>Circuit Breaker</strong></td>
 <td style="text-align:left"><strong>Highest (Fail-Fast)</strong></td>
-<td style="text-align:left">Negligible (&lt;50 $\mu$s)</td>
+<td style="text-align:left">Negligible (&lt;50 <span class="math-inline">μ</span>s)</td>
 <td style="text-align:left">Medium</td>
 <td style="text-align:left">Flapping between states if thresholds misconfigured</td>
 </tr>
@@ -267,7 +268,7 @@ If the Recommendations service hangs, only its 5 threads block. The 20 payment t
 <li>
 <p><strong>Synchronized Retries (The &quot;Thundering Herd&quot; Retry Storm)</strong>:</p>
 <ul>
-<li><em>Pitfall</em>: Using exponential backoff <em>without jitter</em> ($t = 1\text{s}, 2\text{s}, 4\text{s}$).</li>
+<li><em>Pitfall</em>: Using exponential backoff <em>without jitter</em> (<span class="math-inline">t = 1s, 2s, 4s</span>).</li>
 <li><em>Reality</em>: When an outage occurs, 50,000 clients fail simultaneously. They all sleep for exactly 1.0 second, and all 50,000 clients retry at the exact same millisecond, instantly re-crashing the recovering service. Always add <strong>random jitter</strong>!</li>
 </ul>
 </li>
@@ -275,7 +276,7 @@ If the Recommendations service hangs, only its 5 threads block. The 20 payment t
 <p><strong>Infinite Retry Loops Without Deadlines</strong>:</p>
 <ul>
 <li><em>Pitfall</em>: Microservice A retries 3 times to Service B. Service B retries 3 times to Service C. Service C retries 3 times to Service D.</li>
-<li><em>Result</em>: $3 \times 3 \times 3 = \mathbf{27\text{ multiplicative requests}}$ for a single customer action!</li>
+<li><em>Result</em>: <span class="math-inline">3 × 3 × 3 = 27 multiplicative requests</span> for a single customer action!</li>
 <li><em>Fix</em>: Use <strong>Distributed Context Deadlines</strong> (e.g. gRPC deadlines): propagate a single <code>timeout_epoch</code> header across all downstream hops. If the deadline expires, all downstream retries abort immediately.</li>
 </ul>
 </li>
@@ -284,8 +285,8 @@ If the Recommendations service hangs, only its 5 threads block. The 20 payment t
 <h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
 <p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/20-fault-tolerance-and-resilience/demo.py"><code>demo.py</code></a> implements:</p>
 <ol>
-<li>A production-style Circuit Breaker state machine (Closed $\rightarrow$ Open $\rightarrow$ Half-Open $\rightarrow$ Closed).</li>
-<li>Live fail-fast demonstration: latency dropping from timeouts down to $0.001\text{ ms}$ with fallback responses.</li>
+<li>A production-style Circuit Breaker state machine (Closed <span class="math-inline">→</span> Open <span class="math-inline">→</span> Half-Open <span class="math-inline">→</span> Closed).</li>
+<li>Live fail-fast demonstration: latency dropping from timeouts down to <span class="math-inline">0.001 ms</span> with fallback responses.</li>
 <li>The AWS Exponential Backoff with Full Jitter algorithm.</li>
 <li>A Bulkhead simulation showing how isolated thread limits protect healthy endpoints from hanging dependencies.</li>
 </ol>
@@ -309,15 +310,15 @@ If the Recommendations service hangs, only its 5 threads block. The 20 payment t
 <ol>
 <li><strong>Connect Timeout</strong>:
 <ul>
-<li>The maximum time allowed to establish the TCP connection (the 3-way handshake: SYN $\rightarrow$ SYN-ACK $\rightarrow$ ACK) and negotiate TLS.</li>
-<li>Because connection establishment in a cloud datacenter only involves OS kernel networking stacks, connect timeouts should be <strong>very aggressive</strong> (e.g. $50\text{–}100\text{ ms}$). If a server doesn't respond to a TCP SYN packet in 100 ms, its network card or host is likely dead.</li>
+<li>The maximum time allowed to establish the TCP connection (the 3-way handshake: SYN <span class="math-inline">→</span> SYN-ACK <span class="math-inline">→</span> ACK) and negotiate TLS.</li>
+<li>Because connection establishment in a cloud datacenter only involves OS kernel networking stacks, connect timeouts should be <strong>very aggressive</strong> (e.g. <span class="math-inline">50–100 ms</span>). If a server doesn't respond to a TCP SYN packet in 100 ms, its network card or host is likely dead.</li>
 </ul>
 </li>
 <li><strong>Read / Socket Timeout</strong>:
 <ul>
 <li>The maximum time allowed between receiving successive data packets from the server after the connection is established.</li>
 <li>This covers server-side database query execution, business processing, and payload serialization.</li>
-<li>It should be set to match the p99 latency SLA of the downstream service (e.g. $1,000\text{–}2,000\text{ ms}$).
+<li>It should be set to match the p99 latency SLA of the downstream service (e.g. <span class="math-inline">1,000–2,000 ms</span>).
 Confusing the two is dangerous: setting a 10-second connect timeout allows threads to sit frozen during network outages, whereas setting a 50ms read timeout aborts valid, heavy database queries.&quot;</li>
 </ul>
 </li>
@@ -326,16 +327,16 @@ Confusing the two is dangerous: setting a 10-second connect timeout allows threa
 <h3 id="q2-why-is-exponential-backoff-without-jitter-an-anti-pattern-during-outages">Q2: &quot;Why is Exponential Backoff without Jitter an anti-pattern during outages?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Checking deep knowledge of synchronization anomalies and retry storms.</p>
 <p><strong>Model Answer</strong>:
-&quot;When an outage occurs in a high-traffic system (for example, a database restarts), thousands of clients fail simultaneously at time $t_0$.
-If clients use deterministic exponential backoff without jitter ($t_{\text{wait}} = 2^{\text{attempt}}$):</p>
+&quot;When an outage occurs in a high-traffic system (for example, a database restarts), thousands of clients fail simultaneously at time <span class="math-inline">t<sub>0</sub></span>.
+If clients use deterministic exponential backoff without jitter (<span class="math-inline">t<sub>wait</sub> = 2<sup>attempt</sup></span>):</p>
 <ul>
 <li>All 10,000 clients sleep for exactly 1.0 second.</li>
-<li>At $t_0 + 1.0\text{s}$, all 10,000 clients wake up at the exact same millisecond and retry in unison.</li>
+<li>At <span class="math-inline">t<sub>0</sub> + 1.0s</span>, all 10,000 clients wake up at the exact same millisecond and retry in unison.</li>
 <li>This creates massive, synchronized harmonic waves of traffic (<strong>Retry Storms</strong>) that repeatedly hammer and re-crash the recovering database.</li>
 </ul>
-<p><strong>The Fix is Full Jitter</strong>:
-$$t_{\text{wait}} = \text{Uniform}\big(0, \min(M, B \times 2^{\text{attempt}})\big)$$
-Randomizing the sleep duration uniformly breaks the synchronization lock-step. Retries are dispersed smoothly across time, allowing the recovering database to process traffic gradually without spikes.&quot;</p>
+<p><strong>The Fix is Full Jitter</strong>:</p>
+<div class="math-block">t<sub>wait</sub> = Uniform\big(0, \min(M, B × 2<sup>attempt</sup>)\big)</div>
+<p>Randomizing the sleep duration uniformly breaks the synchronization lock-step. Retries are dispersed smoothly across time, allowing the recovering database to process traffic gradually without spikes.&quot;</p>
 <hr />
 <h3 id="q3-explain-the-three-states-of-a-circuit-breaker-and-the-exact-transition-triggers-between-them">Q3: &quot;Explain the three states of a Circuit Breaker and the exact transition triggers between them.&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Evaluating state machine precision.</p>
@@ -345,12 +346,12 @@ Randomizing the sleep duration uniformly breaks the synchronization lock-step. R
 <li><strong>CLOSED</strong>:
 <ul>
 <li>Normal operation. All calls pass through to downstream.</li>
-<li><em>Transition to OPEN</em>: Triggered when the failure rate over a rolling time window exceeds a configured threshold (e.g. $&gt;50%$ error rate over the last 100 requests) or when consecutive timeouts exceed a limit (e.g., 5 consecutive failures).</li>
+<li><em>Transition to OPEN</em>: Triggered when the failure rate over a rolling time window exceeds a configured threshold (e.g. <span class="math-inline">&gt;50%</span> error rate over the last 100 requests) or when consecutive timeouts exceed a limit (e.g., 5 consecutive failures).</li>
 </ul>
 </li>
 <li><strong>OPEN</strong>:
 <ul>
-<li>Outbound calls fail fast immediately ($&lt;1\ \mu\text{s}$) without sending any network packets. Fallback data or errors are returned instantly.</li>
+<li>Outbound calls fail fast immediately (<span class="math-inline">&lt;1 μs</span>) without sending any network packets. Fallback data or errors are returned instantly.</li>
 <li><em>Transition to HALF-OPEN</em>: Triggered when an idle sleep window / cooldown timer expires (e.g., 30 seconds).</li>
 </ul>
 </li>
@@ -392,7 +393,7 @@ Randomizing the sleep duration uniformly breaks the synchronization lock-step. R
 &quot;A <strong>Retry Budget</strong> is a mechanism introduced by Google SRE to prevent retries from magnifying outages:</p>
 <ul>
 <li>Under standard retry logic, if 100% of requests fail, clients retry 3 times, tripling the load on a dying backend.</li>
-<li>A <strong>Retry Budget</strong> enforces a hard ceiling: a client is only allowed to retry if retries account for less than a fixed percentage (typically <strong>$10%$</strong>) of total historical requests over a rolling window.</li>
+<li>A <strong>Retry Budget</strong> enforces a hard ceiling: a client is only allowed to retry if retries account for less than a fixed percentage (typically <strong><span class="math-inline">10%</span></strong>) of total historical requests over a rolling window.</li>
 <li>If the backend is healthy and only 1% of requests fail, the client has plenty of retry budget and retries succeed.</li>
 <li>But if the backend experiences a major outage and failure rate spikes to 50%, the client exhausts its retry budget within seconds and <strong>stops retrying completely</strong>, returning errors immediately. This prevents clients from inadvertently launching a self-inflicted DDoS attack against recovering infrastructure.&quot;</li>
 </ul>
@@ -424,15 +425,28 @@ By allocating <b>separate, isolated thread pools or semaphores</b>. The hanging 
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Connection timeouts and socket mechanics.</li>
-<li><a href="../03-load-balancing/index.html">03 - Load Balancing</a>: Health checks and passive failover.</li>
-<li><a href="../05-rate-limiting/index.html">05 - Rate Limiting</a>: Protecting backends from excessive throughput.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Dead-Letter Queues and asynchronous backpressure absorption.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: Connection timeouts and socket mechanics.</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 - Load Balancing</a>: Health checks and passive failover.</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 - Rate Limiting</a>: Protecting backends from excessive throughput.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Dead-Letter Queues and asynchronous backpressure absorption.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

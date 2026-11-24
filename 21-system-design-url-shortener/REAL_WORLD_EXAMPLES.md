@@ -45,7 +45,7 @@ To completely eliminate hash collisions without locking:
 1. Bitly uses a distributed unique ID generator (e.g., ZooKeeper-coordinated counter blocks or Snowflake IDs) producing 64-bit auto-incrementing integers.
 2. The integer is converted to a short alphanumeric token using **Base62 Encoding** (`[a-zA-Z0-9]`):
    - A 7-character Base62 string yields:
-     $$62^7 \approx 3.52 	imes 10^{12} 	ext{ unique combinations (3.5 trillion URLs)}$$
+     $$62^7 \approx 3.52 \times 10^{12} \text{ unique combinations (3.5 trillion URLs)}$$
    - **Zero Collision Guarantee**: Because each integer is mathematically unique, its Base62 encoding is guaranteed 100% collision-free without checking the database!
 
 #### B. Multi-Tier Caching for 99%+ Hit Ratio

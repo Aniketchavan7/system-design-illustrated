@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="26--scaling-from-one-to-millions-of-users">26 · Scaling from One to Millions of Users</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="26--scaling-from-one-to-millions-of-users">26 · Scaling from One to Millions of Users</h1>
 <blockquote>
 <p><strong>Part 0 · Foundations</strong> · ⏱️ ~25 min read · Prerequisites: None (Foundational)</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> evolved from single-machine monolithic scripts to global multi-region infrastructures are documented in <a href="../26-scaling-from-one-to-millions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> evolved from single-machine monolithic scripts to global multi-region infrastructures are documented in <a href="../../chapters/26-scaling-from-one-to-millions/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
@@ -94,7 +94,7 @@
 </table>
 <hr />
 <h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
-<p>When an application experiences exponential growth (e.g., $10 	o 10,000 	o 10,000,000	ext{ users}$), scaling by simply buying a larger computer (<strong>Vertical Scaling / Scaling Up</strong>) hits hard physical limits:</p>
+<p>When an application experiences exponential growth (e.g., <span class="math-inline">10 → 10,000 → 10,000,000 users</span>), scaling by simply buying a larger computer (<strong>Vertical Scaling / Scaling Up</strong>) hits hard physical limits:</p>
 <ol>
 <li><strong>CPU &amp; RAM Ceilings</strong>: Even a server with 128 cores and 1TB RAM maxes out during traffic spikes.</li>
 <li><strong>Cost Asymmetry</strong>: High-end enterprise servers cost exponentially more than equivalent commodity servers.</li>
@@ -103,7 +103,10 @@
 <p><strong>Horizontal Scaling (Scaling Out)</strong> solves this by adding commodity servers in parallel, achieving virtually unlimited throughput and high availability.</p>
 <hr />
 <h2 id="picture-it-the-9-stage-evolution">🖼️ Picture It: The 9-Stage Evolution</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/scaling_stages.svg" alt="Scaling Architecture Evolution (1 to 10M+ Users)" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     User([&quot;👤 Global Users&quot;]) --&gt; GeoDNS[&quot;🌐 GeoDNS / Anycast&quot;]
     GeoDNS --&gt; CDN[&quot;⚡ CDN (Static Assets)&quot;]
     GeoDNS --&gt; LB[&quot;⚖️ Load Balancer&quot;]
@@ -124,8 +127,7 @@
         WebTier --&gt; Shard2[(&quot;💾 Shard 2 (Primary Write)&quot;)]
     end
     
-    Workers --&gt; DataTier
-</code></pre>
+    Workers --&gt; DataTier</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's trace how infrastructure demands change from <strong>1,000 users to 10,000,000 Daily Active Users (DAU)</strong>:</p>
@@ -133,27 +135,27 @@
 <ol>
 <li><strong>At 1,000 Users</strong>:
 <ul>
-<li>$1,000	ext{ DAU} 	imes 20	ext{ requests/day} = 20,000	ext{ requests/day} \approx \mathbf{0.23	ext{ requests/second}}$.</li>
+<li><span class="math-inline">1,000 DAU × 20 requests/day = 20,000 requests/day ≈ 0.23 requests/second</span>.</li>
 <li>Single $10/mo VPS (2 vCPUs, 4GB RAM) handles this comfortably.</li>
 </ul>
 </li>
 <li><strong>At 100,000 Users</strong>:
 <ul>
-<li>$100,000	ext{ DAU} 	imes 50	ext{ requests/day} = 5,000,000	ext{ req/day} \approx \mathbf{58	ext{ RPS average (150 RPS peak)}}$.</li>
+<li><span class="math-inline">100,000 DAU × 50 requests/day = 5,000,000 req/day ≈ 58 RPS average (150 RPS peak)</span>.</li>
 <li>Separate web server from PostgreSQL database. Add Redis for caching hot queries.</li>
 </ul>
 </li>
 <li><strong>At 10,000,000 Users (The 10M Milestone)</strong>:
 <ul>
-<li>$10,000,000	ext{ DAU} 	imes 100	ext{ requests/day} = 1,000,000,000	ext{ req/day}$.</li>
-<li><strong>Average QPS</strong>: $\frac{10^9}{86,400	ext{s}} \approx \mathbf{11,574	ext{ QPS}}$.</li>
-<li><strong>Peak QPS ($2	imes$)</strong>: $\approx \mathbf{23,000	ext{ QPS}}$.</li>
+<li><span class="math-inline">10,000,000 DAU × 100 requests/day = 1,000,000,000 req/day</span>.</li>
+<li><strong>Average QPS</strong>: <span class="math-inline">(10<sup>9</sup>) / (86,400s) ≈ 11,574 QPS</span>.</li>
+<li><strong>Peak QPS (<span class="math-inline">2×</span>)</strong>: <span class="math-inline">≈ 23,000 QPS</span>.</li>
 <li><strong>Infrastructure Required</strong>:
 <ul>
 <li>40–60 Stateless web application containers behind load balancers.</li>
-<li>10+ Redis cache cluster nodes serving $90%$ of reads in $&lt;1	ext{ms}$.</li>
+<li>10+ Redis cache cluster nodes serving <span class="math-inline">90%</span> of reads in <span class="math-inline">&lt;1ms</span>.</li>
 <li>4–8 Horizontally sharded database clusters with primary-replica replication.</li>
-<li>CDN absorbing $95%$ of all bandwidth egress.</li>
+<li>CDN absorbing <span class="math-inline">95%</span> of all bandwidth egress.</li>
 </ul>
 </li>
 </ul>
@@ -191,31 +193,31 @@
 <td style="text-align:left"><strong>Separate DB Box</strong></td>
 <td style="text-align:left">Eliminates CPU contention between app &amp; DB</td>
 <td style="text-align:left">Additional network latency hop (1–2ms)</td>
-<td style="text-align:left">$&gt;1,000	ext{ users}$</td>
+<td style="text-align:left"><span class="math-inline">&gt;1,000 users</span></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Load Balancer</strong></td>
 <td style="text-align:left">Eliminates single point of failure</td>
 <td style="text-align:left">SSL termination overhead; health checking</td>
-<td style="text-align:left">$&gt;10,000	ext{ users}$</td>
+<td style="text-align:left"><span class="math-inline">&gt;10,000 users</span></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>In-Memory Cache</strong></td>
 <td style="text-align:left">Drops DB read load by 80–95%</td>
 <td style="text-align:left">Cache invalidation complexity; stale data risk</td>
-<td style="text-align:left">$&gt;50,000	ext{ users}$</td>
+<td style="text-align:left"><span class="math-inline">&gt;50,000 users</span></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Message Queue</strong></td>
 <td style="text-align:left">Absorbs traffic spikes; non-blocking APIs</td>
 <td style="text-align:left">Eventual consistency; dead-letter queue handling</td>
-<td style="text-align:left">$&gt;100,000	ext{ users}$</td>
+<td style="text-align:left"><span class="math-inline">&gt;100,000 users</span></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Database Sharding</strong></td>
 <td style="text-align:left">Unlimited horizontal write scaling</td>
 <td style="text-align:left">Joins across shards are impossible; resharding</td>
-<td style="text-align:left">$&gt;1,000,000	ext{ users}$</td>
+<td style="text-align:left"><span class="math-inline">&gt;1,000,000 users</span></td>
 </tr>
 </tbody>
 </table>
@@ -294,7 +296,7 @@ By moving state to external stores (Redis for sessions, S3 for files), web serve
 <p>A CDN delivers two distinct architectural benefits:</p>
 <ol>
 <li><strong>Latency Reduction</strong>: Edge servers terminate TCP/TLS handshakes geographically close to the user (5–15ms RTT vs 150ms+ to origin) and serve cached static assets (images, CSS, JS bundles) instantly.</li>
-<li><strong>Origin Shielding</strong>: By serving $&gt;95%$ of asset requests from edge memory, the CDN absorbs traffic spikes, preventing origin web servers and database connections from being overwhelmed by static asset requests.</li>
+<li><strong>Origin Shielding</strong>: By serving <span class="math-inline">&gt;95%</span> of asset requests from edge memory, the CDN absorbs traffic spikes, preventing origin web servers and database connections from being overwhelmed by static asset requests.</li>
 </ol>
 </details>
 <hr />
@@ -342,7 +344,20 @@ Because cloud instances are ephemeral. When traffic subsides, auto-scaling group
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

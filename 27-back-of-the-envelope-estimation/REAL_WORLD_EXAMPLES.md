@@ -13,12 +13,12 @@
 ### 2. Google's Web Search Index Sizing Model
 When Google sized its crawling and index storage:
 1. **The Crawl Target**: Estimate 20 Billion web pages indexed.
-2. **Page Content**: Average HTML page after compression is $\approx 20	ext{ KB}$.
+2. **Page Content**: Average HTML page after compression is $\approx 20\text{ KB}$.
 3. **Raw Storage Requirement**:
-   $$20,000,000,000 	imes 20	ext{ KB} = 400	ext{ Terabytes of raw text}$$
+   $$20,000,000,000 \times 20\text{ KB} = 400\text{ Terabytes of raw text}$$
 4. **The Storage Multipliers**:
-   - Inverted word index + PageRank link graph adds $2	imes$ overhead $	o 800	ext{ TB}$.
-   - 3x GFS / Colossus distributed replication $	o \mathbf{2.4	ext{ Petabytes}}$.
+   - Inverted word index + PageRank link graph adds $2\times$ overhead $\to 800\text{ TB}$.
+   - 3x GFS / Colossus distributed replication $\to \mathbf{2.4\text{ Petabytes}}$.
 5. **Memory Sizing**:
    - Google calculated that keeping the entire 2.4PB index in RAM was financially impossible.
    - Using the 80/20 rule, they partitioned the inverted index so the top 20% most frequent search terms resided in RAM across thousands of leaf search machines, while long-tail queries fetched from disk.
@@ -38,10 +38,10 @@ How does Netflix determine how many physical storage appliances to ship to an IS
 2. **OCA Hardware Capacity**:
    - Each custom Netflix OCA server has a **100Gbps network interface card** and **200TB of NVMe flash storage**.
 3. **Server Count Calculation**:
-   $$	ext{Servers Needed} = \frac{1,200	ext{ Gbps}}{100	ext{ Gbps/server}} = 12	ext{ Servers}$$
-   Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Servers}}$ deployed in the Chicago IXP rack.
+   $$\text{Servers Needed} = \frac{1,200\text{ Gbps}}{100\text{ Gbps/server}} = 12\text{ Servers}$$
+   Add $N+2$ redundancy for hardware failure $\to \mathbf{14\text{ Open Connect Servers}}$ deployed in the Chicago IXP rack.
 4. **Storage Sizing**:
-   - 14 servers $	imes$ 200TB $= 2.8	ext{ Petabytes}$ of local flash storage.
+   - 14 servers $\times$ 200TB $= 2.8\text{ Petabytes}$ of local flash storage.
    - Completely holds the top 4,000 most popular movies and episodes, delivering a **$98\%$ local cache hit rate** with zero origin bandwidth consumption during prime time!
 
 ---
@@ -52,12 +52,12 @@ How does Netflix determine how many physical storage appliances to ship to an IS
 |---|---|---|
 | **Primary Sizing Bottleneck** | In-memory RAM for low-latency ranking (<100ms) | Egress network bandwidth (Tbps) at ISP edge |
 | **Replication Overhead** | 3x synchronous Paxos replication factor | Proactive overnight push replication to edge OCAs |
-| **Safety Headroom Factor** | $1.5	imes$ to $2.0	imes$ peak traffic headroom | Provisioned for $N+2$ server rack failures |
+| **Safety Headroom Factor** | $1.5\times$ to $2.0\times$ peak traffic headroom | Provisioned for $N+2$ server rack failures |
 | **Cost Tradeoff** | RAM vs NVMe Flash for search indexing | Transit ISP peering fees vs Hardware CapEx |
 
 ---
 
 ## 🎯 System Design Interview Takeaways
-1. **Memorize the Rule of Thumb**: Remember that $1	ext{M requests/day} \approx 12	ext{ QPS}$ and $1	ext{B requests/day} \approx 12,000	ext{ QPS}$. It allows you to produce immediate QPS answers in seconds.
-2. **Always Account for Replication Overhead**: When calculating storage, never stop at raw data size. Always multiply by $3	imes$ for distributed replication (e.g. S3, GFS, Cassandra).
+1. **Memorize the Rule of Thumb**: Remember that $1\text{M requests/day} \approx 12\text{ QPS}$ and $1\text{B requests/day} \approx 12,000\text{ QPS}$. It allows you to produce immediate QPS answers in seconds.
+2. **Always Account for Replication Overhead**: When calculating storage, never stop at raw data size. Always multiply by $3\times$ for distributed replication (e.g. S3, GFS, Cassandra).
 3. **Buffer for Caching Overhead**: In RAM estimation, always add a 20–30% memory buffer for data structure pointers, slab fragmentation, and hash map overhead.

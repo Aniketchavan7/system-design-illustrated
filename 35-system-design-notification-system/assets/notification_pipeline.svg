@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="High-Throughput Multi-Channel Notification Platform">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">High-Throughput Multi-Channel Notification Platform</text>
+  <text x="32" y="58" class="sub">Isolating critical OTPs from marketing blasts with priority topics &amp; vendor fallbacks</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="32" y="130" width="160" height="76" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="112.0" y="164.0" text-anchor="middle" class="box-t">Service Triggers</text>
+  <text x="112.0" y="182.0" text-anchor="middle" class="box-s">OTP, Orders, Promos</text>
+  <line x1="192" y1="168" x2="238" y2="168" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <rect x="238" y="130" width="175" height="76" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="325.5" y="164.0" text-anchor="middle" class="box-t">API + Auth + Dedup</text>
+  <text x="325.5" y="182.0" text-anchor="middle" class="box-s">Idempotency &amp; Rate Caps</text>
+  <line x1="413" y1="150" x2="470" y2="118" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="441.5" y="127.0" text-anchor="middle" class="lbl">P0</text>
+  <line x1="413" y1="186" x2="470" y2="218" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="441.5" y="195.0" text-anchor="middle" class="lbl">P2</text>
+  <rect x="470" y="88" width="170" height="56" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="555.0" y="112.0" text-anchor="middle" class="white-t">High-Priority Kafka</text>
+  <text x="555.0" y="130.0" text-anchor="middle" class="white-s">OTP / Security (&lt;1s)</text>
+  <rect x="470" y="190" width="170" height="56" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="555.0" y="214.0" text-anchor="middle" class="box-t">Bulk Marketing Topic</text>
+  <text x="555.0" y="232.0" text-anchor="middle" class="box-s">Throttled batch drain</text>
+  <line x1="640" y1="116" x2="695" y2="150" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <line x1="640" y1="218" x2="695" y2="186" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <rect x="695" y="125" width="173" height="86" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="781.5" y="164.0" text-anchor="middle" class="box-t">Workers + Providers</text>
+  <text x="781.5" y="182.0" text-anchor="middle" class="box-s">APNs / FCM / SES + DLQ</text>
+  <rect x="32" y="285" width="836" height="72" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="450.0" y="326.0" text-anchor="middle" class="box-t">Reliability Guarantees: User Opt-Out Check before Dispatch + Exponential Backoff + Multi-Vendor Failover</text>
+</svg>

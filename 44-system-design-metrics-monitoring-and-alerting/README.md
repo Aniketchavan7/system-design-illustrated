@@ -45,6 +45,10 @@ Operating thousands of microservice instances across multi-region cloud clusters
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/tsdb_metrics_pipeline.svg" alt="Metrics Collection, Gorilla TSDB Compression & Alerting" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Instrumentation["1. Metrics Collection Layer"]
@@ -175,7 +179,7 @@ Together, these techniques compress 16-byte datapoints down to an average of **1
 
 ### Q2: What is the "High Cardinality Problem" in metrics monitoring, and how do you prevent it?
 **Model Answer**: In time-series databases, a unique time-series stream is created for every unique combination of metric name and key-value label pairs. 
-- If a developer adds a high-cardinality tag like `user_id` ($10	ext{M}$ values) or `order_id` ($100	ext{M}$ values) to a metric, the system must allocate 10 million independent time-series streams in memory.
+- If a developer adds a high-cardinality tag like `user_id` ($10\text{M}$ values) or `order_id` ($100\text{M}$ values) to a metric, the system must allocate 10 million independent time-series streams in memory.
 - This results in memory exhaustion, massive index bloat, and TSDB crashes.
 - **Prevention**: Enforce strict admission control and linting rejecting UUIDs or dynamic strings in label keys. High-cardinality attributes belong in distributed tracing (OpenTelemetry) or structured logs, never metric labels.
 

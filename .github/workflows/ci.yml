@@ -91,6 +91,9 @@ jobs:
       - name: Verify generated course content
         run: python course/build.py --check
 
+      - name: Verify generated flashcards dataset and HTML
+        run: python build_rich_flashcards.py --check
+
   course-browser:
     name: Course browser smoke test
     runs-on: ubuntu-latest

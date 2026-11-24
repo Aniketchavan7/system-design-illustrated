@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="25---system-design-distributed-rate-limiter-stripe--cloudflare">25 - System Design: Distributed Rate Limiter (Stripe / Cloudflare)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="25---system-design-distributed-rate-limiter-stripe--cloudflare">25 - System Design: Distributed Rate Limiter (Stripe / Cloudflare)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In distributed architectures handling hundreds of thousands of requests per second, rate limiting is the primary defense line against brute-force attacks, web scraping, and denial-of-service traffic spikes. Scaling a rate limiter across a multi-server API gateway fleet introduces two critical distributed challenges: <strong>Race Conditions</strong> (concurrent requests bypassing limits via read-then-write cycles) and <strong>Synchronization Latency</strong> (every API request requiring a cross-network database call). Production distributed rate limiters solve this by executing <strong>Atomic Redis Lua Scripts</strong> with lazy token-refill formulas and local in-memory token batching.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../25-system-design-rate-limiter/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/25-system-design-rate-limiter/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP response codes (<code>429 Too Many Requests</code>) and custom headers.</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a>: Edge reverse proxies, TLS termination, and middleware filters.</li>
-<li><a href="../05-rate-limiting/index.html">05 - Rate Limiting Algorithms</a>: Mathematical principles of Token Bucket, Leaky Bucket, and Sliding Windows.</li>
-<li><a href="../22-system-design-in-memory-cache/index.html">22 - System Design: Distributed In-Memory Cache</a>: Redis cluster sharding and atomic Lua scripting.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP response codes (<code>429 Too Many Requests</code>) and custom headers.</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a>: Edge reverse proxies, TLS termination, and middleware filters.</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 - Rate Limiting Algorithms</a>: Mathematical principles of Token Bucket, Leaky Bucket, and Sliding Windows.</li>
+<li><a href="../../chapters/22-system-design-in-memory-cache/index.html">22 - System Design: Distributed In-Memory Cache</a>: Redis cluster sharding and atomic Lua scripting.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -72,7 +72,7 @@
 <tr>
 <td style="text-align:left"><strong>Token Refill</strong></td>
 <td style="text-align:left">Automated coin dispenser dropping 1 token every 12s</td>
-<td style="text-align:left">Lazy $O(1)$ timestamp delta formula on request arrival</td>
+<td style="text-align:left">Lazy <span class="math-inline">O(1)</span> timestamp delta formula on request arrival</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Allowed Request</strong></td>
@@ -108,7 +108,7 @@
 <h3 id="the-challenge-of-distributed-multi-server-gateways">The Challenge of Distributed Multi-Server Gateways</h3>
 <p>If your API gateway runs on 20 independent server instances:</p>
 <ul>
-<li><strong>Local In-Memory Counter (Flawed)</strong>: If each gateway keeps its own local counter in RAM, a user sending 100 requests load-balanced across 20 servers can legally execute $20 \times \text{limit}$ requests, completely defeating the rate limit!</li>
+<li><strong>Local In-Memory Counter (Flawed)</strong>: If each gateway keeps its own local counter in RAM, a user sending 100 requests load-balanced across 20 servers can legally execute <span class="math-inline">20 × limit</span> requests, completely defeating the rate limit!</li>
 <li><strong>Central Database Counter (Race Condition Flaw)</strong>:
 <ul>
 <li><strong>Step 1</strong>: Gateway A and Gateway B both read <code>count = 9</code> simultaneously (Limit = 10).</li>
@@ -125,7 +125,7 @@
 <p><img src="./assets/distributed_rate_limiter.gif" alt="Distributed Rate Limiter" /></p>
 <hr />
 <h3 id="global-api-gateway--redis-sharding-flowchart">Global API Gateway &amp; Redis Sharding Flowchart</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Clients[&quot;Clients Tier&quot;]
         C1[&quot;👤 Client 1 (Mobile)&quot;]
         C2[&quot;🤖 Client 2 (Web Bot)&quot;]
@@ -158,54 +158,55 @@
     style Clients fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style GatewayTier fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style RedisTier fill:#161b22,stroke:#d29922,stroke-width:2px;
-    style BackendTier fill:#161b22,stroke:#3fb950,stroke-width:2px;
-</code></pre>
+    style BackendTier fill:#161b22,stroke:#3fb950,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's estimate traffic, memory footprint, and network latency for a global rate limiting tier:</p>
 <h3 id="1-traffic--memory-sizing">1. Traffic &amp; Memory Sizing</h3>
 <ul>
-<li><strong>Peak Ingress Traffic</strong>: $100,000\text{ requests / second}$.</li>
-<li><strong>Active User Base</strong>: $10,000,000\text{ users / day}$.</li>
+<li><strong>Peak Ingress Traffic</strong>: <span class="math-inline">100,000 requests / second</span>.</li>
+<li><strong>Active User Base</strong>: <span class="math-inline">10,000,000 users / day</span>.</li>
 <li><strong>Redis Key Structure</strong>:
 <ul>
-<li>Key: <code>rate:&lt;user_id&gt;</code> $\approx 32\text{ bytes}$.</li>
-<li>Value: <code>{tokens: float, last_refill: float}</code> $\approx 16\text{ bytes}$.</li>
-<li>Redis internal hash overhead per key: $\approx 50\text{ bytes}$.</li>
-<li>Total per key: $\approx 100\text{ bytes}$.</li>
+<li>Key: <code>rate:&lt;user_id&gt;</code> <span class="math-inline">≈ 32 bytes</span>.</li>
+<li>Value: <code>{tokens: float, last_refill: float}</code> <span class="math-inline">≈ 16 bytes</span>.</li>
+<li>Redis internal hash overhead per key: <span class="math-inline">≈ 50 bytes</span>.</li>
+<li>Total per key: <span class="math-inline">≈ 100 bytes</span>.</li>
 </ul>
 </li>
-<li><strong>Total Memory Footprint</strong>:
-$$\text{Memory} = 10,000,000 \times 100\text{ bytes} \approx \mathbf{1.0\text{ Gigabyte of RAM}}$$
-A single small 4 GB Redis instance holds the rate limits for 10 million active users!</li>
+<li><strong>Total Memory Footprint</strong>:</li>
 </ul>
+<div class="math-block">Memory = 10,000,000 × 100 bytes ≈ 1.0 Gigabyte of RAM</div>
+<p>A single small 4 GB Redis instance holds the rate limits for 10 million active users!</p>
 <h3 id="2-network-latency--synchronization-cost">2. Network Latency &amp; Synchronization Cost</h3>
 <p>If every request from the 20 API Gateways makes a synchronous network round-trip to Redis:</p>
 <ul>
-<li>Redis operations: $100,000\text{ ops / second}$.</li>
-<li>Network transit time inside datacenter: $0.5\text{ ms}$.</li>
-<li>While $0.5\text{ ms}$ is fast, $100\text{k req/s}$ places heavy load on Redis CPU cores.</li>
+<li>Redis operations: <span class="math-inline">100,000 ops / second</span>.</li>
+<li>Network transit time inside datacenter: <span class="math-inline">0.5 ms</span>.</li>
+<li>While <span class="math-inline">0.5 ms</span> is fast, <span class="math-inline">100k req/s</span> places heavy load on Redis CPU cores.</li>
 </ul>
 <p><strong>The Local Token Batching Optimization</strong>:</p>
 <ul>
 <li>Each API Gateway locally reserves a batch of tokens (e.g. 10 tokens) from Redis.</li>
-<li>The Gateway serves the next 10 requests from its local RAM ($0.001\text{ ms}$) without contacting Redis!</li>
+<li>The Gateway serves the next 10 requests from its local RAM (<span class="math-inline">0.001 ms</span>) without contacting Redis!</li>
 <li>Only when local tokens are depleted does it contact Redis for another batch.</li>
-<li><strong>Result</strong>: Reduces Redis network operations by <strong>$90%$ (from 100k down to 10k ops/sec)</strong> with zero loss of protection.</li>
+<li><strong>Result</strong>: Reduces Redis network operations by <strong><span class="math-inline">90%</span> (from 100k down to 10k ops/sec)</strong> with zero loss of protection.</li>
 </ul>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-the-token-bucket-lazy-refill-algorithm-zero-background-timers">1. The Token Bucket Lazy Refill Algorithm (Zero Background Timers!)</h3>
 <p>A naive implementation runs background timer threads incrementing counters every second. At 10 million users, 10 million timer ticks per second would melt the CPU.
 <strong>The Production Solution: Lazy Refill on Request Arrival</strong>:
-When a request arrives at timestamp $T_{\text{now}}$:</p>
+When a request arrives at timestamp <span class="math-inline">T<sub>now</sub></span>:</p>
 <ol>
-<li>Fetch previous state: $(T_{\text{tokens}}, T_{\text{last}})$.</li>
-<li>Calculate time elapsed: $\Delta t = T_{\text{now}} - T_{\text{last}}$.</li>
-<li>Add refilled tokens:
-$$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \times \text{Refill Rate})\big)$$</li>
-<li>If $\text{New Tokens} \ge 1$: deduct 1, update $T_{\text{last}} = T_{\text{now}}$, and allow the request!
-<strong>Complexity</strong>: Pure $O(1)$ arithmetic. Zero background timer threads!</li>
+<li>Fetch previous state: <span class="math-inline">(T<sub>tokens</sub>, T<sub>last</sub>)</span>.</li>
+<li>Calculate time elapsed: <span class="math-inline">Δ t = T<sub>now</sub> - T<sub>last</sub></span>.</li>
+<li>Add refilled tokens:</li>
+</ol>
+<div class="math-block">New Tokens = \min\big(Capacity, T<sub>tokens</sub> + (Δ t × Refill Rate)\big)</div>
+<ol start="4">
+<li>If <span class="math-inline">New Tokens ≥ 1</span>: deduct 1, update <span class="math-inline">T<sub>last</sub> = T<sub>now</sub></span>, and allow the request!
+<strong>Complexity</strong>: Pure <span class="math-inline">O(1)</span> arithmetic. Zero background timer threads!</li>
 </ol>
 <hr />
 <h3 id="2-eliminating-race-conditions-with-atomic-redis-lua-scripts">2. Eliminating Race Conditions with Atomic Redis Lua Scripts</h3>
@@ -261,14 +262,14 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 <tr>
 <td style="text-align:left"><strong>Token Bucket</strong></td>
 <td style="text-align:left"><strong>Yes (up to capacity)</strong></td>
-<td style="text-align:left">$O(1)$ per client (2 numbers)</td>
+<td style="text-align:left"><span class="math-inline">O(1)</span> per client (2 numbers)</td>
 <td style="text-align:left">Low (with lazy refill)</td>
 <td style="text-align:left">Burst traffic can temporarily spike backends</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Leaky Bucket</strong></td>
 <td style="text-align:left">❌ No (smooth constant rate)</td>
-<td style="text-align:left">$O(1)$ queue size</td>
+<td style="text-align:left"><span class="math-inline">O(1)</span> queue size</td>
 <td style="text-align:left">Medium</td>
 <td style="text-align:left">Drops requests if queue fills up</td>
 </tr>
@@ -282,7 +283,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 <tr>
 <td style="text-align:left"><strong>Sliding Window Log</strong></td>
 <td style="text-align:left">❌ No</td>
-<td style="text-align:left">High ($O(M)$ timestamps)</td>
+<td style="text-align:left">High (<span class="math-inline">O(M)</span> timestamps)</td>
 <td style="text-align:left">High</td>
 <td style="text-align:left">High memory overhead storing all request timestamps</td>
 </tr>
@@ -324,7 +325,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 <h2 id="try-it-yourself-python-simulation">💻 Try It Yourself: Python Simulation</h2>
 <p>The companion simulation script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/25-system-design-rate-limiter/demo.py"><code>demo.py</code></a> implements:</p>
 <ol>
-<li>An $O(1)$ Token Bucket algorithm with lazy mathematical refills.</li>
+<li>An <span class="math-inline">O(1)</span> Token Bucket algorithm with lazy mathematical refills.</li>
 <li>A simulated Redis Atomic Lua Script execution eliminating race conditions across multiple gateway workers.</li>
 <li>Rapid burst testing: verifying that exactly 5 burst requests pass and subsequent requests return <code>HTTP 429 Too Many Requests</code>.</li>
 <li>Automated token recovery verification after a 1.0-second refill sleep.</li>
@@ -347,7 +348,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 &quot;In a distributed gateway fleet, multiple servers concurrently receive requests for the same user. If servers use a naive <code>GET count -&gt; count++ -&gt; SET count</code> pattern:</p>
 <ul>
 <li>Server 1 and Server 2 both read <code>count = 9</code> (where limit is 10).</li>
-<li>Both see that $9 &lt; 10$.</li>
+<li>Both see that <span class="math-inline">9 &lt; 10</span>.</li>
 <li>Both increment to 10 and write back.</li>
 <li>Result: 11 requests are admitted, violating the rate limit contract.</li>
 </ul>
@@ -355,7 +356,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 <ol>
 <li>We encapsulate the entire check, refill, and decrement logic inside a Lua script.</li>
 <li>Redis executes Lua scripts with single-threaded atomicity: while the script executes, no other command or script can run on that shard.</li>
-<li>The check and token decrement execute as an indivisible atomic operation in memory ($&lt;100\ \mu\text{s}$). Zero race conditions are mathematically possible.&quot;</li>
+<li>The check and token decrement execute as an indivisible atomic operation in memory (<span class="math-inline">&lt;100 μs</span>). Zero race conditions are mathematically possible.&quot;</li>
 </ol>
 <hr />
 <h3 id="q2-what-is-the-difference-between-token-bucket-and-leaky-bucket-and-when-would-you-choose-one-over-the-other">Q2: &quot;What is the difference between Token Bucket and Leaky Bucket, and when would you choose one over the other?&quot;</h3>
@@ -384,7 +385,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 <p><strong>Model Answer</strong>:
 &quot;Synchronizing rate limits across global data centers presents a classic PACELC trade-off:</p>
 <ul>
-<li>If all global regions query a single centralized Redis cluster in US-East, a European user suffers an unacceptable <strong>$80\text{ ms}$ trans-Atlantic latency penalty</strong> on every API call.</li>
+<li>If all global regions query a single centralized Redis cluster in US-East, a European user suffers an unacceptable <strong><span class="math-inline">80 ms</span> trans-Atlantic latency penalty</strong> on every API call.</li>
 </ul>
 <p><strong>Production Solutions</strong>:</p>
 <ol>
@@ -395,7 +396,7 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 </li>
 <li><strong>Asynchronous Cross-Region Sync</strong>:
 <ul>
-<li>Gateways enforce limits locally in RAM and periodically publish usage deltas asynchronously across a WAN message bus (Kafka/CRDTs). While small temporary overages ($&lt;5%$) can occur during high cross-region traffic bursts, latency remains under $1\text{ ms}$.</li>
+<li>Gateways enforce limits locally in RAM and periodically publish usage deltas asynchronously across a WAN message bus (Kafka/CRDTs). While small temporary overages (<span class="math-inline">&lt;5%</span>) can occur during high cross-region traffic bursts, latency remains under <span class="math-inline">1 ms</span>.</li>
 </ul>
 </li>
 <li><strong>Session Affinity / Geo-DNS Routing</strong>:
@@ -434,18 +435,20 @@ $$\text{New Tokens} = \min\big(\text{Capacity}, T_{\text{tokens}} + (\Delta t \t
 &quot;The <strong>Sliding Window Counter</strong> is a memory-efficient hybrid of Fixed Window and Sliding Window Log:</p>
 <ul>
 <li>Instead of storing every single request timestamp in memory (which uses megabytes of RAM under high traffic), it only stores two numbers: the request count of the <strong>previous window</strong> and the <strong>current window</strong>.</li>
-<li>When a request arrives at percentage $P$ into the current window, it calculates the approximated rolling count:
-$$\text{Count} = (\text{Previous Window Count} \times (1 - P)) + \text{Current Window Count}$$</li>
-<li>If $\text{Count} &lt; \text{Limit}$, it increments the current window counter and allows the request.</li>
-<li><strong>Accuracy</strong>: Assumes traffic in the previous window was distributed uniformly (typically $&lt;1%$ error rate in real-world traffic).</li>
-<li><strong>Memory</strong>: Consumes only two integers per client ($\approx 16\text{ bytes}$), providing smooth sliding-window protection with near-zero memory footprint.&quot;</li>
+<li>When a request arrives at percentage <span class="math-inline">P</span> into the current window, it calculates the approximated rolling count:</li>
+</ul>
+<div class="math-block">Count = (Previous Window Count × (1 - P)) + Current Window Count</div>
+<ul>
+<li>If <span class="math-inline">Count &lt; Limit</span>, it increments the current window counter and allows the request.</li>
+<li><strong>Accuracy</strong>: Assumes traffic in the previous window was distributed uniformly (typically <span class="math-inline">&lt;1%</span> error rate in real-world traffic).</li>
+<li><strong>Memory</strong>: Consumes only two integers per client (<span class="math-inline">≈ 16 bytes</span>), providing smooth sliding-window protection with near-zero memory footprint.&quot;</li>
 </ul>
 <hr />
 <h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
 <details>
 <summary><b>1. Why does the Token Bucket algorithm require zero background timer threads in production?</b></summary>
 <br>
-Because tokens are refilled <b>lazily on-demand</b> when a request arrives. The server simply computes the elapsed time delta since the last request ($\Delta t = \text{now} - \text{last\_refill}$) and multiplies by the refill rate in $O(1)$ constant time, eliminating the CPU overhead of background timers.
+Because tokens are refilled <b>lazily on-demand</b> when a request arrives. The server simply computes the elapsed time delta since the last request (<span class="math-inline">Δ t = now - last_refill</span>) and multiplies by the refill rate in <span class="math-inline">O(1)</span> constant time, eliminating the CPU overhead of background timers.
 </details>
 <details>
 <summary><b>2. What HTTP status code should an API Gateway return when a client exceeds their rate limit, and what header tells them how long to wait?</b></summary>
@@ -468,15 +471,28 @@ Because thousands of distinct mobile users or corporate employees frequently sha
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP status codes and headers.</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a>: Edge filtering and reverse proxy architecture.</li>
-<li><a href="../05-rate-limiting/index.html">05 - Rate Limiting</a>: Mathematical principles of rate limiting algorithms.</li>
-<li><a href="../22-system-design-in-memory-cache/index.html">22 - System Design: Distributed In-Memory Cache</a>: High-performance Redis clusters.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP status codes and headers.</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a>: Edge filtering and reverse proxy architecture.</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 - Rate Limiting</a>: Mathematical principles of rate limiting algorithms.</li>
+<li><a href="../../chapters/22-system-design-in-memory-cache/index.html">22 - System Design: Distributed In-Memory Cache</a>: High-performance Redis clusters.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-39-system-design--proximity-service--nearby-places-yelp--uber">Module 39: System Design — Proximity Service &amp; Nearby Places (Yelp / Uber)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-39-system-design--proximity-service--nearby-places-yelp--uber">Module 39: System Design — Proximity Service &amp; Nearby Places (Yelp / Uber)</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a Location-Based Proximity Service (Yelp, Google Maps, Uber Nearby), covering Geohash encoding, Quadtrees, Google S2 cells, and sub-50ms radius geospatial queries.</p>
 </blockquote>
@@ -30,9 +30,9 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling proximity services, review these core modules:</p>
 <ul>
-<li><a href="../09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (B-Trees vs spatial indexing)</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a> (Caching static businesses vs dynamic driver locations)</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Distributing geospatial shards across Redis nodes)</li>
+<li><a href="../../chapters/09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (B-Trees vs spatial indexing)</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a> (Caching static businesses vs dynamic driver locations)</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Distributing geospatial shards across Redis nodes)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -64,7 +64,7 @@
 <tr>
 <td style="text-align:left"><strong>Zooming into Downtown Sub-Grid</strong></td>
 <td style="text-align:left">Quadtree / Geohash Precision (Length 6)</td>
-<td style="text-align:left">Length 6 Geohash covers $\approx 1.2\text{km} \times 0.6\text{km}$; Length 7 covers $150\text{m} \times 150\text{m}$.</td>
+<td style="text-align:left">Length 6 Geohash covers <span class="math-inline">≈ 1.2km × 0.6km</span>; Length 7 covers <span class="math-inline">150m × 150m</span>.</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Checking the 8 Surrounding Grid Squares</strong></td>
@@ -82,20 +82,23 @@
 <h2 id="the-problem-it-solves">The Problem It Solves</h2>
 <p>Building a proximity service for apps like Yelp, Uber, or Google Maps poses unique geospatial challenges:</p>
 <ol>
-<li><strong>The 2D Indexing Problem</strong>: Traditional B-Tree and LSM indexes sort data in 1 dimension. Indexing latitude and longitude independently results in a massive 2D bounding-box table scan ($O(N)$).</li>
+<li><strong>The 2D Indexing Problem</strong>: Traditional B-Tree and LSM indexes sort data in 1 dimension. Indexing latitude and longitude independently results in a massive 2D bounding-box table scan (<span class="math-inline">O(N)</span>).</li>
 <li><strong>High-Write Dynamic GPS Updates (Uber/Lyft)</strong>: Millions of active drivers broadcast GPS coordinates every 3-5 seconds, creating hundreds of thousands of location writes per second.</li>
 <li><strong>The Boundary Problem</strong>: If a user stands near the edge of a grid square, a restaurant 50 meters away might be in an adjacent grid square. Systems must query neighboring cells to prevent missing close places.</li>
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/spatial_indexing.svg" alt="Geospatial Proximity Search (GeoHash / QuadTree / Uber H3)" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Client[&quot;Mobile Client&quot;]
         User[&quot;User App (lat: 37.77, lon: -122.41)&quot;] --&gt;|&quot;GET /v1/places/nearby?r=2km&quot;| Gateway[&quot;API Gateway&quot;]
     end
 
     subgraph QueryFlow[&quot;1. Proximity Read Path (&lt; 20ms)&quot;]
         Gateway --&gt; GeoSvc[&quot;Proximity Service&quot;]
-        GeoSvc --&gt; HashCompute[&quot;Compute User Geohash (e.g. '9q8yy')&quot;]
+        GeoSvc --&gt; HashCompute[&quot;Compute User Geohash (e.g. &#x27;9q8yy&#x27;)&quot;]
         HashCompute --&gt; NeighborCompute[&quot;Calculate 8 Neighbor Hashes&quot;]
         NeighborCompute --&gt; RedisGeo[(&quot;Redis Geospatial Cluster (In-Memory)&quot;)]
         RedisGeo --&gt;|&quot;Return Place IDs&quot;| Hydrate[&quot;Place Metadata Hydrator&quot;]
@@ -108,24 +111,23 @@
         Ingress --&gt; Kafka[&quot;Kafka Location Stream&quot;]
         Kafka --&gt; LocationWorker[&quot;Location Worker Pool&quot;]
         LocationWorker --&gt; RedisGeo
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
 <p>Consider a Yelp-like service with <strong>100 Million Active Users</strong> and <strong>200 Million Global Places</strong>:</p>
 <ul>
 <li><strong>Read Query Volume</strong>:
 <ul>
-<li>100M users $\times$ 2 proximity searches/day = $200\text{ million queries/day}$.</li>
-<li>Average QPS: $200\text{M} / 86,400 \approx 2,300\text{ QPS}$.</li>
-<li>Peak QPS ($3\times$): $\approx 7,000\text{ QPS}$.</li>
+<li>100M users <span class="math-inline">×</span> 2 proximity searches/day = <span class="math-inline">200 million queries/day</span>.</li>
+<li>Average QPS: <span class="math-inline">200M / 86,400 ≈ 2,300 QPS</span>.</li>
+<li>Peak QPS (<span class="math-inline">3×</span>): <span class="math-inline">≈ 7,000 QPS</span>.</li>
 </ul>
 </li>
 <li><strong>Static Place Storage Footprint</strong>:
 <ul>
 <li>200 million places globally.</li>
 <li>Place ID (8 bytes) + Geohash (12 bytes) + Lat/Lon (16 bytes) = 36 bytes.</li>
-<li>Total spatial index size: $200\text{M} \times 36\text{ bytes} \approx 7.2\text{ Gigabytes}$!</li>
+<li>Total spatial index size: <span class="math-inline">200M × 36 bytes ≈ 7.2 Gigabytes</span>!</li>
 <li>7.2 GB easily fits inside a single Redis node's memory.</li>
 </ul>
 </li>
@@ -135,34 +137,34 @@
 <thead>
 <tr>
 <th style="text-align:left">Geohash Length</th>
-<th style="text-align:left">Cell Width $\times$ Height</th>
+<th style="text-align:left">Cell Width <span class="math-inline">×</span> Height</th>
 <th style="text-align:left">Typical Real-World Use Case</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align:left"><strong>4</strong></td>
-<td style="text-align:left">$39\text{ km} \times 19\text{ km}$</td>
+<td style="text-align:left"><span class="math-inline">39 km × 19 km</span></td>
 <td style="text-align:left">Large metropolitan region</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>5</strong></td>
-<td style="text-align:left">$4.9\text{ km} \times 4.9\text{ km}$</td>
+<td style="text-align:left"><span class="math-inline">4.9 km × 4.9 km</span></td>
 <td style="text-align:left">City district / neighborhood</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>6</strong></td>
-<td style="text-align:left">$1.2\text{ km} \times 0.6\text{ km}$</td>
+<td style="text-align:left"><span class="math-inline">1.2 km × 0.6 km</span></td>
 <td style="text-align:left">Proximity search (walk/short drive)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>7</strong></td>
-<td style="text-align:left">$153\text{ m} \times 153\text{ m}$</td>
+<td style="text-align:left"><span class="math-inline">153 m × 153 m</span></td>
 <td style="text-align:left">Precise street / building block</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>8</strong></td>
-<td style="text-align:left">$38\text{ m} \times 19\text{ m}$</td>
+<td style="text-align:left"><span class="math-inline">38 m × 19 m</span></td>
 <td style="text-align:left">Accurate curb / door location</td>
 </tr>
 </tbody>
@@ -172,8 +174,8 @@
 <h3 id="1-geohash-encoding">1. Geohash Encoding</h3>
 <p>Geohash interleaves the binary representations of latitude and longitude:</p>
 <ol>
-<li>Divide Latitude $[-90, +90]$ into binary splits (greater than 0 = 1, less than 0 = 0).</li>
-<li>Divide Longitude $[-180, +180]$ into binary splits.</li>
+<li>Divide Latitude <span class="math-inline">[-90, +90]</span> into binary splits (greater than 0 = 1, less than 0 = 0).</li>
+<li>Divide Longitude <span class="math-inline">[-180, +180]</span> into binary splits.</li>
 <li>Interleave bits: <code>lon[0], lat[0], lon[1], lat[1]...</code></li>
 <li>Encode the combined bitstream into Base-32 (<code>0-9</code>, <code>b-z</code> excluding <code>a, i, l, o</code> to avoid visual confusion).</li>
 <li><strong>Key Property</strong>: All points sharing a common prefix belong to the same spatial cell. Prefix matching (<code>LIKE '9q8yy%'</code>) performs an instantaneous range query over 2D space!</li>
@@ -189,7 +191,7 @@
 <h3 id="3-spatial-index-comparison-geohash-vs-quadtree-vs-google-s2">3. Spatial Index Comparison: Geohash vs. Quadtree vs. Google S2</h3>
 <ul>
 <li><strong>Geohash</strong>: Simple Base-32 string; supported natively by Redis (<code>GEOADD</code>, <code>GEORADIUS</code>). Best for static places and fast radius lookups.</li>
-<li><strong>Quadtree</strong>: In-memory tree where each node splits into 4 quadrants when entity count exceeds a threshold (e.g., $&gt; 100$ places per node). Dynamically adapts to population density (dense in cities, sparse in rural areas).</li>
+<li><strong>Quadtree</strong>: In-memory tree where each node splits into 4 quadrants when entity count exceeds a threshold (e.g., <span class="math-inline">&gt; 100</span> places per node). Dynamically adapts to population density (dense in cities, sparse in rural areas).</li>
 <li><strong>Google S2</strong>: Projects the 3D spherical Earth onto a cube using Hilbert Space-Filling Curves. Produces 64-bit integers with zero distortion at the poles. Preferred by Google Maps and Uber.</li>
 </ul>
 <hr />
@@ -207,10 +209,10 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Lookup Latency</strong></td>
-<td style="text-align:left">Slow ($50-300\text{ ms}$)</td>
-<td style="text-align:left">Ultra-fast ($&lt; 5\text{ ms}$)</td>
-<td style="text-align:left">Fast ($5-15\text{ ms}$)</td>
-<td style="text-align:left">Ultra-fast ($&lt; 3\text{ ms}$)</td>
+<td style="text-align:left">Slow (<span class="math-inline">50-300 ms</span>)</td>
+<td style="text-align:left">Ultra-fast (<span class="math-inline">&lt; 5 ms</span>)</td>
+<td style="text-align:left">Fast (<span class="math-inline">5-15 ms</span>)</td>
+<td style="text-align:left">Ultra-fast (<span class="math-inline">&lt; 3 ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Memory Footprint</strong></td>
@@ -240,7 +242,7 @@
 <ol>
 <li><strong>Forgetting the 8 Neighboring Cells</strong>: Querying strictly the user's geohash misses businesses right across the street if they sit on a grid border. Always query the center cell plus 8 neighbors.</li>
 <li><strong>Storing Dynamic Moving Targets with Static Businesses</strong>: Storing static restaurants (updated once a year) and moving Uber drivers (updated every 4 seconds) in the same database table leads to index lock contention and performance collapse. <em>Separate into a static Places DB and an ephemeral Redis/Kafka Driver Location store.</em></li>
-<li><strong>Calculating Great-Circle Haversine Distance on the Entire Database</strong>: Running <code>acos(sin(lat)...)</code> across 200 million rows scans the entire table. <em>Use spatial indexes to prune candidates down to $&lt; 100$ places before calculating exact Haversine distance.</em></li>
+<li><strong>Calculating Great-Circle Haversine Distance on the Entire Database</strong>: Running <code>acos(sin(lat)...)</code> across 200 million rows scans the entire table. <em>Use spatial indexes to prune candidates down to <span class="math-inline">&lt; 100</span> places before calculating exact Haversine distance.</em></li>
 </ol>
 <hr />
 <h2 id="try-it-yourself">Try It Yourself</h2>
@@ -258,12 +260,12 @@
 <hr />
 <h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
 <h3 id="q1-how-does-geohash-convert-two-dimensional-coordinates-latitude-longitude-into-a-one-dimensional-searchable-index">Q1: How does Geohash convert two-dimensional coordinates (latitude, longitude) into a one-dimensional searchable index?</h3>
-<p><strong>Model Answer</strong>: Geohash recursively subdivides the Earth's latitude $[-90, +90]$ and longitude $[-180, +180]$ intervals into binary splits. At each level:</p>
+<p><strong>Model Answer</strong>: Geohash recursively subdivides the Earth's latitude <span class="math-inline">[-90, +90]</span> and longitude <span class="math-inline">[-180, +180]</span> intervals into binary splits. At each level:</p>
 <ol>
 <li>If the coordinate falls in the upper half of the range, assign bit <code>1</code>; if lower half, assign bit <code>0</code>.</li>
 <li>The alternating bits (longitude bit, latitude bit, longitude bit...) are interleaved into a single continuous bitstream.</li>
 <li>The bitstream is grouped into 5-bit chunks and encoded into Base-32 characters.
-This preserves spatial locality: points located geographically close to each other share long common prefixes in their Geohash strings, enabling fast $O(1)$ prefix range scans.</li>
+This preserves spatial locality: points located geographically close to each other share long common prefixes in their Geohash strings, enabling fast <span class="math-inline">O(1)</span> prefix range scans.</li>
 </ol>
 <h3 id="q2-what-is-the-boundary-problem-in-grid-based-spatial-systems-and-how-is-it-resolved">Q2: What is the &quot;Boundary Problem&quot; in grid-based spatial systems, and how is it resolved?</h3>
 <p><strong>Model Answer</strong>: The boundary problem occurs when a user stands close to the border of their spatial grid cell. A venue only 10 meters away across the boundary will have a completely different Geohash string. If we only query the user's cell, close venues are missed.
@@ -288,7 +290,7 @@ We solve this using the <strong>9-Cell Query Technique</strong>:</p>
 <li><strong>Read/Write Separation</strong>: Rider search queries read exclusively from the hot in-memory Redis cluster. Historical trip playback data is asynchronously flushed to cold storage (ClickHouse/S3) without impacting live matching.</li>
 </ol>
 <h3 id="q5-how-do-quadtrees-adapt-to-varying-population-densities-between-rural-and-urban-areas">Q5: How do Quadtrees adapt to varying population densities between rural and urban areas?</h3>
-<p><strong>Model Answer</strong>: In a <strong>Quadtree</strong>, each spatial node represents a bounding box. When the number of entities within a node exceeds a fixed capacity threshold (e.g., $N &gt; 100$):</p>
+<p><strong>Model Answer</strong>: In a <strong>Quadtree</strong>, each spatial node represents a bounding box. When the number of entities within a node exceeds a fixed capacity threshold (e.g., <span class="math-inline">N &gt; 100</span>):</p>
 <ul>
 <li>The node dynamically splits into 4 equal quadrant children (NW, NE, SW, SE), re-distributing entities among them.</li>
 <li>In dense urban centers (Manhattan, Tokyo), the Quadtree recursively subdivides into dozens of deep, tiny quadrants.</li>
@@ -340,7 +342,20 @@ D) Linked List<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

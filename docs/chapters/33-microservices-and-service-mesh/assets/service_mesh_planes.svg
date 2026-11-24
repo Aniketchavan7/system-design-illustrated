@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="Microservices Control Plane vs. Envoy Sidecar Data Plane">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">Microservices Control Plane vs. Envoy Sidecar Data Plane</text>
+  <text x="32" y="58" class="sub">Offloading mTLS, retries, circuit breaking, and telemetry from app code into sidecars</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="180" y="88" width="540" height="68" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="450.0" y="118.0" text-anchor="middle" class="white-t">Control Plane (Istio / xDS API)</text>
+  <text x="450.0" y="136.0" text-anchor="middle" class="white-s">Pushes dynamic routing rules, mTLS certs, and service discovery endpoints</text>
+  <line x1="300" y1="156" x2="230" y2="215" stroke="#1d4ed8" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+  <text x="230" y="188" text-anchor="middle" class="lbl">xDS config</text>
+  <line x1="600" y1="156" x2="670" y2="215" stroke="#1d4ed8" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+  <text x="695" y="188" text-anchor="middle" class="lbl">xDS config</text>
+  <rect x="60" y="215" width="320" height="128" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="220.0" y="275.0" text-anchor="middle" class="box-t">Pod A: App Container &lt;-&gt; Envoy</text>
+  <text x="220.0" y="293.0" text-anchor="middle" class="box-s">Localhost loopback; Sidecar enforces timeouts &amp; mTLS</text>
+  <line x1="380" y1="279" x2="520" y2="279" stroke="#1d4ed8" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+  <text x="450.0" y="272.0" text-anchor="middle" class="lbl">mTLS HTTP/2 (gRPC)</text>
+  <rect x="520" y="215" width="320" height="128" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="680.0" y="275.0" text-anchor="middle" class="box-t">Pod B: Envoy &lt;-&gt; App Container</text>
+  <text x="680.0" y="293.0" text-anchor="middle" class="box-s">Telemetry -&gt; Prometheus/Jaeger; Circuit Breaker protects Pod B</text>
+</svg>

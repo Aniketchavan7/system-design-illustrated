@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="23---system-design-real-time-distributed-chat-app-whatsapp--discord">23 - System Design: Real-Time Distributed Chat App (WhatsApp / Discord)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="23---system-design-real-time-distributed-chat-app-whatsapp--discord">23 - System Design: Real-Time Distributed Chat App (WhatsApp / Discord)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Designing a global real-time chat application (like WhatsApp, Discord, or Slack) requires orchestrating millions of persistent, full-duplex <strong>WebSocket</strong> connections, maintaining a high-throughput <strong>Presence Service</strong> (Online/Offline status), routing messages across distributed gateway clusters via a low-latency pub/sub message broker, storing petabytes of chat history in wide-column LSM-tree storage (Apache Cassandra / ScyllaDB), and falling back to APNs/FCM mobile push notifications for offline users.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../23-system-design-chat-app/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/23-system-design-chat-app/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: WebSockets vs. HTTP long-polling vs. SSE.</li>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column NoSQL stores vs. relational tables.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub routing and asynchronous messaging.</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection pooling, heartbeats, and fail-fast patterns.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: WebSockets vs. HTTP long-polling vs. SSE.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column NoSQL stores vs. relational tables.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub routing and asynchronous messaging.</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection pooling, heartbeats, and fail-fast patterns.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -95,14 +95,14 @@
 <p>In classic HTTP request-response:</p>
 <ul>
 <li>The client must always initiate communication; the server cannot push data to the client.</li>
-<li><strong>Polling (<code>setInterval(fetch, 1000)</code>)</strong>: Creates massive wasted traffic—$99%$ of requests return empty responses, wasting bandwidth and exhausting server CPU.</li>
-<li><strong>HTTP Long-Polling</strong>: Holds connection open until a message arrives. However, every new message requires tearing down the TCP connection, doing a new TLS handshake, and sending heavy HTTP headers ($500\text{–}1,000\text{ bytes}$ of header overhead for a $10\text{-byte}$ message!).</li>
+<li><strong>Polling (<code>setInterval(fetch, 1000)</code>)</strong>: Creates massive wasted traffic—<span class="math-inline">99%</span> of requests return empty responses, wasting bandwidth and exhausting server CPU.</li>
+<li><strong>HTTP Long-Polling</strong>: Holds connection open until a message arrives. However, every new message requires tearing down the TCP connection, doing a new TLS handshake, and sending heavy HTTP headers (<span class="math-inline">500–1,000 bytes</span> of header overhead for a <span class="math-inline">10-byte</span> message!).</li>
 </ul>
 <h3 id="how-websockets-revolutionize-real-time-scale">How WebSockets Revolutionize Real-Time Scale</h3>
 <ul>
 <li><strong>Persistent Bi-directional Socket</strong>: Initiated via an HTTP Upgrade handshake, then converts to a lightweight framed binary protocol over TCP.</li>
-<li><strong>Minimal Framing Overhead</strong>: Frame headers are only <strong>$2\text{ to }10\text{ bytes}$</strong> per message.</li>
-<li><strong>Instantaneous Server Push</strong>: The server pushes messages directly into the client's open socket with zero polling delay ($&lt;5\text{ ms}$).</li>
+<li><strong>Minimal Framing Overhead</strong>: Frame headers are only <strong><span class="math-inline">2 to 10 bytes</span></strong> per message.</li>
+<li><strong>Instantaneous Server Push</strong>: The server pushes messages directly into the client's open socket with zero polling delay (<span class="math-inline">&lt;5 ms</span>).</li>
 </ul>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
@@ -111,7 +111,7 @@
 <p><img src="./assets/chat_app.gif" alt="Real-Time Chat Application" /></p>
 <hr />
 <h3 id="end-to-end-chat-architecture-flowchart">End-to-End Chat Architecture Flowchart</h3>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor Alice as 👤 Alice (Tokyo)
     participant GW1 as ⚡ Chat Gateway 1
@@ -123,50 +123,53 @@
 
     Alice-&gt;&gt;GW1: Send: &quot;Hello Bob!&quot; (over WebSocket)
     GW1-&gt;&gt;DB: 1. Persist message (channel_id, timestamp)
-    GW1-&gt;&gt;Presence: 2. Query Bob's location
-    Presence--&gt;&gt;GW1: Bob is on 'GW-London-02'
+    GW1-&gt;&gt;Presence: 2. Query Bob&#x27;s location
+    Presence--&gt;&gt;GW1: Bob is on &#x27;GW-London-02&#x27;
     
     rect rgb(22, 27, 34)
     Note over GW1, GW2: Cross-Gateway Real-Time Dispatch
-    GW1-&gt;&gt;Broker: 3. Publish to channel 'user:bob'
+    GW1-&gt;&gt;Broker: 3. Publish to channel &#x27;user:bob&#x27;
     Broker-&gt;&gt;GW2: 4. Route frame to GW-London-02
     GW2-&gt;&gt;Bob: 5. Push frame over active WebSocket (5ms)
     end
 
     Bob--&gt;&gt;GW2: Read ACK
-    GW2-&gt;&gt;Alice: Delivery Receipt: DELIVERED (✓✓)
-</code></pre>
+    GW2-&gt;&gt;Alice: Delivery Receipt: DELIVERED (✓✓)</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's model capacity planning for a platform with <strong>50 Million Daily Active Users (DAU)</strong>:</p>
 <h3 id="1-concurrency--throughput-math">1. Concurrency &amp; Throughput Math</h3>
 <ul>
 <li><strong>Peak Concurrent Connections</strong>:
-Assume 20% of DAU are connected simultaneously at peak:
-$$\text{Concurrent WebSockets} = 50,000,000 \times 0.20 = \mathbf{10,000,000\text{ active connections}}$$</li>
-<li><strong>Message Volume</strong>:
-Assume average active user sends 40 messages per day:
-$$\text{Total Daily Messages} = 50,000,000 \times 40 = \mathbf{2\text{ Billion messages/day}}$$</li>
-<li><strong>Average QPS</strong>:
-$$\text{QPS} = \frac{2,000,000,000}{86,400} \approx \mathbf{23,150\text{ msgs/sec}}$$
-$$\text{Peak QPS (3x)} \approx \mathbf{70,000\text{ msgs/sec}}$$</li>
+Assume 20% of DAU are connected simultaneously at peak:</li>
 </ul>
-<h3 id="2-gateway-server-fleet-sizing">2. Gateway Server Fleet Sizing</h3>
-<p>A high-performance Linux server running modern Erlang/Go/Node with tuned <code>epoll</code> and <code>file-max</code> can comfortably hold <strong>$100,000$ open idle WebSocket connections</strong>:</p>
+<div class="math-block">Concurrent WebSockets = 50,000,000 × 0.20 = 10,000,000 active connections</div>
 <ul>
-<li>Memory per open WebSocket connection (OS TCP buffer + app struct): $\approx 10\text{ KB}$.</li>
-<li>RAM for 100k connections: $100,000 \times 10\text{ KB} \approx 1\text{ GB of RAM}$.</li>
-<li>Servers needed to hold 10M concurrent connections:
-$$\text{Gateways Needed} = \frac{10,000,000}{100,000} = \mathbf{100\text{ Chat Gateway instances}}$$</li>
+<li><strong>Message Volume</strong>:
+Assume average active user sends 40 messages per day:</li>
 </ul>
+<div class="math-block">Total Daily Messages = 50,000,000 × 40 = 2 Billion messages/day</div>
+<ul>
+<li><strong>Average QPS</strong>:</li>
+</ul>
+<div class="math-block">QPS = (2,000,000,000) / (86,400) ≈ 23,150 msgs/sec</div>
+<div class="math-block">Peak QPS (3x) ≈ 70,000 msgs/sec</div>
+<h3 id="2-gateway-server-fleet-sizing">2. Gateway Server Fleet Sizing</h3>
+<p>A high-performance Linux server running modern Erlang/Go/Node with tuned <code>epoll</code> and <code>file-max</code> can comfortably hold <strong><span class="math-inline">100,000</span> open idle WebSocket connections</strong>:</p>
+<ul>
+<li>Memory per open WebSocket connection (OS TCP buffer + app struct): <span class="math-inline">≈ 10 KB</span>.</li>
+<li>RAM for 100k connections: <span class="math-inline">100,000 × 10 KB ≈ 1 GB of RAM</span>.</li>
+<li>Servers needed to hold 10M concurrent connections:</li>
+</ul>
+<div class="math-block">Gateways Needed = (10,000,000) / (100,000) = 100 Chat Gateway instances</div>
 <h3 id="3-storage-estimations-5-year-horizon">3. Storage Estimations (5-Year Horizon)</h3>
 <ul>
-<li>Average message size: $100\text{ bytes}$ text + $60\text{ bytes}$ metadata = $160\text{ bytes}$.</li>
-<li>Daily storage: $2\text{ Billion} \times 160\text{ bytes} \approx 320\text{ GB/day}$.</li>
-<li>5-year storage:
-$$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{584\text{ Terabytes}}$$
-584 TB fits cleanly in a multi-node Apache Cassandra or ScyllaDB cluster.</li>
+<li>Average message size: <span class="math-inline">100 bytes</span> text + <span class="math-inline">60 bytes</span> metadata = <span class="math-inline">160 bytes</span>.</li>
+<li>Daily storage: <span class="math-inline">2 Billion × 160 bytes ≈ 320 GB/day</span>.</li>
+<li>5-year storage:</li>
 </ul>
+<div class="math-block">Storage (5 Years) = 320 GB × 365 × 5 ≈ 584 Terabytes</div>
+<p>584 TB fits cleanly in a multi-node Apache Cassandra or ScyllaDB cluster.</p>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-transport-comparison">1. Transport Comparison</h3>
@@ -230,8 +233,8 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 <thead>
 <tr>
 <th style="text-align:left">Feature</th>
-<th style="text-align:left">Small Group Chat (e.g. WhatsApp / iMessage, $&lt;100$ users)</th>
-<th style="text-align:left">Massive Public Channels (e.g. Discord / Twitch, $&gt;100,000$ users)</th>
+<th style="text-align:left">Small Group Chat (e.g. WhatsApp / iMessage, <span class="math-inline">&lt;100</span> users)</th>
+<th style="text-align:left">Massive Public Channels (e.g. Discord / Twitch, <span class="math-inline">&gt;100,000</span> users)</th>
 </tr>
 </thead>
 <tbody>
@@ -247,8 +250,8 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 </tr>
 <tr>
 <td style="text-align:left"><strong>Write Cost</strong></td>
-<td style="text-align:left">$O(N)$ where $N$ is group members</td>
-<td style="text-align:left">$O(1)$ constant time</td>
+<td style="text-align:left"><span class="math-inline">O(N)</span> where <span class="math-inline">N</span> is group members</td>
+<td style="text-align:left"><span class="math-inline">O(1)</span> constant time</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Delivery</strong></td>
@@ -269,7 +272,7 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 <li><strong>LSM-Tree Storage Engine</strong>: Writes are sequential appends to memory (Memtable) and flushed sequentially to disk (SSTables), providing massive write throughput.</li>
 <li><strong>Clustered Primary Key Design</strong>:
 <code>*(The ScyllaDB/Cassandra message table schema is separated into [schema.sql](./schema.sql); run [demo.py](./demo.py) for the complete chat gateway simulation.)*</code></li>
-<li><strong>$O(1)$ Range Lookups</strong>: Fetching the latest 50 messages for a channel translates to a single contiguous sequential disk scan!</li>
+<li><strong><span class="math-inline">O(1)</span> Range Lookups</strong>: Fetching the latest 50 messages for a channel translates to a single contiguous sequential disk scan!</li>
 </ul>
 <hr />
 <h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
@@ -289,12 +292,12 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 </tr>
 <tr>
 <td style="text-align:left"><strong>Write Amplification</strong></td>
-<td style="text-align:left">High ($N$ writes for $N$ recipients)</td>
-<td style="text-align:left"><strong>Zero ($O(1)$ single write to channel log)</strong></td>
+<td style="text-align:left">High (<span class="math-inline">N</span> writes for <span class="math-inline">N</span> recipients)</td>
+<td style="text-align:left"><strong>Zero (<span class="math-inline">O(1)</span> single write to channel log)</strong></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Read Complexity</strong></td>
-<td style="text-align:left">Ultra-Fast ($O(1)$ query to single inbox)</td>
+<td style="text-align:left">Ultra-Fast (<span class="math-inline">O(1)</span> query to single inbox)</td>
 <td style="text-align:left">Must query channel log and filter permissions</td>
 </tr>
 <tr>
@@ -311,7 +314,7 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 <p><strong>Broadcasting Presence Changes to All Contacts</strong>:</p>
 <ul>
 <li><em>Pitfall</em>: When User A logs in, the presence service broadcasts <code>Alice is Online</code> to all 2,000 of Alice's contacts.</li>
-<li><em>Result</em>: With 10,000,000 users logging in during peak morning hours, presence broadcasts generate $10\text{M} \times 2,000 = \mathbf{20\text{ Billion messages/second}}$, crashing the gateway cluster! Only push presence updates to users who are actively viewing a direct conversation with Alice.</li>
+<li><em>Result</em>: With 10,000,000 users logging in during peak morning hours, presence broadcasts generate <span class="math-inline">10M × 2,000 = 20 Billion messages/second</span>, crashing the gateway cluster! Only push presence updates to users who are actively viewing a direct conversation with Alice.</li>
 </ul>
 </li>
 <li>
@@ -359,11 +362,15 @@ $$\text{Storage (5 Years)} = 320\text{ GB} \times 365 \times 5 \approx \mathbf{5
 <li><strong>Timestamped Monotonic IDs (Snowflake / UUIDv7)</strong>:
 <ul>
 <li>We cannot rely on client device clocks because client clocks suffer from severe skew, drift, and time-zone errors.</li>
-<li>When the Chat Gateway receives a message, it assigns a 64-bit monotonically increasing ID (like Twitter Snowflake):
-$$\text{ID} = [\text{41-bit timestamp}] + [\text{10-bit machine ID}] + [\text{12-bit sequence}]$$</li>
-<li>This ensures that within any given millisecond, messages are uniquely and strictly ordered.</li>
+<li>When the Chat Gateway receives a message, it assigns a 64-bit monotonically increasing ID (like Twitter Snowflake):</li>
 </ul>
 </li>
+</ol>
+<div class="math-block">ID = [41-bit timestamp] + [10-bit machine ID] + [12-bit sequence]</div>
+<ul>
+<li>This ensures that within any given millisecond, messages are uniquely and strictly ordered.</li>
+</ul>
+<ol start="2">
 <li><strong>Channel Sequence Numbers</strong>:
 <ul>
 <li>For high-concurrency group chats, the channel coordinator maintains an atomic sequence counter (<code>seq_num = 1, 2, 3...</code>) stored in Redis or assigned by a single partition leader in Kafka.</li>
@@ -393,7 +400,7 @@ To scale presence efficiently:</p>
 <li><strong>Pull Model for Large Contact Lists</strong>:
 <ul>
 <li>We never broadcast presence to a user's entire friend list.</li>
-<li>When a user opens the app, the client fetches presence only for the <strong>visible screen items</strong> (e.g., the top 15 conversations in their inbox). For group chats with $&gt;100$ people, presence is turned off completely.&quot;</li>
+<li>When a user opens the app, the client fetches presence only for the <strong>visible screen items</strong> (e.g., the top 15 conversations in their inbox). For group chats with <span class="math-inline">&gt;100</span> people, presence is turned off completely.&quot;</li>
 </ul>
 </li>
 </ol>
@@ -416,7 +423,7 @@ To scale presence efficiently:</p>
 <ul>
 <li>Bob establishes a new WebSocket connection to a gateway.</li>
 <li>Bob's client sends a sync request: <code>Sync(last_received_message_id = 'msg_9821')</code>.</li>
-<li>The gateway fetches all messages for Bob with $\text{ID} &gt; \text{'msg_9821'}$, streams them down the socket, and marks them <code>DELIVERED</code>.&quot;</li>
+<li>The gateway fetches all messages for Bob with <span class="math-inline">ID &gt; 'msg_9821'</span>, streams them down the socket, and marks them <code>DELIVERED</code>.&quot;</li>
 </ul>
 </li>
 </ol>
@@ -435,7 +442,7 @@ To scale presence efficiently:</p>
 <li><strong>Partition &amp; Clustering Key Alignment</strong>:
 <ul>
 <li>By designing the schema with <code>PRIMARY KEY (channel_id, message_id)</code>, all messages for a conversation reside on the same physical cluster partition and are stored <strong>pre-sorted on disk</strong>.</li>
-<li>Fetching the last 50 messages requires a single contiguous sequential disk read ($O(1)$ disk seek), rather than scanning scattered relational blocks.&quot;</li>
+<li>Fetching the last 50 messages requires a single contiguous sequential disk read (<span class="math-inline">O(1)</span> disk seek), rather than scanning scattered relational blocks.&quot;</li>
 </ul>
 </li>
 </ol>
@@ -494,15 +501,28 @@ Because <code>channel_id</code> acts as the <b>partition key</b> (grouping all m
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP sockets, WebSockets, and TLS termination.</li>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column LSM storage engines.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub message brokers for inter-gateway routing.</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection heartbeats and dead-letter queues.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP sockets, WebSockets, and TLS termination.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Wide-column LSM storage engines.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Pub/Sub message brokers for inter-gateway routing.</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a>: Connection heartbeats and dead-letter queues.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

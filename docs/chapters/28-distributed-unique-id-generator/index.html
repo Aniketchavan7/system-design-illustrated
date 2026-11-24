@@ -22,17 +22,17 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="28--distributed-unique-id-generator">28 · Distributed Unique ID Generator</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="28--distributed-unique-id-generator">28 · Distributed Unique ID Generator</h1>
 <blockquote>
 <p><strong>Part 0 · Foundations</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Twitter</strong> (Snowflake), <strong>Discord</strong>, and <strong>Instagram</strong> generate billions of unique IDs per day are documented in <a href="../28-distributed-unique-id-generator/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Twitter</strong> (Snowflake), <strong>Discord</strong>, and <strong>Instagram</strong> generate billions of unique IDs per day are documented in <a href="../../chapters/28-distributed-unique-id-generator/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
-<p>In a traditional single SQL database, generating unique IDs is easy: you use an <code>AUTO_INCREMENT</code> primary key ($1, 2, 3, \dots$).</p>
+<p>In a traditional single SQL database, generating unique IDs is easy: you use an <code>AUTO_INCREMENT</code> primary key (<span class="math-inline">1, 2, 3, …</span>).</p>
 <p>In a distributed system with <strong>50 database shards and 100 API gateways across 3 continents</strong>, <code>AUTO_INCREMENT</code> fails:</p>
 <ul>
 <li>Two servers would generate the exact same ID (<code>1001</code>) simultaneously, corrupting orders and accounts.</li>
@@ -59,7 +59,7 @@
 <h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
 <h3 id="why-alternative-approaches-fail">Why Alternative Approaches Fail:</h3>
 <ol>
-<li><strong>Multi-Master Auto-Increment (Step $K$)</strong>:
+<li><strong>Multi-Master Auto-Increment (Step <span class="math-inline">K</span>)</strong>:
 <ul>
 <li>Server 1 generates $1, 3, 5, 7$; Server 2 generates $2, 4, 6, 8$.</li>
 <li><em>Failure</em>: Cannot scale dynamically when adding a 3rd server without reconfiguring all existing database sequences. IDs are not sortable by time across servers.</li>
@@ -68,7 +68,7 @@
 <li><strong>UUIDv4 (128-bit Random Strings)</strong>:
 <ul>
 <li>Example: <code>f47ac10b-58cc-4372-a567-0e02b2c3d479</code>.</li>
-<li><em>Failure</em>: 128 bits is twice as large as a 64-bit integer. Random UUIDs cause <strong>B-tree index fragmentation</strong> (random disk page splits), degrading database write performance by up to $80%$.</li>
+<li><em>Failure</em>: 128 bits is twice as large as a 64-bit integer. Random UUIDs cause <strong>B-tree index fragmentation</strong> (random disk page splits), degrading database write performance by up to <span class="math-inline">80%</span>.</li>
 </ul>
 </li>
 <li><strong>Ticket Server (Centralized Counter)</strong>:
@@ -80,7 +80,10 @@
 </ol>
 <hr />
 <h2 id="picture-it-the-64-bit-snowflake-bit-layout">🖼️ Picture It: The 64-Bit Snowflake Bit-Layout</h2>
-<pre><code class="language-mermaid">flowchart LR
+<p align="center">
+  <img src="./assets/snowflake_bits.svg" alt="64-Bit Snowflake Distributed ID Bit Layout" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     Sign[&quot;1 Bit&lt;br/&gt;Sign (0)&quot;]
     Time[&quot;41 Bits&lt;br/&gt;Timestamp (ms)&lt;br/&gt;~69 Years&quot;]
     Machine[&quot;10 Bits&lt;br/&gt;Datacenter / Worker ID&lt;br/&gt;1,024 Machines&quot;]
@@ -91,47 +94,48 @@
     style Sign fill:#161b22,stroke:#f85149,stroke-width:2px;
     style Time fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style Machine fill:#161b22,stroke:#d29922,stroke-width:2px;
-    style Seq fill:#161b22,stroke:#3fb950,stroke-width:2px;
-</code></pre>
+    style Seq fill:#161b22,stroke:#3fb950,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="the-mathematics-of-snowflake-bit-allocation">🔢 The Mathematics of Snowflake Bit-Allocation</h2>
-<p>$$	ext{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64	ext{ Bits (Standard 8-byte Integer)}}$$</p>
+<div class="math-block">Total Bits = 1 + 41 + 10 + 12 = 64 Bits (Standard 8-byte Integer)</div>
 <h3 id="1-timestamp-component-41-bits">1. Timestamp Component (41 Bits)</h3>
 <ul>
-<li>Maximum value: $2^{41} - 1 = 2,199,023,255,551	ext{ ms}$.</li>
-<li>Years of life:
-$$	ext{Years} = \frac{2,199,023,255,551	ext{ ms}}{1000	ext{ms} 	imes 60 	imes 60 	imes 24 	imes 365} \approx \mathbf{69.73	ext{ Years}}$$</li>
+<li>Maximum value: <span class="math-inline">2<sup>41</sup> - 1 = 2,199,023,255,551 ms</span>.</li>
+<li>Years of life:</li>
+</ul>
+<div class="math-block">Years = (2,199,023,255,551 ms) / (1000ms × 60 × 60 × 24 × 365) ≈ 69.73 Years</div>
+<ul>
 <li>A custom epoch (e.g., <code>2026-01-01</code>) gives 69 years of runway before overflow.</li>
 </ul>
 <h3 id="2-machine-id-component-10-bits">2. Machine ID Component (10 Bits)</h3>
 <ul>
-<li>Supports $2^{10} = \mathbf{1,024	ext{ distinct worker machines}}$ (or 5 bits Datacenter ID = 32 datacenters $	imes$ 5 bits Worker ID = 32 workers per datacenter).</li>
+<li>Supports <span class="math-inline">2<sup>10</sup> = 1,024 distinct worker machines</span> (or 5 bits Datacenter ID = 32 datacenters <span class="math-inline">×</span> 5 bits Worker ID = 32 workers per datacenter).</li>
 </ul>
 <h3 id="3-sequence-number-component-12-bits">3. Sequence Number Component (12 Bits)</h3>
 <ul>
-<li>Maximum value: $2^{12} = \mathbf{4,096	ext{ IDs per millisecond per node}}$.</li>
-<li>Total theoretical cluster generation capacity:
-$$	ext{Max Throughput} = 1,024	ext{ nodes} 	imes 4,096	ext{ IDs/ms} 	imes 1,000	ext{ms/s} \approx \mathbf{4.19	ext{ Billion IDs / second!}}$$</li>
+<li>Maximum value: <span class="math-inline">2<sup>12</sup> = 4,096 IDs per millisecond per node</span>.</li>
+<li>Total theoretical cluster generation capacity:</li>
 </ul>
+<div class="math-block">Max Throughput = 1,024 nodes × 4,096 IDs/ms × 1,000ms/s ≈ 4.19 Billion IDs / second!</div>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
-<p>When a client thread requests an ID from Worker $W$:</p>
+<p>When a client thread requests an ID from Worker <span class="math-inline">W</span>:</p>
 <ol>
-<li>Read the current system millisecond clock: $T_{	ext{now}}$.</li>
-<li><strong>If $T_{	ext{now}} == T_{	ext{last}}$</strong>:
+<li>Read the current system millisecond clock: <span class="math-inline">T<sub>now</sub></span>.</li>
+<li><strong>If <span class="math-inline">T<sub>now</sub> == T<sub>last</sub></span></strong>:
 <ul>
-<li>Increment sequence counter: $	ext{seq} = (	ext{seq} + 1) \ &amp; \ 4095$.</li>
-<li>If sequence overflows ($4096 	o 0$ in the same millisecond), wait until the next millisecond.</li>
+<li>Increment sequence counter: <span class="math-inline">seq = (seq + 1) &amp; 4095</span>.</li>
+<li>If sequence overflows (<span class="math-inline">4096 → 0</span> in the same millisecond), wait until the next millisecond.</li>
 </ul>
 </li>
-<li><strong>If $T_{	ext{now}} &gt; T_{	ext{last}}$</strong>:
+<li><strong>If <span class="math-inline">T<sub>now</sub> &gt; T<sub>last</sub></span></strong>:
 <ul>
-<li>Reset sequence counter to $0$. Update $T_{	ext{last}} = T_{	ext{now}}$.</li>
+<li>Reset sequence counter to <span class="math-inline">0</span>. Update <span class="math-inline">T<sub>last</sub> = T<sub>now</sub></span>.</li>
 </ul>
 </li>
-<li>Assemble 64-bit integer using bitwise left-shift operators:
-$$	ext{ID} = ((T_{	ext{now}} - 	ext{Epoch}) \ll 22) \ | \ (	ext{WorkerID} \ll 12) \ | \ 	ext{seq}$$</li>
+<li>Assemble 64-bit integer using bitwise left-shift operators:</li>
 </ol>
+<div class="math-block">ID = ((T<sub>now</sub> - Epoch) ≪ 22) | (WorkerID ≪ 12) | seq</div>
 <hr />
 <h2 id="trade-offs--decision-matrix">⚖️ Trade-Offs &amp; Decision Matrix</h2>
 <table>
@@ -187,7 +191,7 @@ $$	ext{ID} = ((T_{	ext{now}} - 	ext{Epoch}) \ll 22) \ | \ (	ext{WorkerID} \ll 12
 </li>
 <li><strong>JavaScript 53-Bit Precision Bug</strong>:
 <ul>
-<li><em>Pitfall</em>: JavaScript's <code>Number.MAX_SAFE_INTEGER</code> is $2^{53} - 1$.</li>
+<li><em>Pitfall</em>: JavaScript's <code>Number.MAX_SAFE_INTEGER</code> is <span class="math-inline">2<sup>53</sup> - 1</span>.</li>
 <li><em>Result</em>: Returning 64-bit Snowflake IDs as raw JSON integers causes web browsers to truncate the last few digits, corrupting IDs. Always serialize 64-bit Snowflake IDs as <strong>strings</strong> (<code>&quot;179421839218201&quot;</code>) in API responses.</li>
 </ul>
 </li>
@@ -210,9 +214,9 @@ $$	ext{ID} = ((T_{	ext{now}} - 	ext{Epoch}) \ll 22) \ | \ (	ext{WorkerID} \ll 12
 <h3 id="q1-why-does-twitter-snowflake-use-a-41-bit-timestamp-instead-of-standard-64-bit-timestamps">Q1: &quot;Why does Twitter Snowflake use a 41-bit timestamp instead of standard 64-bit timestamps?&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
-<p>A 64-bit integer must fit the <em>entire</em> ID (Timestamp + Machine ID + Sequence). Allocating 41 bits to the timestamp relative to a custom epoch provides:
-$$\frac{2^{41} - 1}{1000 	imes 3600 	imes 24 	imes 365} \approx 69.7	ext{ Years}$$
-This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) and sequence number (12 bits), ensuring high-concurrency generation with zero cross-network coordination.</p>
+<p>A 64-bit integer must fit the <em>entire</em> ID (Timestamp + Machine ID + Sequence). Allocating 41 bits to the timestamp relative to a custom epoch provides:</p>
+<div class="math-block">(2<sup>41</sup> - 1) / (1000 × 3600 × 24 × 365) ≈ 69.7 Years</div>
+<p>This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) and sequence number (12 bits), ensuring high-concurrency generation with zero cross-network coordination.</p>
 </details>
 <hr />
 <h3 id="q2-how-does-a-snowflake-generator-handle-ntp-clock-rollback">Q2: &quot;How does a Snowflake generator handle NTP clock rollback?&quot;</h3>
@@ -220,7 +224,7 @@ This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) a
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <p>If the system clock rolls backwards (e.g., NTP slew):</p>
 <ol>
-<li><strong>Short skew (&lt;5ms)</strong>: The generator thread simply sleeps for the delta until $T_{	ext{now}} \ge T_{	ext{last}}$.</li>
+<li><strong>Short skew (&lt;5ms)</strong>: The generator thread simply sleeps for the delta until <span class="math-inline">T<sub>now</sub> ≥ T<sub>last</sub></span>.</li>
 <li><strong>Large skew (&gt;5ms)</strong>: The generator refuses to mint IDs and throws an error or fails over to a backup worker node to preserve the strict uniqueness invariant.</li>
 </ol>
 </details>
@@ -231,7 +235,7 @@ This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) a
 <p>Relational database primary keys are organized as B+ Trees stored in fixed-size disk pages (e.g. 16KB). Because UUIDv4 is completely random:</p>
 <ul>
 <li>Inserts land randomly in any leaf page on disk.</li>
-<li>When an insert hits an already full page, the database must execute an expensive <strong>Page Split</strong> (allocating a new page and moving 50% of keys), causing random disk I/O, low page fill factor ($50%$), and memory cache thrashing.</li>
+<li>When an insert hits an already full page, the database must execute an expensive <strong>Page Split</strong> (allocating a new page and moving 50% of keys), causing random disk I/O, low page fill factor (<span class="math-inline">50%</span>), and memory cache thrashing.</li>
 <li>Time-sortable IDs (Snowflake, UUIDv7) append sequentially to the rightmost leaf page, achieving maximum sequential I/O and zero page fragmentation.</li>
 </ul>
 </details>
@@ -252,7 +256,7 @@ Instagram implemented this inside PL/pgSQL stored procedures, so database row in
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <ul>
-<li>Pick <strong>Twitter Snowflake</strong> when 64-bit integer performance, compact memory footprint, and high generation throughput ($&gt;4	ext{M IDs/sec}$) are critical.</li>
+<li>Pick <strong>Twitter Snowflake</strong> when 64-bit integer performance, compact memory footprint, and high generation throughput (<span class="math-inline">&gt;4M IDs/sec</span>) are critical.</li>
 <li>Pick <strong>UUIDv7</strong> when you need a standardized 128-bit time-ordered UUID without managing centralized worker ID allocations or Zookeeper node registrations.</li>
 </ul>
 </details>
@@ -265,7 +269,20 @@ Instagram implemented this inside PL/pgSQL stored procedures, so database row in
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

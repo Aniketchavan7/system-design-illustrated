@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-cloud-file-storage">Real-World Production Implementations: Cloud File Storage</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-cloud-file-storage">Real-World Production Implementations: Cloud File Storage</h1>
 <p>This document explores how Dropbox and Google Drive store, chunk, deduplicate, and synchronize petabytes of user files.</p>
 <hr />
 <h2 id="1-dropbox-the-magic-pocket--sync-engine-architecture">1. Dropbox: The Magic Pocket &amp; Sync Engine Architecture</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Dropbox syncs files for over <strong>700 million registered users</strong>, storing exabytes of data. Dropbox originally ran on Amazon S3 before migrating to its custom-built storage infrastructure (<strong>Magic Pocket</strong>).</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Desktop[&quot;Dropbox Desktop Client (Python/Rust)&quot;] --&gt;|&quot;Chunk into 4MB Blocks&quot;| ChunkEngine[&quot;Client Chunking Daemon&quot;]
     ChunkEngine --&gt;|&quot;Compute SHA-256&quot;| HashCalc[&quot;Hash Calculator&quot;]
     
@@ -38,14 +38,13 @@
     HashCalc --&gt;|&quot;Stream Missing Blocks&quot;| MagicPocket[&quot;Magic Pocket (Custom S3 Storage Engine)&quot;]
     
     MetaServer --&gt; NotificationSvc[&quot;Notification Server (WebSocket Cluster)&quot;]
-    NotificationSvc --&gt;|&quot;Push File Change&quot;| MobilePhone[&quot;User Mobile / Laptop Client&quot;]
-</code></pre>
+    NotificationSvc --&gt;|&quot;Push File Change&quot;| MobilePhone[&quot;User Mobile / Laptop Client&quot;]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Magic Pocket (Exabyte Storage Architecture)</strong>:
 <ul>
 <li>Custom-designed hardware and software storage engine deployed across Dropbox datacenters.</li>
-<li>Slices files into immutable 4MB blocks, storing them with $8+4$ Reed-Solomon erasure coding across distributed disk storage sleds, achieving $99.9999999999%$ (12 9's) durability.</li>
+<li>Slices files into immutable 4MB blocks, storing them with <span class="math-inline">8+4</span> Reed-Solomon erasure coding across distributed disk storage sleds, achieving <span class="math-inline">99.9999999999%</span> (12 9's) durability.</li>
 </ul>
 </li>
 <li><strong>Variable-Length Chunking (Rabin Fingerprints)</strong>:
@@ -64,12 +63,11 @@
 <h2 id="2-google-google-drive--colossus-distributed-file-system">2. Google: Google Drive &amp; Colossus Distributed File System</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google Drive integrates with Google Docs, Sheets, Gmail, and Android backups, serving over <strong>1 billion users</strong>.</p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     DriveClient[&quot;Google Drive Client&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
     GFE --&gt; DriveBackend[&quot;Drive Backend Orchestrator&quot;]
     DriveBackend --&gt; Spanner[(&quot;Google Cloud Spanner (Global Metadata)&quot;)]
-    DriveBackend --&gt; Colossus[(&quot;Colossus (Google File System 2)&quot;)]
-</code></pre>
+    DriveBackend --&gt; Colossus[(&quot;Colossus (Google File System 2)&quot;)]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Colossus Storage Engine</strong>:
@@ -93,7 +91,20 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

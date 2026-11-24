@@ -83,9 +83,9 @@ To safely experiment with complex failure modes (e.g., RPC latency injection, da
 
 #### B. Exponential Backoff with Full Jitter
 When clients retry failed requests, naive retries trigger a synchronized stampede:
-- If 10,000 clients all retry after exactly 1.0 second, the struggling server is hit by another 10,000 requests simultaneously at $t = 1.0	ext{s}$.
+- If 10,000 clients all retry after exactly 1.0 second, the struggling server is hit by another 10,000 requests simultaneously at $t = 1.0\text{s}$.
 - Google enforces **Exponential Backoff with Full Jitter**:
-  $$	ext{Sleep Time} = 	ext{random}(0, \min(	ext{MaxBackoff}, 	ext{Base} 	imes 2^{	ext{attempt}}))$$
+  $$\text{Sleep Time} = \text{random}(0, \min(\text{MaxBackoff}, \text{Base} \times 2^{\text{attempt}}))$$
 - Randomizing the sleep interval uniformly over the entire window spreads client retries smoothly across time, allowing the recovering server to process backlog without re-crashing.
 
 #### C. Fail-Open vs Fail-Closed

@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-distributed-transactions">Real-World Production Deep Dives: Distributed Transactions</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-distributed-transactions">Real-World Production Deep Dives: Distributed Transactions</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Uber/Netflix</strong> execute distributed transactions, comparing Google's two-phase locking snapshot isolation (Percolator &amp; Spanner) with the asynchronous Saga Pattern.</p>
 </blockquote>
@@ -99,7 +99,7 @@
 <li>Two-Phase Commit requires all participating databases to hold row locks until the coordinator confirms commit:
 <ul>
 <li>If Service C experiences network latency, Services A and B hold database locks for seconds.</li>
-<li>Across hundreds of independent microservices owned by different teams, 2PC creates <strong>tight temporal coupling</strong>, distributed deadlocks, and collapses system availability to the product of all service availabilities ($A_{	ext{system}} = A_1 	imes A_2 	imes A_3$).</li>
+<li>Across hundreds of independent microservices owned by different teams, 2PC creates <strong>tight temporal coupling</strong>, distributed deadlocks, and collapses system availability to the product of all service availabilities (<span class="math-inline">A<sub>system</sub> = A<sub>1</sub> × A<sub>2</sub> × A<sub>3</sub></span>).</li>
 </ul>
 </li>
 </ul>
@@ -193,7 +193,11 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

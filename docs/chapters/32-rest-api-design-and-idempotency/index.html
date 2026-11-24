@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-32-rest-api-design--idempotency">Module 32: REST API Design &amp; Idempotency</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-32-rest-api-design--idempotency">Module 32: REST API Design &amp; Idempotency</h1>
 <blockquote>
 <p>Deep-dive architectural guide covering RESTful resource modeling, HTTP semantics, idempotent request semantics, idempotency key locking protocols, and safe retries in distributed systems.</p>
 </blockquote>
@@ -30,9 +30,9 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before diving into REST API design and idempotency, you should be familiar with:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a> (TCP, HTTP request/response lifecycles, and headers)</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Reverse proxies, routing, and header mutation)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Network retries, exponential backoff, and duplicate delivery)</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a> (TCP, HTTP request/response lifecycles, and headers)</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Reverse proxies, routing, and header mutation)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Network retries, exponential backoff, and duplicate delivery)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -96,10 +96,13 @@
 <li><strong>Response Drops on the Return Path</strong>: Server completed the mutation successfully, but the network connection timed out before the 200 OK reached the client.</li>
 </ol>
 <p>Without idempotency, a client retry leads to double-billing, duplicate records, and corrupted ledger states. Idempotency guarantees that executing an operation multiple times produces identical server state as executing it once:</p>
-<p>$$\forall x, \quad f(f(x)) = f(x)$$</p>
+<div class="math-block">∀ x, f(f(x)) = f(x)</div>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">sequenceDiagram
+<p align="center">
+  <img src="./assets/idempotency_flow.svg" alt="Idempotent Payment API Request State Machine" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor Client as Mobile Client
     participant GW as API Gateway
@@ -123,16 +126,15 @@
         Svc--&gt;&gt;GW: Charge Result {charge_id: &quot;ch_999&quot;, amount: 5000}
         GW-&gt;&gt;Cache: SET key_123 {status: 200, body: {...}} EX 86400
         GW--&gt;&gt;Client: 201 Created {charge_id: &quot;ch_999&quot;, status: &quot;succeeded&quot;}
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
 <p>Consider a global payment gateway like Stripe handling 2,000 payment API requests per second at peak:</p>
 <ul>
-<li><strong>Key Storage Size</strong>: UUIDv4 string (36 bytes) + SHA-256 hash of payload (32 bytes) + Cached Response Body (1 KB) $\approx 1.1\text{ KB}$ per idempotency record.</li>
-<li><strong>Daily Volume</strong>: $2,000\text{ req/s} \times 86,400\text{ s/day} \approx 172.8\text{ million requests/day}$.</li>
-<li><strong>Active Working Set (24-Hour Retention)</strong>: $172.8\text{M} \times 1.1\text{ KB} \approx 190\text{ GB}$ of Redis memory required.</li>
-<li><strong>Storage Cluster</strong>: A 3-node Redis cluster with 128 GB RAM per node with LRU eviction provides sub-millisecond duplicate checks ($&lt; 1.2\text{ ms}$).</li>
+<li><strong>Key Storage Size</strong>: UUIDv4 string (36 bytes) + SHA-256 hash of payload (32 bytes) + Cached Response Body (1 KB) <span class="math-inline">≈ 1.1 KB</span> per idempotency record.</li>
+<li><strong>Daily Volume</strong>: <span class="math-inline">2,000 req/s × 86,400 s/day ≈ 172.8 million requests/day</span>.</li>
+<li><strong>Active Working Set (24-Hour Retention)</strong>: <span class="math-inline">172.8M × 1.1 KB ≈ 190 GB</span> of Redis memory required.</li>
+<li><strong>Storage Cluster</strong>: A 3-node Redis cluster with 128 GB RAM per node with LRU eviction provides sub-millisecond duplicate checks (<span class="math-inline">&lt; 1.2 ms</span>).</li>
 </ul>
 <hr />
 <h2 id="deep-dive-under-the-hood">Deep Dive: Under the Hood</h2>
@@ -140,7 +142,7 @@
 <p>According to RFC 7231 / RFC 9110:</p>
 <ul>
 <li><strong>Safe Methods</strong>: <code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>. Calling them creates no server state mutations.</li>
-<li><strong>Idempotent Methods</strong>: <code>PUT</code> (full replacement), <code>DELETE</code> (removal), <code>GET</code>, <code>HEAD</code>. Calling them $N$ times has the same net side-effect as calling them once.</li>
+<li><strong>Idempotent Methods</strong>: <code>PUT</code> (full replacement), <code>DELETE</code> (removal), <code>GET</code>, <code>HEAD</code>. Calling them <span class="math-inline">N</span> times has the same net side-effect as calling them once.</li>
 <li><strong>Non-Idempotent Methods</strong>: <code>POST</code> (resource creation), <code>PATCH</code> (partial modification, e.g., append/increment operations).</li>
 </ul>
 <h3 id="2-the-idempotency-key-lifecycle">2. The Idempotency Key Lifecycle</h3>
@@ -192,7 +194,7 @@
 <hr />
 <h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
 <ol>
-<li><strong>Reusing Idempotency Keys Across Different Payloads</strong>: A buggy client sends <code>Idempotency-Key: abc</code> for a $10 transfer, and then reuses <code>abc</code> for a $500 transfer. If the server does not validate the SHA-256 payload fingerprint, it will silently return the cached $10 receipt without charging the $500!</li>
+<li><strong>Reusing Idempotency Keys Across Different Payloads</strong>: A buggy client sends <code>Idempotency-Key: abc</code> for a &lt;span class=&quot;math-inline&quot;&gt;10 transfer, and then reuses <code>abc</code> for a &lt;/span&gt;500 transfer. If the server does not validate the SHA-256 payload fingerprint, it will silently return the cached &lt;span class=&quot;math-inline&quot;&gt;10 receipt without charging the &lt;/span&gt;500!</li>
 <li><strong>Releasing the Lock on Downstream Timeout</strong>: If the payment processor times out after 10 seconds, deleting the idempotency key allows the client to retry. But the payment processor may have actually charged the card! The key state must transition to <code>FAILED</code> or hold until reconciliation completes.</li>
 <li><strong>Using URL Query Parameters for Mutating State</strong>: Calling <code>GET /v1/delete_user?id=123</code> violates HTTP safety principles. Web crawlers and prefetch engines will trigger user deletions! Always use <code>DELETE</code> or <code>POST</code>.</li>
 </ol>
@@ -213,7 +215,7 @@
 <hr />
 <h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
 <h3 id="q1-what-is-the-exact-mathematical-and-architectural-definition-of-an-idempotent-api">Q1: What is the exact mathematical and architectural definition of an Idempotent API?</h3>
-<p><strong>Model Answer</strong>: An API operation is idempotent if making multiple identical requests has the same net server state effect as making a single request. Formally, $f(f(x)) = f(x)$. In HTTP, <code>GET</code>, <code>PUT</code>, <code>DELETE</code>, and <code>HEAD</code> are defined as idempotent by specification. <code>POST</code> is non-idempotent by default because repeated invocations append or trigger additional resources or transactions. In distributed systems, non-idempotent endpoints are made idempotent by incorporating an <code>Idempotency-Key</code> header with atomic deduplication storage.</p>
+<p><strong>Model Answer</strong>: An API operation is idempotent if making multiple identical requests has the same net server state effect as making a single request. Formally, <span class="math-inline">f(f(x)) = f(x)</span>. In HTTP, <code>GET</code>, <code>PUT</code>, <code>DELETE</code>, and <code>HEAD</code> are defined as idempotent by specification. <code>POST</code> is non-idempotent by default because repeated invocations append or trigger additional resources or transactions. In distributed systems, non-idempotent endpoints are made idempotent by incorporating an <code>Idempotency-Key</code> header with atomic deduplication storage.</p>
 <h3 id="q2-why-is-post-not-idempotent-but-put-is-idempotent">Q2: Why is <code>POST</code> not idempotent, but <code>PUT</code> is idempotent?</h3>
 <p><strong>Model Answer</strong>: <code>PUT</code> represents a complete resource replacement at a specific URI (<code>PUT /users/42</code>). If you execute <code>PUT /users/42</code> with <code>{ name: &quot;Bob&quot; }</code> ten times, the resource state on the database at <code>/users/42</code> remains identical after the 1st and 10th execution. In contrast, <code>POST /users</code> creates a new resource with a server-generated ID (<code>/users/101</code>, <code>/users/102</code>). Calling it ten times generates ten distinct database records and side effects.</p>
 <h3 id="q3-how-do-you-handle-concurrent-requests-that-arrive-with-the-exact-same-idempotency-key-simultaneously">Q3: How do you handle concurrent requests that arrive with the exact same <code>Idempotency-Key</code> simultaneously?</h3>
@@ -267,7 +269,20 @@ D) Because HTTP headers expire automatically.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

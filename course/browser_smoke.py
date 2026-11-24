@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
 from threading import Thread
 
@@ -323,6 +324,82 @@ def test_no_script(browser, base_url):
     page.close()
 
 
+def test_new_labs(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+
+    open_page(page, base_url + "learn/hashing-lab.html")
+    ch_text = page.locator("#hash-ch-moved").inner_text()
+    mod_text = page.locator("#hash-mod-moved").inner_text()
+    assert ch_text.endswith("%") and mod_text.endswith("%"), (ch_text, mod_text)
+    assert int(ch_text[:-1]) < int(mod_text[:-1]), (ch_text, mod_text)
+    assert int(mod_text[:-1]) >= 75, mod_text
+    page.locator("#hash-nodes").press("ArrowRight")
+    expect(page.locator('[data-hash-value="nodes"]')).to_have_text("5")
+
+    open_page(page, base_url + "learn/quorum-lab.html")
+    expect(page.locator("#q-overlap")).to_have_text("1 node")
+    expect(page.locator("#q-consistency")).to_have_text("Strong quorum overlap")
+    f_slider = page.locator("#q-f")
+    f_slider.press("ArrowRight")
+    f_slider.press("ArrowRight")
+    expect(page.locator("#q-availability")).to_contain_text("Blocked")
+    assert not errors, errors
+    page.close()
+
+
+def test_flashcards_app(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+
+    open_page(page, base_url + "flashcards.html")
+    expect(page.locator("#progress-text")).to_have_text("Card 1 of 45")
+    expect(page.locator('#category-chips [data-cat="networking"] .chip-count')).to_have_text("5")
+    expect(page.locator('#category-chips [data-cat="distributed"] .chip-count')).to_have_text("7")
+
+    page.locator('#category-chips [data-cat="networking"]').click()
+    expect(page.locator("#progress-text")).to_have_text("Card 1 of 5")
+
+    page.locator("#search-input").fill("Envoy")
+    expect(page.locator("#card-title-front")).to_contain_text("API Gateways")
+    page.locator("#btn-flip").click()
+    expect(page.locator("#flashcard")).to_have_class(re.compile(r"\bflipped\b"))
+    expect(page.locator("#google-desc h4").first).to_be_visible()
+    google_txt = page.locator("#google-desc").inner_text()
+    assert "###" not in google_txt, google_txt
+
+    page.locator("#btn-theme").click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "paper"
+    expect(page.locator("#link-readme-back")).to_have_attribute(
+        "href", "./chapters/04-api-gateways-and-proxies/index.html"
+    )
+    page.locator("#link-readme-back").click()
+    expect(page.get_by_role("heading", level=1)).to_contain_text("API Gateways")
+
+    open_page(page, base_url + "flashcards.html")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "paper"
+    assert not errors, errors
+    page.close()
+
+
+def test_chapters_and_guides_mobile(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    for rel in (
+        "chapters/01-client-server-networking/index.html",
+        "chapters/27-back-of-the-envelope-estimation/index.html",
+        "chapters/32-rest-api-design-and-idempotency/index.html",
+        "guides/cheatsheet.html",
+        "guides/resource-reading-map.html",
+    ):
+        open_page(page, base_url + rel)
+    assert not errors, errors
+    page.close()
+
+
 def run(base_url, chrome):
     launch = {"executable_path": chrome} if chrome else {}
     with sync_playwright() as playwright, TemporaryDirectory() as directory:
@@ -338,6 +415,9 @@ def run(base_url, chrome):
             test_capstone(browser, base_url, Path(directory) / "capstone.json")
             test_queue_lab(browser, base_url)
             test_dns_lab(browser, base_url)
+            test_new_labs(browser, base_url)
+            test_flashcards_app(browser, base_url)
+            test_chapters_and_guides_mobile(browser, base_url)
         finally:
             browser.close()
 

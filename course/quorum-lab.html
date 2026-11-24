@@ -1,0 +1,53 @@
+<main id="main" class="practice-body container">
+    <header class="practice-header">
+      <h1>When do quorum reads see stale data?</h1>
+      <p class="lead">Test Dynamo-style quorum values N, W, and R under replica failures.</p>
+    </header>
+    <section class="simulator" aria-label="Quorum replication simulator">
+      <div class="sim-controls">
+        <fieldset id="quorum-controls" disabled>
+          <legend>Configure replication quorums</legend>
+          <div class="sim-input">
+            <label for="q-n">Total replicas (N)</label>
+            <span data-q-value="n" aria-hidden="true">5</span>
+            <input id="q-n" type="range" min="3" max="7" step="2" value="5">
+          </div>
+          <div class="sim-input">
+            <label for="q-w">Write quorum (W)</label>
+            <span data-q-value="w" aria-hidden="true">3</span>
+            <input id="q-w" type="range" min="1" max="7" step="1" value="3">
+          </div>
+          <div class="sim-input">
+            <label for="q-r">Read quorum (R)</label>
+            <span data-q-value="r" aria-hidden="true">3</span>
+            <input id="q-r" type="range" min="1" max="7" step="1" value="3">
+          </div>
+          <div class="sim-input">
+            <label for="q-f">Unreachable replicas (F)</label>
+            <span data-q-value="f" aria-hidden="true">1</span>
+            <input id="q-f" type="range" min="0" max="6" step="1" value="1">
+          </div>
+        </fieldset>
+        <p>Strong read-after-write overlap requires <strong>W + R &gt; N</strong>. High availability under node crashes requires healthy replicas <strong>N − F ≥ W</strong> and <strong>N − F ≥ R</strong>.</p>
+        <noscript><p>Enable JavaScript to adjust quorum sliders. The worked scenario below is available without it.</p></noscript>
+      </div>
+      <figure class="sim-result">
+        <figcaption>Quorum overlap &amp; fault tolerance</figcaption>
+        <dl class="sim-metrics">
+          <div><dt>Overlap (W + R − N)</dt><dd id="q-overlap">1 node</dd></div>
+          <div><dt>Read consistency</dt><dd id="q-consistency">Strong quorum overlap</dd></div>
+          <div><dt>Write / Read availability</dt><dd id="q-availability">Writes OK · Reads OK</dd></div>
+        </dl>
+        <p class="sim-message" id="q-message" role="status">Every read intersects at least 1 replica holding the latest write, even with 1 failed node.</p>
+      </figure>
+    </section>
+    <section class="sim-exercise">
+      <h2>Predict the trade-off</h2>
+      <p>With <code>N = 5</code>, <code>W = 3</code>, and <code>R = 3</code>, what happens to reads and writes if a datacenter outage knocks <strong>3</strong> replicas offline?</p>
+      <details>
+        <summary>Reveal the worked example</summary>
+        <p>Only <code>5 − 3 = 2</code> replicas remain reachable. Since 2 &lt; 3, both <code>W = 3</code> writes and <code>R = 3</code> reads are blocked (choosing Consistency over Availability). Lowering to <code>W = 1, R = 1</code> preserves availability at the cost of stale reads.</p>
+      </details>
+      <p><a class="text-link" href="../chapters/13-cap-and-pacelc-theorems/index.html">Read the full CAP &amp; PACELC chapter</a> · <a class="text-link" href="../guides/durable-key-value-store.html">Durable key-value store guide</a></p>
+    </section>
+  </main>

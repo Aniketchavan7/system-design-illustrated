@@ -53,6 +53,10 @@ The ticket is **globally unique**, **generated independently with zero coordinat
 
 ## 🖼️ Picture It: The 64-Bit Snowflake Bit-Layout
 
+<p align="center">
+  <img src="./assets/snowflake_bits.svg" alt="64-Bit Snowflake Distributed ID Bit Layout" width="100%" />
+</p>
+
 ```mermaid
 flowchart LR
     Sign["1 Bit<br/>Sign (0)"]
@@ -72,35 +76,35 @@ flowchart LR
 
 ## 🔢 The Mathematics of Snowflake Bit-Allocation
 
-$$	ext{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64	ext{ Bits (Standard 8-byte Integer)}}$$
+$$\text{Total Bits} = 1 + 41 + 10 + 12 = \mathbf{64\text{ Bits (Standard 8-byte Integer)}}$$
 
 ### 1. Timestamp Component (41 Bits)
-- Maximum value: $2^{41} - 1 = 2,199,023,255,551	ext{ ms}$.
+- Maximum value: $2^{41} - 1 = 2,199,023,255,551\text{ ms}$.
 - Years of life:
-  $$	ext{Years} = \frac{2,199,023,255,551	ext{ ms}}{1000	ext{ms} 	imes 60 	imes 60 	imes 24 	imes 365} \approx \mathbf{69.73	ext{ Years}}$$
+  $$\text{Years} = \frac{2,199,023,255,551\text{ ms}}{1000\text{ms} \times 60 \times 60 \times 24 \times 365} \approx \mathbf{69.73\text{ Years}}$$
 - A custom epoch (e.g., `2026-01-01`) gives 69 years of runway before overflow.
 
 ### 2. Machine ID Component (10 Bits)
-- Supports $2^{10} = \mathbf{1,024	ext{ distinct worker machines}}$ (or 5 bits Datacenter ID = 32 datacenters $	imes$ 5 bits Worker ID = 32 workers per datacenter).
+- Supports $2^{10} = \mathbf{1,024\text{ distinct worker machines}}$ (or 5 bits Datacenter ID = 32 datacenters $\times$ 5 bits Worker ID = 32 workers per datacenter).
 
 ### 3. Sequence Number Component (12 Bits)
-- Maximum value: $2^{12} = \mathbf{4,096	ext{ IDs per millisecond per node}}$.
+- Maximum value: $2^{12} = \mathbf{4,096\text{ IDs per millisecond per node}}$.
 - Total theoretical cluster generation capacity:
-  $$	ext{Max Throughput} = 1,024	ext{ nodes} 	imes 4,096	ext{ IDs/ms} 	imes 1,000	ext{ms/s} \approx \mathbf{4.19	ext{ Billion IDs / second!}}$$
+  $$\text{Max Throughput} = 1,024\text{ nodes} \times 4,096\text{ IDs/ms} \times 1,000\text{ms/s} \approx \mathbf{4.19\text{ Billion IDs / second!}}$$
 
 ---
 
 ## ⚙️ How It Works Under the Hood
 
 When a client thread requests an ID from Worker $W$:
-1. Read the current system millisecond clock: $T_{	ext{now}}$.
-2. **If $T_{	ext{now}} == T_{	ext{last}}$**:
-   - Increment sequence counter: $	ext{seq} = (	ext{seq} + 1) \ \& \ 4095$.
-   - If sequence overflows ($4096 	o 0$ in the same millisecond), wait until the next millisecond.
-3. **If $T_{	ext{now}} > T_{	ext{last}}$**:
-   - Reset sequence counter to $0$. Update $T_{	ext{last}} = T_{	ext{now}}$.
+1. Read the current system millisecond clock: $T_{\text{now}}$.
+2. **If $T_{\text{now}} == T_{\text{last}}$**:
+   - Increment sequence counter: $\text{seq} = (\text{seq} + 1) \ \& \ 4095$.
+   - If sequence overflows ($4096 \to 0$ in the same millisecond), wait until the next millisecond.
+3. **If $T_{\text{now}} > T_{\text{last}}$**:
+   - Reset sequence counter to $0$. Update $T_{\text{last}} = T_{\text{now}}$.
 4. Assemble 64-bit integer using bitwise left-shift operators:
-   $$	ext{ID} = ((T_{	ext{now}} - 	ext{Epoch}) \ll 22) \ | \ (	ext{WorkerID} \ll 12) \ | \ 	ext{seq}$$
+   $$\text{ID} = ((T_{\text{now}} - \text{Epoch}) \ll 22) \ | \ (\text{WorkerID} \ll 12) \ | \ \text{seq}$$
 
 ---
 
@@ -153,7 +157,7 @@ python demo.py
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 A 64-bit integer must fit the *entire* ID (Timestamp + Machine ID + Sequence). Allocating 41 bits to the timestamp relative to a custom epoch provides:
-$$\frac{2^{41} - 1}{1000 	imes 3600 	imes 24 	imes 365} \approx 69.7	ext{ Years}$$
+$$\frac{2^{41} - 1}{1000 \times 3600 \times 24 \times 365} \approx 69.7\text{ Years}$$
 This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) and sequence number (12 bits), ensuring high-concurrency generation with zero cross-network coordination.
 
 </details>
@@ -165,7 +169,7 @@ This leaves 23 bits free to encode the physical Datacenter/Worker ID (10 bits) a
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 If the system clock rolls backwards (e.g., NTP slew):
-1. **Short skew (<5ms)**: The generator thread simply sleeps for the delta until $T_{	ext{now}} \ge T_{	ext{last}}$.
+1. **Short skew (<5ms)**: The generator thread simply sleeps for the delta until $T_{\text{now}} \ge T_{\text{last}}$.
 2. **Large skew (>5ms)**: The generator refuses to mint IDs and throws an error or fails over to a backup worker node to preserve the strict uniqueness invariant.
 
 </details>
@@ -203,7 +207,7 @@ Instagram implemented this inside PL/pgSQL stored procedures, so database row in
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
-- Pick **Twitter Snowflake** when 64-bit integer performance, compact memory footprint, and high generation throughput ($>4	ext{M IDs/sec}$) are critical.
+- Pick **Twitter Snowflake** when 64-bit integer performance, compact memory footprint, and high generation throughput ($>4\text{M IDs/sec}$) are critical.
 - Pick **UUIDv7** when you need a standardized 128-bit time-ordered UUID without managing centralized worker ID allocations or Zookeeper node registrations.
 
 </details>

@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-33-microservices--service-mesh">Module 33: Microservices &amp; Service Mesh</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-33-microservices--service-mesh">Module 33: Microservices &amp; Service Mesh</h1>
 <blockquote>
 <p>Deep-dive architectural guide covering microservices decomposition, service discovery, sidecar proxies, distributed tracing, and service mesh data/control planes (Envoy &amp; Istio).</p>
 </blockquote>
@@ -30,9 +30,9 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before diving into microservices and service meshes, you should be familiar with:</p>
 <ul>
-<li><a href="../03-load-balancing/index.html">03 - Load Balancing</a> (Client-side vs server-side load balancing)</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Edge routing vs east-west internal traffic)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Circuit breakers, deadlines, and fallback strategies)</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 - Load Balancing</a> (Client-side vs server-side load balancing)</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 - API Gateways &amp; Proxies</a> (Edge routing vs east-west internal traffic)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Circuit breakers, deadlines, and fallback strategies)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -95,7 +95,10 @@ However, having 100 independent kitchens creates chaos: how do chefs talk to eac
 <p>A <strong>Service Mesh</strong> extracts all networking, observability, security, and traffic control out of application code into the infrastructure layer via <strong>Sidecar Proxies</strong>.</p>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/service_mesh_planes.svg" alt="Microservices Control Plane vs. Envoy Sidecar Data Plane" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph ControlPlane[&quot;Service Mesh Control Plane (e.g., Istio)&quot;]
         Pilot[&quot;Traffic Controller &amp; Routing Rules&quot;]
         Citadel[&quot;CA / mTLS Certificate Manager&quot;]
@@ -117,15 +120,14 @@ However, having 100 independent kitchens creates chaos: how do chefs talk to eac
     Pilot -.-&gt;|&quot;Push Config via xDS (gRPC)&quot;| SidecarA
     Pilot -.-&gt;|&quot;Push Config via xDS (gRPC)&quot;| SidecarB
     Citadel -.-&gt;|&quot;Issue &amp; Rotate x509 Certs&quot;| SidecarA
-    Citadel -.-&gt;|&quot;Issue &amp; Rotate x509 Certs&quot;| SidecarB
-</code></pre>
+    Citadel -.-&gt;|&quot;Issue &amp; Rotate x509 Certs&quot;| SidecarB</pre></figure>
 <hr />
 <h2 id="real-numbers--latency-overhead">Real Numbers &amp; Latency Overhead</h2>
 <p>Adding a sidecar proxy introduces two extra network hops on <code>localhost</code> per inter-service call:</p>
 <ul>
-<li><strong>Proxy Latency Overhead</strong>: A modern Envoy sidecar proxy adds <strong>$\approx 0.8\text{ ms}$ to $1.8\text{ ms}$</strong> of p99 latency per hop under high load.</li>
-<li><strong>CPU &amp; Memory Footprint</strong>: Envoy typically requires $50\text{ MB} - 120\text{ MB}$ of RAM per container pod and $0.1$ to $0.25$ vCPU cores.</li>
-<li><strong>Scale Consideration</strong>: In an enterprise cluster with 2,000 microservice pods, 2,000 sidecar proxies consume $\approx 200\text{ GB}$ of RAM and hundreds of CPU cores purely for traffic mediation.</li>
+<li><strong>Proxy Latency Overhead</strong>: A modern Envoy sidecar proxy adds <strong><span class="math-inline">≈ 0.8 ms</span> to <span class="math-inline">1.8 ms</span></strong> of p99 latency per hop under high load.</li>
+<li><strong>CPU &amp; Memory Footprint</strong>: Envoy typically requires <span class="math-inline">50 MB - 120 MB</span> of RAM per container pod and <span class="math-inline">0.1</span> to <span class="math-inline">0.25</span> vCPU cores.</li>
+<li><strong>Scale Consideration</strong>: In an enterprise cluster with 2,000 microservice pods, 2,000 sidecar proxies consume <span class="math-inline">≈ 200 GB</span> of RAM and hundreds of CPU cores purely for traffic mediation.</li>
 <li><strong>Decision Rule</strong>: Adopt a full service mesh only when microservice count exceeds 20-30 services and multi-language polyglot routing, mTLS, or canary releases become unmanageable with centralized API gateways.</li>
 </ul>
 <hr />
@@ -169,9 +171,9 @@ However, having 100 independent kitchens creates chaos: how do chefs talk to eac
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Network Overhead</strong></td>
-<td style="text-align:left">In-memory function call ($&lt; 1\text{ µs}$)</td>
-<td style="text-align:left">1 network hop ($2-5\text{ ms}$)</td>
-<td style="text-align:left">3 hops: App $\rightarrow$ Sidecar $\rightarrow$ Sidecar $\rightarrow$ App ($4-8\text{ ms}$)</td>
+<td style="text-align:left">In-memory function call (<span class="math-inline">&lt; 1 µs</span>)</td>
+<td style="text-align:left">1 network hop (<span class="math-inline">2-5 ms</span>)</td>
+<td style="text-align:left">3 hops: App <span class="math-inline">→</span> Sidecar <span class="math-inline">→</span> Sidecar <span class="math-inline">→</span> App (<span class="math-inline">4-8 ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Polyglot Support</strong></td>
@@ -286,7 +288,20 @@ D) Round-Robin DNS<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

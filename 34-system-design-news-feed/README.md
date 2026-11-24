@@ -45,6 +45,10 @@ Social networks with hundreds of millions of daily active users (DAUs) face seve
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/hybrid_feed_fanout.svg" alt="Hybrid Social News Feed Fan-Out Architecture" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph PublishingPath["1. Post Publishing Flow (Fan-out on Write)"]

@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-rate-limiting">Real-World Production Deep Dives: Rate Limiting</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-rate-limiting">Real-World Production Deep Dives: Rate Limiting</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Stripe</strong>, <strong>Google</strong>, and <strong>Netflix</strong> implement distributed rate limiting, protect against cascading failures, and enforce concurrency limits.</p>
 </blockquote>
@@ -123,18 +123,20 @@ X-RateLimit-Reset: 1716480002
 [ Microservice Business Logic ]
 </code></pre>
 <h4 id="the-algorithm-mechanics-littles-law">The Algorithm Mechanics (Little's Law)</h4>
-<p>According to Little's Law:
-$$L = \lambda 	imes W$$
-$$	ext{Concurrency} = 	ext{Throughput} 	imes 	ext{Latency}$$</p>
+<p>According to Little's Law:</p>
+<div class="math-block">L = λ × W</div>
+<div class="math-block">Concurrency = Throughput × Latency</div>
 <ol>
 <li>The service continuously monitors request round-trip time (RTT).</li>
 <li>It tracks the <strong>Minimum RTT</strong> observed during low-traffic periods (the physical baseline latency of the system).</li>
 <li>If current RTT begins to climb significantly above baseline, the system has entered <strong>queueing delay</strong> (congestion).</li>
-<li>The limiter dynamically contracts the permitted concurrency limit:
-$$	ext{Limit}_{t+1} = 	ext{Limit}_t 	imes \beta \quad (	ext{Multiplicative Decrease})$$</li>
-<li>When RTT recovers, it gradually increases the limit:
-$$	ext{Limit}_{t+1} = 	ext{Limit}_t + \alpha \quad (	ext{Additive Increase})$$</li>
+<li>The limiter dynamically contracts the permitted concurrency limit:</li>
 </ol>
+<div class="math-block">Limit<sub>t+1</sub> = Limit_t × β (Multiplicative Decrease)</div>
+<ol start="5">
+<li>When RTT recovers, it gradually increases the limit:</li>
+</ol>
+<div class="math-block">Limit<sub>t+1</sub> = Limit_t + α (Additive Increase)</div>
 <h4 id="traffic-prioritization">Traffic Prioritization</h4>
 <p>When throttling is active, Netflix drops low-priority background traffic first:</p>
 <ul>
@@ -148,13 +150,13 @@ $$	ext{Limit}_{t+1} = 	ext{Limit}_t + \alpha \quad (	ext{Additive Increase})$$</
 <h3 id="the-formula">The Formula</h3>
 <p>Clients track the number of requests they sent in the last 2 minutes (<code>requests</code>) and the number of requests accepted by the server without error (<code>accepts</code>).
 Clients compute the probability of dropping their own request before sending it:</p>
-<p>$$P_{	ext{drop}} = \max\left(0, \frac{	ext{requests} - K 	imes 	ext{accepts}}{	ext{requests} + 1}\right)$$</p>
+<div class="math-block">P<sub>drop</sub> = \max(0, (requests - K × accepts) / (requests + 1))</div>
 <ul>
-<li>Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).</li>
+<li>Where <span class="math-inline">K</span> is the multiplier (typically <span class="math-inline">K = 2.0</span> or <span class="math-inline">1.5</span>).</li>
 <li><strong>How it behaves</strong>:
 <ul>
-<li>If the server accepts all requests, $	ext{requests} \approx 	ext{accepts}$, so $	ext{requests} - 2(	ext{accepts}) &lt; 0 \implies P_{	ext{drop}} = 0$ (no throttling).</li>
-<li>If the server starts failing requests due to overload, $P_{	ext{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!</li>
+<li>If the server accepts all requests, <span class="math-inline">requests ≈ accepts</span>, so <span class="math-inline">requests - 2(accepts) &lt; 0 ⇒ P<sub>drop</sub> = 0</span> (no throttling).</li>
+<li>If the server starts failing requests due to overload, <span class="math-inline">P<sub>drop</sub></span> automatically increases. The client itself discards requests locally with zero network load on the struggling server!</li>
 </ul>
 </li>
 </ul>
@@ -206,7 +208,11 @@ Clients compute the probability of dropping their own request before sending it:
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

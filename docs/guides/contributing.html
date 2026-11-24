@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How to contribute fixes, diagrams, case studies, and simulations.">
+  <title>Contributing Guide | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="contributing-to-system-design-illustrated">Contributing to System Design Illustrated 🤝</h1>
+<blockquote>
+<p><strong>&quot;This is an open source project for everyone. We learn together, build together, and accept mistakes together. Whether you're fixing a typo, updating a latency figure, or sharing your company's production architecture—your knowledge belongs here.&quot;</strong></p>
+</blockquote>
+<p>First off, thank you for considering contributing to <strong>System Design Illustrated</strong>!</p>
+<p>System design is not a static, dogmatic textbook. Real-world distributed systems are messy, evolving, and full of subtle tradeoffs. No single person knows everything about how planetary systems are built. This project thrives because engineers, students, and practitioners from around the world share their knowledge, catch mistakes, and develop it collaboratively.</p>
+<hr />
+<h2 id="our-guiding-principles">🌟 Our Guiding Principles</h2>
+<ol>
+<li><strong>Mistakes are Welcomed &amp; Expected</strong>: Found a technical inaccuracy, an outdated latency number, a broken link, or a confusing explanation? Please tell us or submit a fix! Nobody writes bug-free documentation or flawless architectures on their first pass. We treat every bug report and correction as an act of generosity.</li>
+<li><strong>Share Your Own Knowledge</strong>: Have you worked on high-scale systems at your job or in an open source project? Have you debugged a cascading failure or a subtle race condition? Your real-world war stories and architectural dissections are pure gold for someone preparing for an interview or building their first production system.</li>
+<li><strong>No Contribution Is Too Small</strong>: Fixing a comma, correcting an equation, improving a diagram, adding a comment to a Python simulation, or suggesting a clearer analogy is just as valuable as writing a brand-new 5,000-word case study.</li>
+<li><strong>Clarity Over Jargon</strong>: We explain things from first principles using everyday physical analogies, visual diagrams, and real numbers before diving into kernel internals. If an explanation feels like &quot;academic soup&quot;, help us simplify it!</li>
+</ol>
+<hr />
+<h2 id="ways-you-can-contribute">🧭 Ways You Can Contribute</h2>
+<p>There are many ways to contribute to the project:</p>
+<h3 id="1--fix-mistakes--inaccuracies">1. 🐛 Fix Mistakes &amp; Inaccuracies</h3>
+<ul>
+<li>Fix typos, grammatical errors, or awkward phrasing.</li>
+<li>Correct outdated hardware numbers (e.g., modern NVMe SSD vs. HDD latency).</li>
+<li>Clarify misleading or incomplete distributed systems explanations (e.g., nuances in Paxos vs. Raft, CAP theorem subtleties, ACID vs. BASE).</li>
+<li>Fix broken markdown links or table formatting.</li>
+</ul>
+<h3 id="2--share-real-world-production-knowledge">2. 🏢 Share Real-World Production Knowledge</h3>
+<ul>
+<li>Add a <strong>Real-World Production Deep Dive</strong> to any module's <code>REAL_WORLD_EXAMPLES.md</code>:
+<ul>
+<li>How did your company (or a company you admire like Stripe, Uber, Netflix, Shopify, Discord, Cloudflare) solve rate limiting, feed generation, distributed locks, or database sharding?</li>
+<li>What were the post-mortem lessons and failure modes?</li>
+</ul>
+</li>
+<li>Add new architectural decision tradeoffs to <code>DECISION_FLOWCHARTS.md</code>.</li>
+</ul>
+<h3 id="3--visuals--architectural-diagrams">3. 🎨 Visuals &amp; Architectural Diagrams</h3>
+<ul>
+<li>Add or improve ASCII, SVG, or Mermaid diagrams in any module.</li>
+<li>Create step-by-step visual request flows (e.g., DNS resolution, 2PC transaction flow, consistent hashing ring rebalance).</li>
+</ul>
+<h3 id="4--back-of-the-envelope-math--cheat-sheets">4. 🧮 Back-of-the-Envelope Math &amp; Cheat Sheets</h3>
+<ul>
+<li>Expand <code>CHEATSHEET.md</code> with new rules of thumb, SLA conversions, and capacity formulas.</li>
+<li>Add new presets or formulas to <code>calculate.py</code> (the interactive CLI estimation calculator).</li>
+</ul>
+<h3 id="5--interactive-flashcards--interview-qa">5. 🧠 Interactive Flashcards &amp; Interview Q&amp;A</h3>
+<ul>
+<li>Contribute new high-yield interview questions and senior-level answers to <code>README.md</code> and <code>cards-data.js</code>.</li>
+<li>Improve the ELI5 explanations or physical analogies on the flashcards.</li>
+</ul>
+<h3 id="6--runnable-python-simulations--labs">6. 💻 Runnable Python Simulations &amp; Labs</h3>
+<ul>
+<li>Improve existing <code>demo.py</code> scripts to make simulations clearer or more interactive.</li>
+<li>Contribute new hands-on labs in <code>labs/</code> (e.g., simulating a distributed lock with Redis lease TTLs, an event-driven saga orchestrator, or a token bucket rate limiter).</li>
+</ul>
+<h3 id="7--translations--accessibility">7. 🌐 Translations &amp; Accessibility</h3>
+<ul>
+<li>Help translate modules or flashcards to other languages so developers worldwide can learn system design in their native tongue.</li>
+</ul>
+<h3 id="8--discuss-ideas--share-feedback-on-reddit">8. 💬 Discuss Ideas &amp; Share Feedback on Reddit</h3>
+<ul>
+<li>Before opening a large PR or proposing an extensive new module, feel free to bounce ideas off the community in <strong><a href="https://www.reddit.com/r/systemdesign/">r/systemdesign</a></strong> or other subreddits.</li>
+<li>See our <strong><a href="../guides/community.html">Community &amp; Reddit Guide</a></strong> for discussion prompts, post templates, and how community feedback gets turned into repository updates.</li>
+</ul>
+<hr />
+<h2 id="step-by-step-contribution-workflow">🛠️ Step-by-Step Contribution Workflow</h2>
+<p>We use the standard GitHub fork-and-pull-request model:</p>
+<h3 id="step-1-fork-and-clone-the-repository">Step 1: Fork and Clone the Repository</h3>
+<pre><code class="language-bash"># 1. Fork the repo on GitHub via the 'Fork' button
+# 2. Clone your personal fork locally
+git clone https://github.com/&lt;your-username&gt;/system-design-illustrated.git
+cd system-design-illustrated
+
+# 3. Add upstream remote to stay synchronized with main
+git remote add upstream https://github.com/Aniketchavan7/system-design-illustrated.git
+</code></pre>
+<h3 id="step-2-create-a-feature-branch">Step 2: Create a Feature Branch</h3>
+<p>Create a descriptive branch for your work:</p>
+<pre><code class="language-bash">git checkout -b fix/module-05-rate-limiting-typo
+# or
+git checkout -b feat/add-shopify-flash-sale-case-study
+</code></pre>
+<h3 id="step-3-make-your-changes">Step 3: Make Your Changes</h3>
+<ul>
+<li>Follow the existing module structure (see <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/TEMPLATE.md">TEMPLATE.md</a> for module conventions).</li>
+<li>Keep language direct, clear, and non-dogmatic.</li>
+<li>If you're adding or editing flashcard data, remember that <code>cards-data.js</code> and <code>docs/cards-data.js</code> should remain in sync (or run <code>python build_rich_flashcards.py</code>).</li>
+</ul>
+<h3 id="step-4-run-the-test-suite-locally">Step 4: Run the Test Suite Locally</h3>
+<p>Before submitting a PR, verify that all automated checks and links pass:</p>
+<pre><code class="language-bash"># Run the test suite via the CLI runner:
+python run_tests.py
+
+# Or run pytest directly:
+pytest tests/
+</code></pre>
+<p>All 105+ tests (including relative link validity, demo execution, calculator presets, and flashcard data integrity) should pass with 0 errors.</p>
+<h3 id="step-5-commit-and-push">Step 5: Commit and Push</h3>
+<p>Write a clear, concise commit message following conventional commits format:</p>
+<pre><code class="language-bash">git add .
+git commit -m &quot;fix(05-rate-limiting): correct token bucket refill math&quot;
+git push origin feat/your-feature-name
+</code></pre>
+<h3 id="step-6-open-a-pull-request">Step 6: Open a Pull Request</h3>
+<ul>
+<li>Go to the original repository on GitHub and click <strong>&quot;Compare &amp; pull request&quot;</strong>.</li>
+<li>Fill out the provided Pull Request template.</li>
+<li>Explain what you changed, why it helps, and any references or links.</li>
+<li>Don't worry if CI catches an issue—maintainers will gladly help guide you through it!</li>
+</ul>
+<h3 id="step-7-review--merge-policy-maintainer-review-required">Step 7: Review &amp; Merge Policy (Maintainer Review Required)</h3>
+<p>To ensure technical accuracy, consistency, and educational rigor, <strong>all pull requests require explicit review and approval from maintainer <a href="https://github.com/Aniketchavan7">@Aniketchavan7</a> before merging into <code>main</code></strong>:</p>
+<ol>
+<li><strong>Branch Protection Enforced</strong>: The <code>main</code> branch is protected. Direct commits are disallowed, and pull requests cannot be merged without review.</li>
+<li><strong>Code Owner Approval</strong>: Every PR automatically assigns <a href="https://github.com/Aniketchavan7">@Aniketchavan7</a> as the designated code owner (defined in <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/.github/CODEOWNERS"><code>.github/CODEOWNERS</code></a>). Approval from the code owner is mandatory to unlock merging.</li>
+<li><strong>Automated CI Checks</strong>: All automated test checks (<code>Test (Python 3.12)</code> and <code>Asset &amp; Link Integrity</code>) must pass.</li>
+<li><strong>Stale Review Dismissal</strong>: If you push new commits after receiving approval, GitHub resets the approval status to ensure all final changes are re-reviewed before merge.</li>
+<li><strong>Constructive Collaboration</strong>: Reviews are supportive and focused on clarity, real numbers, and accurate system tradeoffs. We will gladly help you get your PR across the finish line!</li>
+</ol>
+<hr />
+<h2 id="update-the-trail-notes-course">Update the Trail Notes course</h2>
+<p>Edit the source chapters and regenerate the Pages lessons. The <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/course/README.md">course contributor guide</a> covers the build and browser checks.</p>
+<h2 id="content-style-guide">📐 Content Style Guide</h2>
+<p>To maintain high educational quality across all 45 modules, please keep these guidelines in mind:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Section</th>
+<th style="text-align:left">Target Style</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>🧒 The 30-Second Version (ELI5)</strong></td>
+<td style="text-align:left">Direct, accessible, zero buzzwords. Explain it so a freshman or curious high school student understands the core problem and solution.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>🍕 Everyday Analogy</strong></td>
+<td style="text-align:left">Intuitive, tangible real-world physical metaphor (kitchens, post offices, traffic intersections, library catalogs).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>🔢 Real Numbers Math</strong></td>
+<td style="text-align:left">Grounded in hardware physics: L1 cache (~1ns) vs. RAM (~100ns) vs. NVMe SSD (~100μs) vs. Network RTT (~40–150ms).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>⚖️ Tradeoffs Matrix</strong></td>
+<td style="text-align:left">Balanced and honest. Every architecture is a tradeoff—highlight when <em>not</em> to use a pattern as clearly as when to use it.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>🏢 Real-World Examples</strong></td>
+<td style="text-align:left">Citable engineering architecture papers, tech blogs (Netflix TechBlog, Uber Engineering, Stripe Blog, AWS Architecture), or public post-mortems.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="good-first-issues--ideas-to-explore">💡 Good First Issues &amp; Ideas to Explore</h2>
+<p>Looking for an idea to contribute? Here are some fantastic topics currently open for community contributions:</p>
+<ol>
+<li><strong>New FAANG Case Studies</strong>:
+<ul>
+<li>How <strong>Discord</strong> migrated from MongoDB to Cassandra to ScyllaDB for billions of messages.</li>
+<li>How <strong>Shopify</strong> handles Black Friday / Cyber Monday flash sale surges.</li>
+<li>How <strong>Figma</strong> built their real-time multiplayer multiplayer CRDT / operational transform engine.</li>
+<li>How <strong>Airbnb</strong> designed their distributed search and pricing indexing engine.</li>
+</ul>
+</li>
+<li><strong>Interactive Labs</strong>:
+<ul>
+<li>Add a runnable simulation of <strong>Consistent Hashing with Virtual Nodes</strong> visualizing node addition/removal load distribution.</li>
+<li>Build a mini simulation of <strong>Bloom Filter false positive rates</strong> with varying bit-array sizes.</li>
+</ul>
+</li>
+<li><strong>Cheat Sheet Additions</strong>:
+<ul>
+<li>Add cloud egress cost rules of thumb (AWS / GCP / Cloudflare bandwidth pricing comparison).</li>
+<li>Add database connection pool sizing formulas (<span class="math-inline">Connections = 2 × CPU cores + disk count</span>).</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="code-of-conduct">🤝 Code of Conduct</h2>
+<p>We are committed to making participation in <strong>System Design Illustrated</strong> a welcoming, respectful, and harassment-free experience for everyone. Please review our <a href="../guides/code-of-conduct.html">Code of Conduct</a>.</p>
+<hr />
+<h2 id="contributor-recognition">🏆 Contributor Recognition</h2>
+<p>Every single contributor—whether you fix a typo, suggest a diagram, or write an entire case study—will be recognized and credited in our README and documentation. You are helping thousands of engineers around the world learn system design.</p>
+<p>Thank you for being part of this open community! Let's build and learn together. 🚀</p>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+
+</body>
+</html>

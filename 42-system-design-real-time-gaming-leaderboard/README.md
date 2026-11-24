@@ -45,6 +45,10 @@ Multiplayer gaming platforms (Fortnite, League of Legends, Clash Royale, Wordle)
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/redis_zset_leaderboard.svg" alt="Real-Time Gaming Leaderboard with Redis Sorted Sets (ZSET)" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Clients["Gaming Clients (Mobile / PC / Console)"]

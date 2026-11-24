@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="04--api-gateways--reverse-proxies">04 · API Gateways &amp; Reverse Proxies</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="04--api-gateways--reverse-proxies">04 · API Gateways &amp; Reverse Proxies</h1>
 <blockquote>
-<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../03-load-balancing/index.html">03 · Load balancing</a></p>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~18 min read · Prerequisites: <a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../../chapters/03-load-balancing/index.html">03 · Load balancing</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../04-api-gateways-and-proxies/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/04-api-gateways-and-proxies/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>When your backend grows from one server into 50 different microservices (User Service, Payment Service, Recommendation Service), you should <strong>never</strong> let external mobile apps call those 50 services directly.</p>
@@ -73,7 +73,7 @@
 </tr>
 <tr>
 <td style="text-align:left"><strong>Terminal Signs to Flight Gates</strong></td>
-<td style="text-align:left"><strong>Path-Based Request Routing</strong> (<code>/orders</code> $\to$ Order Service)</td>
+<td style="text-align:left"><strong>Path-Based Request Routing</strong> (<code>/orders</code> <span class="math-inline">→</span> Order Service)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Airport Concierge Booking Hotel+Cab</strong></td>
@@ -97,7 +97,7 @@
 <li><code>GET /cart</code> (Shopping cart)</li>
 <li><code>GET /recommendations</code> (Feed items)</li>
 <li><code>GET /notifications</code> (Unread count)
-On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$500\text{ ms}$</strong>, draining battery and creating a sluggish UI.</li>
+On a 4G connection (<span class="math-inline">80 ms RTT</span>), 5 sequential calls take over <strong><span class="math-inline">500 ms</span></strong>, draining battery and creating a sluggish UI.</li>
 </ul>
 </li>
 <li><strong>Cross-Cutting Concerns Duplication:</strong> Every engineering team has to reimplement rate limiting, auth token parsing, CORS headers, and request logging in Python, Go, Java, and Node.js.</li>
@@ -108,7 +108,7 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
 <p align="center">
   <img src="./assets/api_gateway.gif" alt="API Gateway Architecture Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     Client[&quot;📱 Mobile App (Public Internet)&quot;] --&gt;|&quot;1. HTTPS Request&lt;br/&gt;Bearer JWT Token&quot;| GW[&quot;🚪 API Gateway&lt;br/&gt;(Kong / Envoy / Traefik)&quot;]
 
     subgraph CrossCutting[&quot;Edge Perimeter Responsibilities&quot;]
@@ -132,8 +132,7 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
     GW --&gt;|/api/v1/users| S1
     GW --&gt;|/api/v1/orders| S2
     GW --&gt;|/api/v1/payments| S3
-    GW --&gt;|BFF Composite Call| S4
-</code></pre>
+    GW --&gt;|BFF Composite Call| S4</pre></figure>
 <ol>
 <li>External client sends a single HTTPS request with an Authorization header to <code>api.example.com</code>.</li>
 <li>The Gateway offloads TLS decryption and verifies the cryptographic signature of the JWT token.</li>
@@ -144,7 +143,7 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
 <h3 id="mobile-latency-direct-calls-vs-bff-gateway-aggregation">Mobile Latency: Direct Calls vs BFF Gateway Aggregation</h3>
-<p>Suppose a mobile client on a cellular network ($70\text{ ms RTT}$) needs to assemble its home dashboard from 4 backend services. Each backend service takes $15\text{ ms}$ of internal computing time.</p>
+<p>Suppose a mobile client on a cellular network (<span class="math-inline">70 ms RTT</span>) needs to assemble its home dashboard from 4 backend services. Each backend service takes <span class="math-inline">15 ms</span> of internal computing time.</p>
 <table>
 <thead>
 <tr>
@@ -157,26 +156,26 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Direct Microservice Calls</strong> (No Gateway)</td>
-<td style="text-align:center">4 cellular RTTs ($4 \times 70\text{ms} = 280\text{ms}$)</td>
-<td style="text-align:center">$0\text{ ms}$</td>
-<td style="text-align:center"><strong>$340\text{ ms}$</strong> (Sluggish)</td>
+<td style="text-align:center">4 cellular RTTs (<span class="math-inline">4 × 70ms = 280ms</span>)</td>
+<td style="text-align:center"><span class="math-inline">0 ms</span></td>
+<td style="text-align:center"><strong><span class="math-inline">340 ms</span></strong> (Sluggish)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>API Gateway BFF Aggregation</strong></td>
-<td style="text-align:center"><strong>1 cellular RTT</strong> ($1 \times 70\text{ms} = 70\text{ms}$)</td>
-<td style="text-align:center">Parallel internal RPCs ($1\text{ms} \times 4$)</td>
-<td style="text-align:center"><strong>$86\text{ ms}$</strong> (Instant!)</td>
+<td style="text-align:center"><strong>1 cellular RTT</strong> (<span class="math-inline">1 × 70ms = 70ms</span>)</td>
+<td style="text-align:center">Parallel internal RPCs (<span class="math-inline">1ms × 4</span>)</td>
+<td style="text-align:center"><strong><span class="math-inline">86 ms</span></strong> (Instant!)</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p>💡 <strong>Impact:</strong> By aggregating 4 calls into 1 at the gateway, you eliminate 3 round trips over the cellular airwaves, achieving a <strong>$4\times$ speedup</strong> and saving mobile battery!</p>
+<p>💡 <strong>Impact:</strong> By aggregating 4 calls into 1 at the gateway, you eliminate 3 round trips over the cellular airwaves, achieving a <strong><span class="math-inline">4×</span> speedup</strong> and saving mobile battery!</p>
 </blockquote>
 <hr />
 <h2 id="how-it-works-reverse-proxies--gateway-architecture">⚙️ How it works: Reverse Proxies &amp; Gateway Architecture</h2>
 <h3 id="1-forward-proxy-vs-reverse-proxy">1. Forward Proxy vs Reverse Proxy</h3>
 <p>Understanding the direction of representation is essential:</p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     subgraph FP[&quot;Forward Proxy (Protects Clients)&quot;]
         C1[&quot;Client A&quot;] --&gt; FProxy[&quot;🛡️ Forward Proxy&quot;]
         C2[&quot;Client B&quot;] --&gt; FProxy
@@ -187,8 +186,7 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
         Internet2[&quot;🌐 Public Internet / Clients&quot;] --&gt; RProxy[&quot;🚪 Reverse Proxy&quot;]
         RProxy --&gt; Srv1[&quot;🖥️ Backend 1&quot;]
         RProxy --&gt; Srv2[&quot;🖥️ Backend 2&quot;]
-    end
-</code></pre>
+    end</pre></figure>
 <ul>
 <li><strong>Forward Proxy (Client-Facing):</strong> Sits in front of a group of <strong>clients</strong> (e.g., inside a corporate office or school). It hides the real client IPs, filters outbound illicit websites, and caches shared intranet downloads. The outside world only sees the proxy's IP.</li>
 <li><strong>Reverse Proxy (Server-Facing):</strong> Sits in front of a group of <strong>servers</strong>. External clients believe they are talking directly to the destination website. It terminates TLS, shields internal IP addresses, caches static assets, and balances traffic.</li>
@@ -222,7 +220,7 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
 </li>
 <li><strong>Traffic Canary Splits:</strong>
 <ul>
-<li>Routes $95%$ of traffic to <code>v1</code> of a service and $5%$ of traffic to a newly deployed <code>v2</code> canary instance to test stability.</li>
+<li>Routes <span class="math-inline">95%</span> of traffic to <code>v1</code> of a service and <span class="math-inline">5%</span> of traffic to a newly deployed <code>v2</code> canary instance to test stability.</li>
 </ul>
 </li>
 </ol>
@@ -272,14 +270,14 @@ On a 4G connection ($80\text{ ms RTT}$), 5 sequential calls take over <strong>$5
 <p><strong>Database Queries in the Gateway:</strong></p>
 <ul>
 <li><em>Why it hurts:</em> If the gateway connects directly to PostgreSQL to look up user permissions on every request, the gateway becomes a database connection bottleneck.</li>
-<li><em>The Fix:</em> Validate identity statelessly using <strong>cryptographically signed JWTs</strong> (verifying the signature with a public key in memory in $&lt; 0.1\text{ ms}$ without querying any database).</li>
+<li><em>The Fix:</em> Validate identity statelessly using <strong>cryptographically signed JWTs</strong> (verifying the signature with a public key in memory in <span class="math-inline">&lt; 0.1 ms</span> without querying any database).</li>
 </ul>
 </li>
 <li>
 <p><strong>No Timeout Configuration for Downstream Services:</strong></p>
 <ul>
 <li><em>Why it hurts:</em> If the Recommendation Service hangs for 30 seconds due to a database deadlock, gateway worker threads remain blocked waiting for a response. Incoming traffic backs up, exhausting gateway file descriptors and crashing the entire site.</li>
-<li><em>The Fix:</em> Configure strict <strong>request timeouts</strong> (e.g. 500 ms) and deploy <strong>Circuit Breakers</strong> (<a href="../20-fault-tolerance-and-resilience/index.html">module 20</a>) at the gateway.</li>
+<li><em>The Fix:</em> Configure strict <strong>request timeouts</strong> (e.g. 500 ms) and deploy <strong>Circuit Breakers</strong> (<a href="../../chapters/20-fault-tolerance-and-resilience/index.html">module 20</a>) at the gateway.</li>
 </ul>
 </li>
 </ol>
@@ -311,7 +309,7 @@ python demo.py
 <ol>
 <li><strong>Reverse Proxy:</strong> The base concept. Any server that sits in front of backend servers and forwards requests to them, hiding their identity, terminating TLS, and providing caching.</li>
 <li><strong>Load Balancer:</strong> A specialized reverse proxy focused primarily on <strong>traffic distribution</strong> across a pool of identical server instances using algorithms (Round Robin, Least Connections) to prevent overloading and ensure high availability.</li>
-<li><strong>API Gateway:</strong> An application-layer (Layer 7) edge controller built specifically for <strong>microservices</strong>. Beyond load balancing, it acts as the API perimeter controller: validating JWTs, offloading authentication, managing API keys and developer quotas, performing path routing to diverse services, translating protocols (HTTP $\to$ gRPC), and aggregating responses (BFF pattern).</li>
+<li><strong>API Gateway:</strong> An application-layer (Layer 7) edge controller built specifically for <strong>microservices</strong>. Beyond load balancing, it acts as the API perimeter controller: validating JWTs, offloading authentication, managing API keys and developer quotas, performing path routing to diverse services, translating protocols (HTTP <span class="math-inline">→</span> gRPC), and aggregating responses (BFF pattern).</li>
 </ol>
 </details>
 <hr />
@@ -322,9 +320,9 @@ python demo.py
 <ol>
 <li><strong>Asymmetric Key Verification:</strong> When a user logs in, the Auth Service signs a JWT containing claims (<code>user_id</code>, <code>role</code>, <code>expires_at</code>) using a private RSA/ECDSA key.</li>
 <li><strong>In-Memory Signature Check:</strong> The API Gateway downloads the Auth Service's <strong>Public Key</strong> once on startup (via JWKS endpoint).</li>
-<li>When requests arrive at 100,000 RPS, the Gateway cryptographically verifies the signature in memory using CPU math in $&lt; 0.1\text{ ms}$. <strong>Zero database queries are performed.</strong></li>
+<li>When requests arrive at 100,000 RPS, the Gateway cryptographically verifies the signature in memory using CPU math in <span class="math-inline">&lt; 0.1 ms</span>. <strong>Zero database queries are performed.</strong></li>
 <li>If the signature matches and <code>now &lt; expires_at</code>, the token is valid. The Gateway unpacks the claims, injects <code>X-User-Id: 4120</code> into the request header, and forwards it to internal services.</li>
-<li><strong>Revocation Strategy:</strong> For emergency logouts, the Gateway maintains an in-memory Redis blocklist of revoked token IDs (<code>jti</code>), checking it with an ultra-fast $O(1)$ key lookup.</li>
+<li><strong>Revocation Strategy:</strong> For emergency logouts, the Gateway maintains an in-memory Redis blocklist of revoked token IDs (<code>jti</code>), checking it with an ultra-fast <span class="math-inline">O(1)</span> key lookup.</li>
 </ol>
 </details>
 <hr />
@@ -399,14 +397,27 @@ python demo.py
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 · Client–server networking</a>: The HTTP and WebSocket protocols terminated by the gateway.</li>
-<li><a href="../03-load-balancing/index.html">03 · Load balancing</a>: How Layer 4 balancers distribute traffic across a fleet of API gateways.</li>
-<li><a href="../05-rate-limiting/index.html">05 · Rate limiting</a>: The algorithms implemented inside the gateway to protect backends from floods.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>: The HTTP and WebSocket protocols terminated by the gateway.</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 · Load balancing</a>: How Layer 4 balancers distribute traffic across a fleet of API gateways.</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 · Rate limiting</a>: The algorithms implemented inside the gateway to protect backends from floods.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

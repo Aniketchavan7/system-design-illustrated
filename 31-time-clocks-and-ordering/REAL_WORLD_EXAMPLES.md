@@ -39,12 +39,12 @@
 #### A. Redundant GPS and Rubidium Clocks
 - Why both GPS and Atomic clocks?
   - GPS can fail due to antenna damage, solar flares, or satellite spoofing.
-  - Rubidium atomic clocks are independent of external radio signals, but drift slightly over months ($\approx 1	ext{ }\mu	ext{s/day}$).
-  - Combining both allows Google to cross-check time sources and mathematically bound maximum time drift to **$\epsilon < 7	ext{ milliseconds}$**.
+  - Rubidium atomic clocks are independent of external radio signals, but drift slightly over months ($\approx 1\text{ }\mu\text{s/day}$).
+  - Combining both allows Google to cross-check time sources and mathematically bound maximum time drift to **$\epsilon < 7\text{ milliseconds}$**.
 
 #### B. The Commit Wait Rule
-1. When transaction $T_1$ commits, Spanner assigns it timestamp $s = t_{	ext{latest}}$.
-2. The Spanner leader intentionally **pauses execution for $2\epsilon$ ($\approx 7	ext{–}14	ext{ms}$)** before releasing locks and acknowledging to the client.
+1. When transaction $T_1$ commits, Spanner assigns it timestamp $s = t_{\text{latest}}$.
+2. The Spanner leader intentionally **pauses execution for $2\epsilon$ ($\approx 7\text{–}14\text{ms}$)** before releasing locks and acknowledging to the client.
 3. This guarantees that any subsequent transaction $T_2$ anywhere on Earth will receive a timestamp $s_2 > s_1$. Causality is physically locked to real-world time!
 
 ---
@@ -93,7 +93,7 @@ Vector=[(NodeA, 2)]          Vector=[(NodeA, 1), (NodeB, 1)]
 
 #### B. The Business Resolution
 - Instead of using Last-Write-Wins (which would delete either the Phone or the Laptop), Amazon's application logic executes a set union:
-  $$	ext{Cart} = 	ext{Cart}_A \cup 	ext{Cart}_B = [	ext{Book}, 	ext{Phone}, 	ext{Laptop}]$$
+  $$\text{Cart} = \text{Cart}_A \cup \text{Cart}_B = [\text{Book}, \text{Phone}, \text{Laptop}]$$
 - The customer sees all items in their cart. Zero sales revenue is lost!
 
 ---
@@ -112,5 +112,5 @@ Vector=[(NodeA, 2)]          Vector=[(NodeA, 1), (NodeB, 1)]
 
 ## 🎯 System Design Interview Takeaways
 1. **Explain Why Last-Write-Wins (LWW) is Dangerous**: Impress interviewers by explaining that using physical NTP timestamps to resolve conflicts in Cassandra or Dynamo silently drops legitimate writes when server clocks drift.
-2. **TrueTime Concept in Distributed Systems**: Citing TrueTime demonstrates elite understanding of how Google solved the CAP theorem in practice by bounding clock uncertainty to $<7	ext{ms}$.
+2. **TrueTime Concept in Distributed Systems**: Citing TrueTime demonstrates elite understanding of how Google solved the CAP theorem in practice by bounding clock uncertainty to $<7\text{ms}$.
 3. **Application-Level Conflict Resolution**: When designing AP systems, explain that concurrent conflicting versions should be reconciled using domain-specific logic (like shopping cart union or CRDTs) rather than blind wall-clock overwrites.

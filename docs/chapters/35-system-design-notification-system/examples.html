@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-notification-systems">Real-World Production Implementations: Notification Systems</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-notification-systems">Real-World Production Implementations: Notification Systems</h1>
 <p>This document explores how Netflix and Google build and operate messaging platforms delivering billions of communications daily.</p>
 <hr />
 <h2 id="1-netflix-zuul-messaging--the-hermes-notification-platform">1. Netflix: Zuul Messaging &amp; The Hermes Notification Platform</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Netflix delivers billions of personalized notifications each month (new season arrivals, payment renewals, account security alerts) across mobile push, email, SMS, and in-app web banners through its <strong>Hermes</strong> messaging platform.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     BusinessSvc[&quot;Viewing / Billing Service&quot;] --&gt;|&quot;Publish Event&quot;| HermesIngress[&quot;Hermes Ingestion Gateway&quot;]
     HermesIngress --&gt; PriorityRouter{&quot;Priority Classifier&quot;}
     
@@ -43,8 +43,7 @@
     
     ChannelDistributor --&gt; APNS[&quot;Apple APNs&quot;]
     ChannelDistributor --&gt; FCM[&quot;Google FCM&quot;]
-    ChannelDistributor --&gt; SES[&quot;Amazon SES (Email)&quot;]
-</code></pre>
+    ChannelDistributor --&gt; SES[&quot;Amazon SES (Email)&quot;]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>User Preference &amp; Quiet Hour Intelligence</strong>:
@@ -68,12 +67,11 @@
 <h2 id="2-google-firebase-cloud-messaging-fcm--google-alert-infrastructure">2. Google: Firebase Cloud Messaging (FCM) &amp; Google Alert Infrastructure</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google's <strong>Firebase Cloud Messaging (FCM)</strong> powers push notification infrastructure for millions of mobile and web applications worldwide, sending hundreds of billions of messages per day.</p>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     AppServer[&quot;App Server / Backend&quot;] --&gt;|&quot;HTTP v1 API / OAuth 2.0&quot;| FCMEndpoint[&quot;FCM Ingress Edge (BFE)&quot;]
     FCMEndpoint --&gt; MessageRouter[&quot;FCM Router &amp; Fanout Engine&quot;]
     MessageRouter --&gt; ConnectionServer[&quot;Google Play Services Connection Servers&quot;]
-    ConnectionServer ==&gt;|&quot;Persistent TLS Keep-Alive Socket&quot;| AndroidPhone[&quot;Android Devices (Play Services)&quot;]
-</code></pre>
+    ConnectionServer ==&gt;|&quot;Persistent TLS Keep-Alive Socket&quot;| AndroidPhone[&quot;Android Devices (Play Services)&quot;]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Single Persistent TCP Connection (Google Play Services)</strong>:
@@ -99,7 +97,20 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

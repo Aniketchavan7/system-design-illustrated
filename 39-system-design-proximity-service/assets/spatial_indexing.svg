@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="Geospatial Proximity Search (GeoHash / QuadTree / Uber H3)">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">Geospatial Proximity Search (GeoHash / QuadTree / Uber H3)</text>
+  <text x="32" y="58" class="sub">Mapping 2D lat/lng coordinates into 1D partitionable cell prefixes for fast nearby lookup</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="32" y="100" width="220" height="82" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="142.0" y="137.0" text-anchor="middle" class="box-t">Driver / Place (Lat, Lng)</text>
+  <text x="142.0" y="155.0" text-anchor="middle" class="box-s">37.7749 N, 122.4194 W</text>
+  <line x1="252" y1="141" x2="300" y2="141" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="276.0" y="134.0" text-anchor="middle" class="lbl">Encode</text>
+  <rect x="300" y="100" width="270" height="82" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="435.0" y="137.0" text-anchor="middle" class="white-t">Spatial Index (H3 / S2 / GeoHash)</text>
+  <text x="435.0" y="155.0" text-anchor="middle" class="white-s">Cell ID &#x27;8828308281fffff&#x27; (~460m)</text>
+  <line x1="570" y1="141" x2="618" y2="141" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="594.0" y="134.0" text-anchor="middle" class="lbl">Lookup</text>
+  <rect x="618" y="100" width="250" height="82" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="743.0" y="137.0" text-anchor="middle" class="box-t">Read Replicas + Redis Grid</text>
+  <text x="743.0" y="155.0" text-anchor="middle" class="box-s">Fetch center + 8 neighbor cells</text>
+  <rect x="32" y="235" width="400" height="105" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="232.0" y="283.5" text-anchor="middle" class="box-t">Why Read/Write Separation?</text>
+  <text x="232.0" y="301.5" text-anchor="middle" class="box-s">Driver locations update every 5s in volatile RAM; Business POIs read via Read Replicas</text>
+  <rect x="460" y="235" width="408" height="105" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="664.0" y="283.5" text-anchor="middle" class="box-t">Handling Boundary Edge Cases</text>
+  <text x="664.0" y="301.5" text-anchor="middle" class="box-s">Always query the target cell + all adjacent hexagons/boxes so nearby points are never missed</text>
+</svg>

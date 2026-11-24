@@ -36,11 +36,15 @@ Imagine a printed paper form for renewing a passport:
 In production distributed systems with thousands of microservices:
 1. **You Cannot Deploy Everything Simultaneously**: Large systems rely on **Rolling Upgrades** (updating 5% of servers at a time over hours). During this window, `v1` services talk to `v2` services.
 2. **Database Longevity**: A record written to disk 5 years ago by `v1` code must still be readable by today's `v5` code.
-3. **Bandwidth & CPU Waste**: Parsing text JSON strings consumes massive CPU cycles and inflates network bandwidth. Binary serialization reduces payload size by **60% to 80%** and cuts serialization CPU time by up to **$10	imes$**.
+3. **Bandwidth & CPU Waste**: Parsing text JSON strings consumes massive CPU cycles and inflates network bandwidth. Binary serialization reduces payload size by **60% to 80%** and cuts serialization CPU time by up to **$10\times$**.
 
 ---
 
 ## 🖼️ Picture It: JSON vs Protocol Buffers Binary Encoding
+
+<p align="center">
+  <img src="./assets/protobuf_vs_json.svg" alt="Schema Evolution: JSON vs. Protobuf Binary Wire Framing" width="100%" />
+</p>
 
 ```mermaid
 flowchart TD

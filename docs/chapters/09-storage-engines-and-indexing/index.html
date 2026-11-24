@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="09--storage-engines--database-indexing">09 · Storage Engines &amp; Database Indexing</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="09--storage-engines--database-indexing">09 · Storage Engines &amp; Database Indexing</h1>
 <blockquote>
-<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../09-storage-engines-and-indexing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/09-storage-engines-and-indexing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>A database index is exactly like the alphabetical index at the back of a 1,000-page textbook.</p>
@@ -41,7 +41,7 @@
 <li><strong>The B+ Tree (The Carefully Maintained Encyclopedic Binder):</strong>
 <ul>
 <li>Every topic has a designated page slot in alphabetical order.</li>
-<li>When you want to find a topic, you navigate a table of contents: <em>Section M $\to$ Subsection MO $\to$ Page 84</em>.</li>
+<li>When you want to find a topic, you navigate a table of contents: <em>Section M <span class="math-inline">→</span> Subsection MO <span class="math-inline">→</span> Page 84</em>.</li>
 <li><strong>The Catch:</strong> When you want to add a new note into a page that is already completely full, you have to physically erase, rewrite, and split the page in half (<strong>Page Split</strong>). Reads are instant, but writes involve heavy erasing and rewriting.</li>
 </ul>
 </li>
@@ -70,7 +70,7 @@
 <td style="text-align:left"><strong>Full Table Scan (Sequential Scan)</strong></td>
 </tr>
 <tr>
-<td style="text-align:left"><strong>Flipping to Section $\to$ Chapter $\to$ Page</strong></td>
+<td style="text-align:left"><strong>Flipping to Section <span class="math-inline">→</span> Chapter <span class="math-inline">→</span> Page</strong></td>
 <td style="text-align:left"><strong>B+ Tree Node Traversal</strong></td>
 </tr>
 <tr>
@@ -96,10 +96,10 @@
 <ol>
 <li><strong>The I/O Latency Chasm:</strong>
 <ul>
-<li>Reading 1 MB from RAM takes $\approx 3\text{ }\mu\text{s}$.</li>
-<li>Reading 1 MB from an NVMe SSD takes $\approx 50\text{ }\mu\text{s}$.</li>
-<li>Reading 1 MB randomly from a magnetic hard drive takes $\approx 10,000\text{ }\mu\text{s}$ ($10\text{ ms}$).
-If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on disk takes <strong>30 seconds</strong>. An index cuts that lookup to <strong>2 milliseconds</strong> ($15,000\times$ faster).</li>
+<li>Reading 1 MB from RAM takes <span class="math-inline">≈ 3 μs</span>.</li>
+<li>Reading 1 MB from an NVMe SSD takes <span class="math-inline">≈ 50 μs</span>.</li>
+<li>Reading 1 MB randomly from a magnetic hard drive takes <span class="math-inline">≈ 10,000 μs</span> (<span class="math-inline">10 ms</span>).
+If a table has 100 million rows (<span class="math-inline">50 GB</span>), scanning the whole table on disk takes <strong>30 seconds</strong>. An index cuts that lookup to <strong>2 milliseconds</strong> (<span class="math-inline">15,000×</span> faster).</li>
 </ul>
 </li>
 <li><strong>The Write Amplification Bottleneck:</strong>
@@ -114,9 +114,9 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 <p align="center">
   <img src="./assets/storage_engines.gif" alt="Storage Engine Architecture Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph WritePipeline[&quot;LSM-Tree Write Path (Blazing Fast)&quot;]
-        Write[&quot;✍️ Incoming Write: SET user:42 = 'Alice'&quot;]
+        Write[&quot;✍️ Incoming Write: SET user:42 = &#x27;Alice&#x27;&quot;]
         WAL[(&quot;📝 1. Write-Ahead Log (WAL)&lt;br/&gt;Append-only sequential disk write&quot;)]
         Mem[&quot;⚡ 2. MemTable (in RAM)&lt;br/&gt;Sorted SkipList / Red-Black Tree&quot;]
         Flush[&quot;💾 3. Flush to Disk&lt;br/&gt;Immutable SSTable Level 0&quot;]
@@ -136,26 +136,25 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
         SST0 --&gt; Compaction
         Compaction --&gt; SST1
         Bloom -.-&gt;|Check before reading disk| SST0
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-through with real numbers</h2>
 <h3 id="why-b-trees-are-shallow-the-power-of-fan-out-branching-factor">Why B+ Trees are Shallow: The Power of Fan-Out (Branching Factor)</h3>
-<p>A standard binary search tree has a branching factor of 2. A <strong>B+ Tree</strong> has a branching factor of <strong>$B = 100$ to $500$</strong> (matching physical 4KB or 8KB disk page boundaries).</p>
-<p>Suppose branching factor $B = 100$:</p>
+<p>A standard binary search tree has a branching factor of 2. A <strong>B+ Tree</strong> has a branching factor of <strong><span class="math-inline">B = 100</span> to <span class="math-inline">500</span></strong> (matching physical 4KB or 8KB disk page boundaries).</p>
+<p>Suppose branching factor <span class="math-inline">B = 100</span>:</p>
 <ul>
-<li><strong>Level 1 (Root Page):</strong> Points to $100$ child pages.</li>
-<li><strong>Level 2:</strong> $100 \times 100 = 10,000$ leaf pages.</li>
-<li><strong>Level 3:</strong> $10,000 \times 100 = 1,000,000$ leaf pages.</li>
-<li><strong>Level 4:</strong> $1,000,000 \times 100 = \mathbf{100,000,000\text{ records}}$!</li>
+<li><strong>Level 1 (Root Page):</strong> Points to <span class="math-inline">100</span> child pages.</li>
+<li><strong>Level 2:</strong> <span class="math-inline">100 × 100 = 10,000</span> leaf pages.</li>
+<li><strong>Level 3:</strong> <span class="math-inline">10,000 × 100 = 1,000,000</span> leaf pages.</li>
+<li><strong>Level 4:</strong> <span class="math-inline">1,000,000 × 100 = 100,000,000 records</span>!</li>
 </ul>
 <blockquote>
-<p>💡 <strong>The Magic of B+ Trees:</strong> You can index <strong>100 Million rows</strong> in a tree of height <strong>only 4 levels</strong>! The root and internal nodes sit permanently cached in RAM, meaning any point query on a 100M-row table requires <strong>at most 1 or 2 physical disk reads</strong> ($&lt; 2\text{ ms}$).</p>
+<p>💡 <strong>The Magic of B+ Trees:</strong> You can index <strong>100 Million rows</strong> in a tree of height <strong>only 4 levels</strong>! The root and internal nodes sit permanently cached in RAM, meaning any point query on a 100M-row table requires <strong>at most 1 or 2 physical disk reads</strong> (<span class="math-inline">&lt; 2 ms</span>).</p>
 </blockquote>
 <hr />
 <h2 id="how-it-works-storage-engines--indexing-under-the-hood">⚙️ How it works: Storage Engines &amp; Indexing Under the Hood</h2>
 <h3 id="1-b-trees-the-classic-engine-postgresql-mysql-innodb">1. B+ Trees: The Classic Engine (PostgreSQL, MySQL InnoDB)</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Root[&quot;Root Page [20, 50]&quot;] --&gt; Child1[&quot;Page [5, 12, 19]&quot;]
     Root --&gt; Child2[&quot;Page [23, 35, 48]&quot;]
     Root --&gt; Child3[&quot;Page [55, 72, 91]&quot;]
@@ -165,8 +164,7 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
     Child3 --&gt; Leaf3[&quot;Leaf: [55, 72] -&gt; Row Data Pointers&quot;]
 
     Leaf1 &lt;--&gt;|Doubly Linked List for Range Scans| Leaf2
-    Leaf2 &lt;--&gt;|Doubly Linked List for Range Scans| Leaf3
-</code></pre>
+    Leaf2 &lt;--&gt;|Doubly Linked List for Range Scans| Leaf3</pre></figure>
 <ul>
 <li><strong>All data pointers live in the Leaf Nodes:</strong> Internal nodes only store routing keys, allowing maximum branching factor.</li>
 <li><strong>Leaves are connected by a Doubly-Linked List:</strong> Once you find the starting key, range scans (<code>WHERE age BETWEEN 20 AND 30</code>) simply walk the linked list sequentially along disk blocks without backtracking up the tree!</li>
@@ -175,7 +173,7 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 <h3 id="2-lsm-trees-the-write-engine-rocksdb-cassandra-leveldb">2. LSM-Trees: The Write Engine (RocksDB, Cassandra, LevelDB)</h3>
 <p>Instead of overwriting disk pages in-place, an LSM-Tree follows an append-only pipeline:</p>
 <ol>
-<li><strong>Write-Ahead Log (WAL):</strong> When a write arrives, it is appended to an append-only log file on disk. This guarantees durability in $&lt; 0.1\text{ ms}$. If the computer loses power, the WAL replays lost writes on reboot.</li>
+<li><strong>Write-Ahead Log (WAL):</strong> When a write arrives, it is appended to an append-only log file on disk. This guarantees durability in <span class="math-inline">&lt; 0.1 ms</span>. If the computer loses power, the WAL replays lost writes on reboot.</li>
 <li><strong>MemTable:</strong> Simultaneously, the write is inserted into an in-memory balanced tree (Red-Black tree or SkipList) sorted by key.</li>
 <li><strong>SSTable (Sorted String Table):</strong> When the MemTable reaches its size threshold (typically 32MB to 64MB), it is frozen and written to disk as an immutable SSTable file. Because keys are already sorted in RAM, writing the SSTable is a purely <strong>sequential disk write</strong>.</li>
 <li><strong>Compaction:</strong> Over time, multiple SSTables accumulate. Background worker threads run <strong>Compaction</strong>: merging sorted files together (like merge sort), removing superseded old values, and permanently deleting rows marked with a <strong>Tombstone</strong> (<code>__DELETED__</code>).</li>
@@ -188,11 +186,11 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 <li>It uses multiple hash functions mapped onto a bit array.</li>
 <li>It answers with mathematical certainty:
 <ul>
-<li><em>&quot;Key is <strong>definitely NOT</strong> in this SSTable.&quot;</em> $\to$ <strong>Skips disk read entirely!</strong></li>
-<li><em>&quot;Key <strong>might be</strong> in this SSTable.&quot;</em> $\to$ Performs disk read.</li>
+<li><em>&quot;Key is <strong>definitely NOT</strong> in this SSTable.&quot;</em> <span class="math-inline">→</span> <strong>Skips disk read entirely!</strong></li>
+<li><em>&quot;Key <strong>might be</strong> in this SSTable.&quot;</em> <span class="math-inline">→</span> Performs disk read.</li>
 </ul>
 </li>
-<li><strong>Guarantee:</strong> A Bloom Filter has <strong>$0%$ False Negatives</strong>. It will never tell you a key doesn't exist when it actually does!</li>
+<li><strong>Guarantee:</strong> A Bloom Filter has <strong><span class="math-inline">0%</span> False Negatives</strong>. It will never tell you a key doesn't exist when it actually does!</li>
 </ul>
 <hr />
 <h3 id="4-clustered-vs-secondary-indexes">4. Clustered vs Secondary Indexes</h3>
@@ -208,9 +206,9 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 <h3 id="5-composite-indexes--the-leftmost-prefix-rule">5. Composite Indexes &amp; The Leftmost Prefix Rule</h3>
 <p>If you create an index on <code>(last_name, first_name)</code>:</p>
 <ul>
-<li><code>WHERE last_name = 'Smith'</code> $\to$ <strong>Uses index ✅</strong></li>
-<li><code>WHERE last_name = 'Smith' AND first_name = 'Alice'</code> $\to$ <strong>Uses index ✅</strong></li>
-<li><code>WHERE first_name = 'Alice'</code> $\to$ <strong>CANNOT use index! ❌ (Full table scan)</strong></li>
+<li><code>WHERE last_name = 'Smith'</code> <span class="math-inline">→</span> <strong>Uses index ✅</strong></li>
+<li><code>WHERE last_name = 'Smith' AND first_name = 'Alice'</code> <span class="math-inline">→</span> <strong>Uses index ✅</strong></li>
+<li><code>WHERE first_name = 'Alice'</code> <span class="math-inline">→</span> <strong>CANNOT use index! ❌ (Full table scan)</strong></li>
 </ul>
 <p><strong>Why?</strong> Think of a telephone phonebook sorted by <code>(Lastname, Firstname)</code>. You can easily find all <em>&quot;Smiths&quot;</em>. But you cannot look up all people named <em>&quot;Alice&quot;</em> without scanning every page from A to Z!</p>
 <hr />
@@ -231,7 +229,7 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 </tr>
 <tr>
 <td style="text-align:left"><strong>Read Performance</strong></td>
-<td style="text-align:left"><strong>Predictable &amp; Fast</strong> ($O(\log N)$ in 1–2 disk reads)</td>
+<td style="text-align:left"><strong>Predictable &amp; Fast</strong> (<span class="math-inline">O(\log N)</span> in 1–2 disk reads)</td>
 <td style="text-align:left">Slower (May need to check MemTable + multiple SSTables)</td>
 </tr>
 <tr>
@@ -257,15 +255,15 @@ If a table has 100 million rows ($50\text{ GB}$), scanning the whole table on di
 <li>
 <p><strong>&quot;Index Everything&quot; Syndrome:</strong></p>
 <ul>
-<li><em>Why it hurts:</em> Junior engineers add an index to all 15 columns in a table. While reads speed up, every single <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> must now update 15 separate B-Tree structures on disk, cutting write throughput by $80%$ and tripling disk storage.</li>
+<li><em>Why it hurts:</em> Junior engineers add an index to all 15 columns in a table. While reads speed up, every single <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> must now update 15 separate B-Tree structures on disk, cutting write throughput by <span class="math-inline">80%</span> and tripling disk storage.</li>
 <li><em>The Fix:</em> Index only columns used in <code>WHERE</code>, <code>JOIN</code>, and <code>ORDER BY</code> clauses on high-frequency query paths.</li>
 </ul>
 </li>
 <li>
 <p><strong>Indexing Low-Cardinality Columns (e.g. <code>gender</code> or <code>is_active</code>):</strong></p>
 <ul>
-<li><em>Why it hurts:</em> If a column has only 2 values (True/False), each value matches $50%$ of the table. Traversing a B-Tree to fetch $50%$ of the row pointers is actually <strong>slower than a sequential table scan</strong>! The query planner will simply ignore the index.</li>
-<li><em>The Fix:</em> Use a <strong>Partial Index</strong> (<code>CREATE INDEX ... WHERE is_active = false</code>) if you only query the rare $1%$ minority value.</li>
+<li><em>Why it hurts:</em> If a column has only 2 values (True/False), each value matches <span class="math-inline">50%</span> of the table. Traversing a B-Tree to fetch <span class="math-inline">50%</span> of the row pointers is actually <strong>slower than a sequential table scan</strong>! The query planner will simply ignore the index.</li>
+<li><em>The Fix:</em> Use a <strong>Partial Index</strong> (<code>CREATE INDEX ... WHERE is_active = false</code>) if you only query the rare <span class="math-inline">1%</span> minority value.</li>
 </ul>
 </li>
 <li>
@@ -305,8 +303,8 @@ python demo.py
 <ol>
 <li><strong>Branching Factor &amp; Tree Height:</strong>
 <ul>
-<li>A Binary Search Tree has a branching factor of 2. In a table of 100 million rows, a balanced BST has a height of $\approx 27$. Following pointers on disk would require <strong>27 random disk seeks</strong> ($27 \times 10\text{ms} = 270\text{ ms}$).</li>
-<li>A B+ Tree has a branching factor of $100$ to $500$, keeping tree height at <strong>only 3 or 4 levels</strong>, requiring at most 1–2 disk reads ($&lt; 2\text{ ms}$).</li>
+<li>A Binary Search Tree has a branching factor of 2. In a table of 100 million rows, a balanced BST has a height of <span class="math-inline">≈ 27</span>. Following pointers on disk would require <strong>27 random disk seeks</strong> (<span class="math-inline">27 × 10ms = 270 ms</span>).</li>
+<li>A B+ Tree has a branching factor of <span class="math-inline">100</span> to <span class="math-inline">500</span>, keeping tree height at <strong>only 3 or 4 levels</strong>, requiring at most 1–2 disk reads (<span class="math-inline">&lt; 2 ms</span>).</li>
 </ul>
 </li>
 <li><strong>Page Sizing Alignment:</strong>
@@ -329,12 +327,12 @@ python demo.py
 <li><strong>Why LSM-Tree Writes are 10x Faster:</strong>
 <ul>
 <li>In a B+ Tree, updating a row requires an in-place overwrite of an 8KB disk page. If you update 5 rows scattered across different tables, you trigger 5 random I/O writes.</li>
-<li>In an LSM-Tree, data is <strong>never modified in-place</strong>. Every write is appended sequentially to the Write-Ahead Log (WAL) on disk and inserted into an in-memory sorted structure (MemTable). Sequential disk writes are up to $100\times$ faster than random writes because they eliminate disk head seek overhead and minimize SSD write amplification.</li>
+<li>In an LSM-Tree, data is <strong>never modified in-place</strong>. Every write is appended sequentially to the Write-Ahead Log (WAL) on disk and inserted into an in-memory sorted structure (MemTable). Sequential disk writes are up to <span class="math-inline">100×</span> faster than random writes because they eliminate disk head seek overhead and minimize SSD write amplification.</li>
 </ul>
 </li>
 <li><strong>The Trade-Off on Reads:</strong>
 <ul>
-<li>In a B+ Tree, a read is guaranteed in $O(\log N)$ in 1 or 2 page accesses.</li>
+<li>In a B+ Tree, a read is guaranteed in <span class="math-inline">O(\log N)</span> in 1 or 2 page accesses.</li>
 <li>In an LSM-Tree, the newest value might be in the MemTable, or in SSTable 0, or in SSTable 3 on disk. A read may have to check multiple files across disk levels (<strong>Read Amplification</strong>). LSM-trees mitigate this using <strong>Bloom Filters</strong> and sparse block indexes.</li>
 </ul>
 </li>
@@ -347,9 +345,9 @@ python demo.py
 <ul>
 <li><strong>Mechanism:</strong>
 <ul>
-<li>A Bloom Filter consists of a bit array of $m$ bits (all initialized to 0) and $k$ independent hash functions.</li>
-<li><strong>Adding a key:</strong> Hash the key with all $k$ hash functions and set the corresponding bit indexes to <code>1</code>.</li>
-<li><strong>Querying a key:</strong> Hash the key with the $k$ hash functions. If <strong>any</strong> of those bit positions is <code>0</code>, the key was <strong>mathematically NEVER added</strong> to the set.</li>
+<li>A Bloom Filter consists of a bit array of <span class="math-inline">m</span> bits (all initialized to 0) and <span class="math-inline">k</span> independent hash functions.</li>
+<li><strong>Adding a key:</strong> Hash the key with all <span class="math-inline">k</span> hash functions and set the corresponding bit indexes to <code>1</code>.</li>
+<li><strong>Querying a key:</strong> Hash the key with the <span class="math-inline">k</span> hash functions. If <strong>any</strong> of those bit positions is <code>0</code>, the key was <strong>mathematically NEVER added</strong> to the set.</li>
 </ul>
 </li>
 <li><strong>Why Zero False Negatives?</strong>
@@ -372,16 +370,16 @@ python demo.py
 <ul>
 <li><strong>Queries that utilize the index:</strong>
 <ul>
-<li><code>WHERE A = 1</code> $\to$ <strong>Yes</strong> (uses level A)</li>
-<li><code>WHERE A = 1 AND B = 2</code> $\to$ <strong>Yes</strong> (uses levels A and B)</li>
-<li><code>WHERE A = 1 AND B = 2 AND C = 3</code> $\to$ <strong>Yes</strong> (uses full index)</li>
+<li><code>WHERE A = 1</code> <span class="math-inline">→</span> <strong>Yes</strong> (uses level A)</li>
+<li><code>WHERE A = 1 AND B = 2</code> <span class="math-inline">→</span> <strong>Yes</strong> (uses levels A and B)</li>
+<li><code>WHERE A = 1 AND B = 2 AND C = 3</code> <span class="math-inline">→</span> <strong>Yes</strong> (uses full index)</li>
 </ul>
 </li>
 <li><strong>Queries that CANNOT use the index efficiently:</strong>
 <ul>
-<li><code>WHERE B = 2</code> $\to$ <strong>No!</strong> B is sorted only within specific values of A. Across the whole index, B values are scattered randomly.</li>
-<li><code>WHERE C = 3</code> $\to$ <strong>No!</strong></li>
-<li><code>WHERE A = 1 AND C = 3</code> $\to$ Uses index for <code>A</code>, but must scan all matching rows to filter <code>C</code>.</li>
+<li><code>WHERE B = 2</code> <span class="math-inline">→</span> <strong>No!</strong> B is sorted only within specific values of A. Across the whole index, B values are scattered randomly.</li>
+<li><code>WHERE C = 3</code> <span class="math-inline">→</span> <strong>No!</strong></li>
+<li><code>WHERE A = 1 AND C = 3</code> <span class="math-inline">→</span> Uses index for <code>A</code>, but must scan all matching rows to filter <code>C</code>.</li>
 </ul>
 </li>
 <li><strong>Takeaway:</strong> Always place the column most frequently queried with equality filters as the <strong>leftmost column</strong> in the composite index definition.</li>
@@ -394,7 +392,7 @@ python demo.py
 </ol>
 <details>
 <summary>View Answer</summary>
-<p><strong>Approximately 3 or 4 page accesses.</strong> With a branching factor $B=100$, a B+ Tree of height 4 can hold 100 million entries. The database traverses Root $\to$ Internal 1 $\to$ Internal 2 $\to$ Leaf page. Because root and upper levels are cached in RAM, this usually requires <strong>at most 1 physical disk read</strong>!</p>
+<p><strong>Approximately 3 or 4 page accesses.</strong> With a branching factor <span class="math-inline">B=100</span>, a B+ Tree of height 4 can hold 100 million entries. The database traverses Root <span class="math-inline">→</span> Internal 1 <span class="math-inline">→</span> Internal 2 <span class="math-inline">→</span> Leaf page. Because root and upper levels are cached in RAM, this usually requires <strong>at most 1 physical disk read</strong>!</p>
 </details>
 <hr />
 <ol start="2">
@@ -402,7 +400,7 @@ python demo.py
 </ol>
 <details>
 <summary>View Answer</summary>
-<p>Because SSTables on disk are strictly <strong>immutable</strong> (read-only). Modifying an existing file in-place would require expensive random disk seeks and rewriting gigabyte-sized files. By writing a tombstone record sequentially (<code>key: __DELETED__</code>), the delete executes in $&lt; 0.1\text{ ms}$. During later background <strong>Compaction</strong>, the compaction worker merges SSTables and permanently discards the tombstone and the deleted data together.</p>
+<p>Because SSTables on disk are strictly <strong>immutable</strong> (read-only). Modifying an existing file in-place would require expensive random disk seeks and rewriting gigabyte-sized files. By writing a tombstone record sequentially (<code>key: __DELETED__</code>), the delete executes in <span class="math-inline">&lt; 0.1 ms</span>. During later background <strong>Compaction</strong>, the compaction worker merges SSTables and permanently discards the tombstone and the deleted data together.</p>
 </details>
 <hr />
 <ol start="3">
@@ -422,14 +420,27 @@ Because the index itself contains the requested <code>status</code> data, the da
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: How these storage engines underpin relational and non-relational stores.</li>
-<li><a href="../07-database-replication/index.html">07 · Database replication</a>: How Write-Ahead Logs (WAL) are streamed to replicas.</li>
-<li><a href="../10-caching-patterns/index.html">10 · Caching patterns</a>: How in-memory caches protect storage engines from read saturation.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: How these storage engines underpin relational and non-relational stores.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 · Database replication</a>: How Write-Ahead Logs (WAL) are streamed to replicas.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 · Caching patterns</a>: How in-memory caches protect storage engines from read saturation.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

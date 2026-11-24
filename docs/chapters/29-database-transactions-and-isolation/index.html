@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="29--database-transactions--isolation-levels">29 · Database Transactions &amp; Isolation Levels</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="29--database-transactions--isolation-levels">29 · Database Transactions &amp; Isolation Levels</h1>
 <blockquote>
-<p><strong>Part 2 · Storing data</strong> · ⏱️ ~25 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · Relational vs NoSQL</a></p>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~25 min read · Prerequisites: <a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 · Relational vs NoSQL</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Cloud Spanner Serializable Snapshot Isolation via TrueTime) and <strong>Netflix</strong> (handling financial billing isolation in relational databases) implement transaction safety are documented in <a href="../29-database-transactions-and-isolation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Cloud Spanner Serializable Snapshot Isolation via TrueTime) and <strong>Netflix</strong> (handling financial billing isolation in relational databases) implement transaction safety are documented in <a href="../../chapters/29-database-transactions-and-isolation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
@@ -49,7 +49,7 @@
 <p>Imagine multiple coworkers booking meeting rooms:</p>
 <ul>
 <li><strong>Dirty Read (Read Uncommitted)</strong>: Bob starts drafting an email saying <em>&quot;Room 101 booked&quot;</em>, then changes his mind and deletes it. Alice peeked at Bob's draft screen and wrongly assumes Room 101 is taken.</li>
-<li><strong>Lost Update</strong>: Alice and Bob both read the inventory: <em>&quot;Items remaining: 5&quot;</em>. Alice sells 1 item and writes back $4$. Bob sells 1 item and writes back $4$. Two items were sold, but the counter says 4 instead of 3!</li>
+<li><strong>Lost Update</strong>: Alice and Bob both read the inventory: <em>&quot;Items remaining: 5&quot;</em>. Alice sells 1 item and writes back <span class="math-inline">4</span>. Bob sells 1 item and writes back <span class="math-inline">4</span>. Two items were sold, but the counter says 4 instead of 3!</li>
 <li><strong>Write Skew</strong>: A hospital requires at least 1 doctor on call. Doctors Alice and Bob are both on call. Both simultaneously request to go off duty. Under Snapshot Isolation:
 <ul>
 <li>Alice's transaction checks: <em>&quot;Is another doctor on call?&quot;</em> Yes (Bob). Alice logs off.</li>
@@ -97,12 +97,15 @@
 <p>In high-concurrency production systems, executing transactions without strict isolation triggers catastrophic race conditions:</p>
 <ol>
 <li><strong>Lost Updates</strong>: Concurrent increments or JSON modifications overwrite each other.</li>
-<li><strong>Non-Repeatable Reads</strong>: Query 1 reads an account balance of $100. Query 2 (in the same transaction 10ms later) reads $50 because an external transaction committed in between.</li>
+<li><strong>Non-Repeatable Reads</strong>: Query 1 reads an account balance of &lt;span class=&quot;math-inline&quot;&gt;100. Query 2 (in the same transaction 10ms later) reads &lt;/span&gt;50 because an external transaction committed in between.</li>
 <li><strong>Write Skew</strong>: Two concurrent transactions read the same data, make independent decisions based on that data, and write to different rows, violating global business constraints.</li>
 </ol>
 <hr />
 <h2 id="picture-it-the-4-sql-standard-isolation-levels">🖼️ Picture It: The 4 SQL Standard Isolation Levels</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/isolation_levels.svg" alt="SQL Isolation Spectrum & Concurrency Anomalies" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Levels[&quot;The Isolation Spectrum (Weakest to Strongest)&quot;]
         L1[&quot;1. Read Uncommitted&lt;br/&gt;(Suffers from Dirty Reads)&quot;]
         L2[&quot;2. Read Committed&lt;br/&gt;(No Dirty Reads, No Dirty Writes)&quot;]
@@ -115,8 +118,7 @@
     style L1 fill:#161b22,stroke:#f85149,stroke-width:2px;
     style L2 fill:#161b22,stroke:#d29922,stroke-width:2px;
     style L3 fill:#161b22,stroke:#58a6ff,stroke-width:2px;
-    style L4 fill:#161b22,stroke:#3fb950,stroke-width:2px;
-</code></pre>
+    style L4 fill:#161b22,stroke:#3fb950,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="the-race-conditions--anomalies-matrix">🔢 The Race Conditions &amp; Anomalies Matrix</h2>
 <table>
@@ -287,7 +289,7 @@ Snapshot Isolation fails because it only detects <strong>Dirty Writes on the sam
 <h3 id="q3-what-is-the-lost-update-problem-and-what-are-3-ways-to-prevent-it">Q3: &quot;What is the Lost Update problem, and what are 3 ways to prevent it?&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
-<p>A Lost Update happens when Transaction 1 and Transaction 2 both read value $V$, compute new values independently, and write back, with the second write blindly overwriting the first.
+<p>A Lost Update happens when Transaction 1 and Transaction 2 both read value <span class="math-inline">V</span>, compute new values independently, and write back, with the second write blindly overwriting the first.
 Three ways to prevent it:</p>
 <ol>
 <li><strong>Atomic Database Operations</strong>: <code>UPDATE counters SET val = val + 1 WHERE id = 10;</code></li>
@@ -307,7 +309,7 @@ Three ways to prevent it:</p>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <ul>
 <li><strong>Two-Phase Locking (2PL)</strong> is a <strong>concurrency control mechanism</strong> on a <em>single database</em> ensuring Serializable isolation: transactions acquire locks during the growing phase and release them during the shrinking phase.</li>
-<li><strong>Two-Phase Commit (2PC)</strong> is an <strong>atomic distributed consensus protocol</strong> across <em>multiple independent databases/nodes</em> (Prepare phase $	o$ Commit phase) ensuring all nodes commit or all abort.
+<li><strong>Two-Phase Commit (2PC)</strong> is an <strong>atomic distributed consensus protocol</strong> across <em>multiple independent databases/nodes</em> (Prepare phase <span class="math-inline">→</span> Commit phase) ensuring all nodes commit or all abort.
 They are completely different concepts despite sharing the &quot;Two-Phase&quot; name!</li>
 </ul>
 </details>
@@ -320,7 +322,20 @@ They are completely different concepts despite sharing the &quot;Two-Phase&quot;
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

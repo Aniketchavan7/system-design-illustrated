@@ -1,4 +1,4 @@
-"""Render the Trail Notes course from the repository lessons."""
+"""Render the Trail Notes course, rendered reference chapters, guides, and labs."""
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import escape
@@ -27,6 +27,14 @@ class Lesson:
     heading: str
 
 
+@dataclass(frozen=True)
+class Guide:
+    slug: str
+    title: str
+    description: str
+    source: str
+
+
 FIRST_PASS = "## First pass"
 EXERCISE = "## Trail Notes exercise"
 LESSONS = (
@@ -43,6 +51,61 @@ LESSONS = (
     Lesson("regional-recovery", "Recover from a regional outage", "Check whether Trail Notes meets its recovery targets.",
            "advanced/multi-region-recovery.md", EXERCISE),
 )
+
+GUIDES = (
+    Guide("cheatsheet", "Back-of-the-Envelope Master Cheat Sheet",
+          "Powers of 2, hardware latency budget, QPS sizing formulas, and availability nines.",
+          "CHEATSHEET.md"),
+    Guide("decision-flowcharts", "Master Architectural Decision Flowcharts",
+          "Visual decision trees for databases, consistency, caching, protocols, and distributed transactions.",
+          "DECISION_FLOWCHARTS.md"),
+    Guide("study-guide", "System Design Interview Study Guide",
+          "Structured prep tracks, timed mock interview rubrics, and whiteboarding checklist.",
+          "STUDY_GUIDE.md"),
+    Guide("resource-reading-map", "Book-to-Course Reading Map",
+          "Chapter-by-chapter mapping to Designing Data-Intensive Applications and System Design Interview.",
+          "advanced/resource-reading-map.md"),
+    Guide("durable-key-value-store", "Design a Durable Key-Value Store",
+          "Replicated logs, majority commits, snapshots, and partition reconciliation.",
+          "advanced/durable-key-value-store.md"),
+    Guide("batch-stream-and-derived-data", "Batch, Stream, and Derived Views",
+          "Building deterministic reports, event-time watermarks, and safe view rebuilds.",
+          "advanced/batch-stream-and-derived-data.md"),
+    Guide("multi-region-recovery", "Multi-Region Failover & Disaster Recovery",
+          "RTO/RPO targets, failover topologies, single-writer fencing, and restore verification.",
+          "advanced/multi-region-recovery.md"),
+    Guide("authentication-and-authorization", "Authentication & Tenant Authorization",
+          "OpenID Connect PKCE flow, session revocation, RBAC/ReBAC, and workload identity.",
+          "advanced/authentication-and-authorization.md"),
+    Guide("order-processing-lab", "Order Processing Crash-Recovery Lab",
+          "Runnable Postgres + RabbitMQ transactional outbox and idempotent consumer lab.",
+          "labs/order-processing/README.md"),
+    Guide("contributing", "Contributing Guide",
+          "How to contribute fixes, diagrams, case studies, and simulations.",
+          "CONTRIBUTING.md"),
+    Guide("community", "Community & Reddit Discussions",
+          "Share feedback, post-mortem insights, and architectural debates on Reddit.",
+          "COMMUNITY.md"),
+    Guide("code-of-conduct", "Code of Conduct",
+          "Our shared community standards and constructive learning values.",
+          "CODE_OF_CONDUCT.md"),
+)
+
+GUIDE_MAP = {g.source: f"guides/{g.slug}.html" for g in GUIDES}
+GUIDE_MAP["labs/order-processing"] = "guides/order-processing-lab.html"
+
+MODULE_LABS = {
+    "01-client-server-networking": ("learn/simulator.html", "Traffic & cache outage simulator"),
+    "02-domain-name-system": ("learn/dns-lab.html", "DNS cache & TTL cutover lab"),
+    "03-load-balancing": ("learn/simulator.html", "Traffic & server failure simulator"),
+    "07-database-replication": ("learn/quorum-lab.html", "Quorum replication (N, W, R) lab"),
+    "10-caching-patterns": ("learn/simulator.html", "Cache hit & outage simulator"),
+    "13-cap-and-pacelc-theorems": ("learn/quorum-lab.html", "Quorum & CAP trade-off lab"),
+    "14-consistency-models": ("learn/quorum-lab.html", "Quorum overlap & stale read lab"),
+    "15-consensus-and-leader-election": ("learn/quorum-lab.html", "Majority quorum simulator"),
+    "16-consistent-hashing": ("learn/hashing-lab.html", "Consistent hashing ring lab"),
+    "17-message-queues": ("learn/queue-lab.html", "Queue backlog & drain simulator"),
+}
 
 DIAGRAMS = {
     "networking": (
@@ -68,6 +131,92 @@ LOCAL_TARGETS = {
         if lesson.source.endswith("/README.md") else [lesson.source]
     )
 }
+
+MERMAID_PROGRESSIVE_SCRIPT = """  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>"""
+
+
+def convert_tex_to_html(text):
+    """Convert inline and block LaTeX math outside code blocks to offline-safe HTML."""
+    placeholders = []
+
+    def mask(match):
+        placeholders.append(match.group(0))
+        return f"@@CODEMASK_{len(placeholders) - 1}@@"
+
+    masked = re.sub(r"(?:```|~~~).*?(?:```|~~~)", mask, text, flags=re.DOTALL)
+    masked = re.sub(r"`[^`\n]+`", mask, masked)
+
+    def render_expr(expr):
+        expr = expr.strip()
+        for _ in range(4):
+            expr = re.sub(r"\\(?:text|mathbf|mathrm|mathit|operatorname)\{([^{}]*)\}", r"\1", expr)
+            expr = re.sub(r"\\left\\lfloor", "⌊", expr)
+            expr = re.sub(r"\\right\\rfloor", "⌋", expr)
+            expr = re.sub(r"\\lfloor", "⌊", expr)
+            expr = re.sub(r"\\rfloor", "⌋", expr)
+            expr = re.sub(r"\\left\(", "(", expr)
+            expr = re.sub(r"\\right\)", ")", expr)
+        # Convert scripts before fraction replacement
+        expr = re.sub(r"\^\{([^{}]+)\}", lambda m: f"<sup>{escape(m.group(1))}</sup>", expr)
+        expr = re.sub(r"_\{([^{}]+)\}", lambda m: f"<sub>{escape(m.group(1))}</sub>", expr)
+        expr = re.sub(r"\b([A-Za-z])_([A-Za-z0-9])\b", lambda m: f"{m.group(1)}<sub>{m.group(2)}</sub>", expr)
+        expr = re.sub(r"(\d|[A-Za-z])\^(\d+)\b", lambda m: f"{m.group(1)}<sup>{m.group(2)}</sup>", expr)
+
+        for _ in range(3):
+            expr = re.sub(
+                r"\\frac\{([^{}]*)\}\{([^{}]*)\}",
+                lambda m: f"({m.group(1)}) / ({m.group(2)})",
+                expr,
+            )
+
+        symbol_map = (
+            (r"\times", "×"), (r"\cdot", "·"),
+            (r"\rightarrow", "→"), (r"\to", "→"),
+            (r"\leftrightarrow", "↔"), (r"\implies", "⇒"),
+            (r"\approx", "≈"), (r"\sim", "~"),
+            (r"\le", "≤"), (r"\ge", "≥"), (r"\neq", "≠"),
+            (r"\pm", "±"), (r"\forall", "∀"), (r"\in", "∈"),
+            (r"\sum", "Σ"), (r"\gg", "≫"), (r"\ll", "≪"),
+            (r"\epsilon", "ε"), (r"\mu", "μ"), (r"\lambda", "λ"),
+            (r"\alpha", "α"), (r"\beta", "β"), (r"\Delta", "Δ"),
+            (r"\pmod", " mod "), (r"\quad", " "), (r"\dots", "…"),
+            (r"\mid", "|"), (r"\#", "#"), (r"\%", "%"),
+            (r"\_", "_"), (r"\{", "{"), (r"\}", "}"), (r"\,", " "), (r"\ ", " "),
+        )
+        for src, dst in symbol_map:
+            expr = expr.replace(src, dst)
+        expr = re.sub(r"\s+", " ", expr).strip()
+        return expr
+
+    # Escape literal dollar amounts first only conceptually; distinguish math vs currency:
+    masked = re.sub(
+        r"\$\$(.*?)\$\$",
+        lambda m: f'\n<div class="math-block">{render_expr(m.group(1))}</div>\n',
+        masked,
+        flags=re.DOTALL,
+    )
+
+    def replace_inline(m):
+        inner = m.group(1)
+        has_math_sym = any(tok in inner for tok in ("\\", "^", "_", "=", "+", "×", "≈", "→", "<", ">", "/"))
+        if not has_math_sym and (" " in inner or "costs" in inner or "from" in inner):
+            return m.group(0)
+        return f'<span class="math-inline">{render_expr(inner)}</span>'
+
+    masked = re.sub(r"\$([^$\n]+)\$", replace_inline, masked)
+
+    for idx, original in enumerate(placeholders):
+        masked = masked.replace(f"@@CODEMASK_{idx}@@", original)
+    return masked
 
 
 def outline(start="", current=None):
@@ -126,9 +275,7 @@ def selected_content(lesson):
 
 def link_target(lesson, href):
     url = urlsplit(href)
-    if url.scheme or url.netloc:
-        return href
-    if not url.path:
+    if url.scheme or url.netloc or not url.path:
         return href
     parent = PurePosixPath(lesson.source).parent
     target = normpath(str(parent / unquote(url.path)))
@@ -136,6 +283,9 @@ def link_target(lesson, href):
         return LOCAL_TARGETS[target]
     if target.startswith("../") or target.startswith("/"):
         raise ValueError(f"Link exits repository: {href} in {lesson.source}")
+    if target in GUIDE_MAP:
+        fragment = f"#{url.fragment}" if url.fragment else ""
+        return f"../{GUIDE_MAP[target]}{fragment}"
     repo_path = f"{target}/README.md" if (ROOT / target).is_dir() else target
     if not (ROOT / repo_path).is_file():
         repo_path = target
@@ -154,7 +304,7 @@ def diagram(lesson):
 
 def render_lesson_content(lesson):
     md = MarkdownIt("commonmark", {"html": True}).enable("table")
-    tokens = md.parse(selected_content(lesson))
+    tokens = md.parse(convert_tex_to_html(selected_content(lesson)))
     for token in tokens:
         if token.type == "fence" and token.info.strip() == "mermaid":
             token.type = "html_block"
@@ -185,12 +335,13 @@ def lesson_page(index, lesson):
         sections.append('<p><a href="dns-lab.html">Try the DNS cache lab</a></p>')
     if lesson.id == "queues":
         sections.append('<p><a href="queue-lab.html">Try the queue backlog simulator</a></p>')
-        sections.append(f'<p><a href="{REPO}/tree/main/labs/order-processing">Try the order-processing lab</a></p>')
+        sections.append('<p><a href="../guides/order-processing-lab.html">Try the order-processing lab</a></p>')
     if lesson.id == "regional-recovery":
-        sections.append(f'<p><a href="{REPO}/blob/main/STUDY_GUIDE.md#timed-mock-interviews">Try a timed design interview</a></p>')
+        sections.append('<p><a href="quorum-lab.html">Test quorum tolerance in the Quorum Lab</a></p>')
+        sections.append('<p><a href="../guides/study-guide.html#timed-mock-interviews">Try a timed design interview</a></p>')
     folder = PurePosixPath(lesson.source).parent
     full_chapter = (f"../chapters/{folder}/index.html" if lesson.source.endswith("/README.md")
-                    else f"{REPO}/blob/main/{lesson.source}")
+                    else "../guides/multi-region-recovery.html")
     sections.append(
         f'<p class="reference-link"><a href="{full_chapter}">Read the full technical chapter</a></p>'
     )
@@ -225,13 +376,17 @@ def site_navigation(prefix="./", current=None):
     return '<nav aria-label="Main navigation">\n' + "\n".join(links) + "\n    </nav>"
 
 
-def tool_page(title, description, prefix, script, content, current=None, before=()):
+def tool_page(title, description, prefix, script, content, current=None, before=(), extra_body=""):
     template = Template((COURSE / "tool.html").read_text(encoding="utf-8"))
     return template.substitute(
-        title=escape(title), description=escape(description), prefix=prefix,
+        title=escape(title),
+        description=escape(description),
+        prefix=prefix,
         scripts="\n".join(f'  <script src="{prefix}course/{item}" defer></script>'
                           for item in (*before, script) if item),
-        navigation=site_navigation(prefix, current), content=content,
+        navigation=site_navigation(prefix, current),
+        content=content,
+        extra_body=extra_body,
     )
 
 
@@ -283,45 +438,112 @@ def library_page(rows):
                      "./", "library.js", content, "library")
 
 
+def resolve_site_link(source_posix_path, href, folders, prefix):
+    """Map relative repository markdown/URL links to rendered docs/ pages when possible."""
+    url = urlsplit(href)
+    if url.scheme or url.netloc or not url.path:
+        return href
+    parent = PurePosixPath(source_posix_path).parent
+    joined = normpath(str(parent / unquote(url.path)))
+    frag = f"#{url.fragment}" if url.fragment else ""
+
+    if joined in GUIDE_MAP:
+        return f"{prefix}{GUIDE_MAP[joined]}{frag}"
+
+    target = PurePosixPath(joined)
+    if str(target) in folders:
+        target /= "README.md"
+    names = {"README.md": "index.html", "REAL_WORLD_EXAMPLES.md": "examples.html"}
+    if str(target.parent) in folders and target.name in names:
+        return f"{prefix}chapters/{target.parent}/{names[target.name]}{frag}"
+
+    # Fallback to GitHub for runnable Python files / assets not hosted natively as HTML
+    repo_target = f"{joined}/README.md" if (ROOT / joined).is_dir() and (ROOT / joined / "README.md").is_file() else joined
+    return f"{REPO}/blob/main/{quote(repo_target, safe='/')}{frag}"
+
+
+def render_reader_article(source_posix_path, md_text, folders, prefix):
+    md = MarkdownIt("commonmark", {"html": True}).enable("table")
+    processed = convert_tex_to_html(md_text)
+    tokens = md.parse(processed)
+    has_mermaid = False
+    for index, token in enumerate(tokens):
+        if token.type == "fence" and token.info.strip() == "mermaid":
+            has_mermaid = True
+            token.type = "html_block"
+            token.content = f'<figure class="chapter-diagram"><pre class="mermaid">{escape(token.content.strip())}</pre></figure>\n'
+            continue
+        if token.type == "heading_open":
+            slug = re.sub(r"[^\w -]", "", tokens[index + 1].content.lower()).strip().replace(" ", "-")
+            token.attrSet("id", slug)
+        for child in token.children or ():
+            if child.type == "link_open":
+                href = child.attrGet("href")
+                child.attrSet("href", resolve_site_link(source_posix_path, href, folders, prefix))
+            elif child.type == "image":
+                # Keep relative ./assets/ images intact for chapters
+                pass
+    html_body = md.renderer.render(tokens, md.options, {})
+    return html_body, has_mermaid
+
+
 def chapter_outputs(rows):
     folders = {row["folder"] for row in rows}
-    md = MarkdownIt("commonmark", {"html": True}).enable("table")
     for row in rows:
         folder = row["folder"]
         destination = PAGES / "chapters" / folder
         for source in ("README.md", "REAL_WORLD_EXAMPLES.md"):
-            tokens = md.parse((ROOT / folder / source).read_text(encoding="utf-8"))
-            for index, token in enumerate(tokens):
-                if token.type == "heading_open":
-                    slug = re.sub(r"[^\w -]", "", tokens[index + 1].content.lower()).strip().replace(" ", "-")
-                    token.attrSet("id", slug)
-                for child in token.children or ():
-                    if child.type != "link_open":
-                        continue
-                    href = child.attrGet("href")
-                    url = urlsplit(href)
-                    if url.scheme or url.netloc or not url.path:
-                        continue
-                    target = PurePosixPath(normpath(str(PurePosixPath(folder) / unquote(url.path))))
-                    if str(target) in folders:
-                        target /= "README.md"
-                    names = {"README.md": "index.html", "REAL_WORLD_EXAMPLES.md": "examples.html"}
-                    if str(target.parent) in folders and target.name in names:
-                        link = f"../{target.parent}/{names[target.name]}"
-                    else:
-                        link = f"{REPO}/blob/main/{quote(str(target))}"
-                    child.attrSet("href", link + (f"#{url.fragment}" if url.fragment else ""))
-            article = md.renderer.render(tokens, md.options, {})
-            content = ('<main id="main" class="container chapter-reader">'
-                       '<a href="../../library.html">Back to topic library</a>'
-                       f'<article>{article}</article></main>')
+            rel_src = f"{folder}/{source}"
+            raw_md = (ROOT / rel_src).read_text(encoding="utf-8")
+            article, has_mermaid = render_reader_article(rel_src, raw_md, folders, "../../")
+
+            actions = ['<a href="../../library.html">Back to topic library</a>']
+            if source == "README.md":
+                actions.append('<a href="examples.html">FAANG case studies</a>')
+            else:
+                actions.append('<a href="index.html">Back to chapter</a>')
+            if folder in MODULE_LABS:
+                lab_href, lab_label = MODULE_LABS[folder]
+                actions.append(f'<a href="../../{lab_href}">{escape(lab_label)}</a>')
+            actions.append('<a href="../../flashcards.html">Practice in Flashcards</a>')
+
+            content = (
+                '<main id="main" class="container chapter-reader">'
+                f'<nav class="chapter-actions" aria-label="Chapter links">{" · ".join(actions)}</nav>'
+                f"<article>{article}</article></main>"
+            )
             filename = "index.html" if source == "README.md" else "examples.html"
+            extra = MERMAID_PROGRESSIVE_SCRIPT if has_mermaid else ""
             yield destination / filename, tool_page(
-                row["title"], row["title"], "../../", None, content,
+                row["title"], row["title"], "../../", None, content, extra_body=extra,
             ).encode()
         for asset in sorted((ROOT / folder / "assets").glob("*")):
             if asset.is_file():
                 yield destination / "assets" / asset.name, asset.read_bytes()
+
+
+def guide_outputs(rows):
+    folders = {row["folder"] for row in rows}
+    for guide in GUIDES:
+        raw_md = (ROOT / guide.source).read_text(encoding="utf-8")
+        # Normalize local GitHub pages flashcards link when inside docs/
+        article, has_mermaid = render_reader_article(guide.source, raw_md, folders, "../")
+        actions = [
+            '<a href="../library.html">Topic library</a>',
+            '<a href="../">Trail Notes course</a>',
+            '<a href="../flashcards.html">Flashcards</a>',
+        ]
+        if guide.slug in ("durable-key-value-store", "multi-region-recovery"):
+            actions.append('<a href="../learn/quorum-lab.html">Quorum replication lab</a>')
+        content = (
+            '<main id="main" class="container chapter-reader">'
+            f'<nav class="chapter-actions" aria-label="Guide links">{" · ".join(actions)}</nav>'
+            f"<article>{article}</article></main>"
+        )
+        extra = MERMAID_PROGRESSIVE_SCRIPT if has_mermaid else ""
+        yield PAGES / "guides" / f"{guide.slug}.html", tool_page(
+            guide.title, guide.description, "../", None, content, extra_body=extra,
+        ).encode()
 
 
 def capstone_page():
@@ -361,6 +583,7 @@ def capstone_page():
     return tool_page("Trail Notes capstone", "Practice six system design decisions and check your answers.",
                      "../", "capstone.js", content, before=("progress.js",))
 
+
 def outputs():
     banner = "<!-- Generated by course/build.py. Edit the course templates or source lessons. -->\n"
     home = Template((COURSE / "home.html").read_text(encoding="utf-8")).substitute(
@@ -373,22 +596,27 @@ def outputs():
     rows = catalog_rows()
     yield PAGES / "library.html", (banner + library_page(rows)).encode()
     yield from chapter_outputs(rows)
+    yield from guide_outputs(rows)
     yield PAGES / "learn/capstone.html", (banner + capstone_page()).encode()
-    simulator = (COURSE / "simulator.html").read_text(encoding="utf-8")
-    yield PAGES / "learn/simulator.html", (banner + tool_page(
-        "Traffic simulator", "Change request volume and simulate server failures.",
-        "../", "simulator.js", simulator.strip(), "simulator",
-    )).encode()
-    queue_lab = (COURSE / "queue-lab.html").read_text(encoding="utf-8")
-    yield PAGES / "learn/queue-lab.html", (banner + tool_page(
-        "Queue backlog simulator", "Predict when a worker pool will clear a burst of photo jobs.",
-        "../", "queue-lab.js", queue_lab.strip(),
-    )).encode()
-    dns_lab = (COURSE / "dns-lab.html").read_text(encoding="utf-8")
-    yield PAGES / "learn/dns-lab.html", (banner + tool_page(
-        "DNS cache lab", "Explore a DNS change and resolver cache expiry on an interactive timeline.",
-        "../", "dns-lab.js", dns_lab.strip(),
-    )).encode()
+
+    labs = (
+        ("simulator", "simulator.js", "Traffic simulator",
+         "Change request volume and simulate server failures.", "simulator"),
+        ("queue-lab", "queue-lab.js", "Queue backlog simulator",
+         "Predict when a worker pool will clear a burst of photo jobs.", None),
+        ("dns-lab", "dns-lab.js", "DNS cache lab",
+         "Explore a DNS change and resolver cache expiry on an interactive timeline.", None),
+        ("hashing-lab", "hashing-lab.js", "Consistent hashing ring lab",
+         "Compare key movement and load skew across consistent hashing and modulo sharding.", None),
+        ("quorum-lab", "quorum-lab.js", "Quorum replication lab",
+         "Explore Dynamo-style N, W, R quorums and replica failures.", None),
+    )
+    for slug, script, title, desc, current_nav in labs:
+        body = (COURSE / f"{slug}.html").read_text(encoding="utf-8").strip()
+        yield PAGES / f"learn/{slug}.html", (banner + tool_page(
+            title, desc, "../", script, body, current_nav,
+        )).encode()
+
     source = ROOT / "03-load-balancing/assets/load_balancer.gif"
     yield PAGES / "course/load-balancer.gif", source.read_bytes()
 

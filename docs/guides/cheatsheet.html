@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Powers of 2, hardware latency budget, QPS sizing formulas, and availability nines.">
+  <title>Back-of-the-Envelope Master Cheat Sheet | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="system-design-back-of-the-envelope-master-cheat-sheet">📐 System Design Back-of-the-Envelope Master Cheat Sheet</h1>
+<blockquote>
+<p>The ultimate mathematical reference, latency handbook, capacity planning formulas, and hardware limits for system design interviews and production infrastructure sizing.</p>
+</blockquote>
+<hr />
+<h2 id="table-of-contents">📑 Table of Contents</h2>
+<ol>
+<li><a href="#1-powers-of-two--data-scale">Powers of Two &amp; Data Scale</a></li>
+<li><a href="#2-latency-numbers-every-programmer-must-know">Latency Numbers Every Programmer Must Know</a></li>
+<li><a href="#3-traffic--qps-quick-conversions">Traffic &amp; QPS Quick Conversions</a></li>
+<li><a href="#4-standard-data-size-estimates">Standard Data Size Estimates</a></li>
+<li><a href="#5-the-universal-5-step-sizing-formulas">The Universal 5-Step Sizing Formulas</a></li>
+<li><a href="#6-high-availability-the-nines--downtime">High Availability: &quot;The Nines&quot; &amp; Downtime</a></li>
+<li><a href="#7-production-hardware--technology-benchmarks">Production Hardware &amp; Technology Benchmarks</a></li>
+<li><a href="#8-mental-math-tricks-for-the-interview">Mental Math Tricks for the Interview</a></li>
+</ol>
+<hr />
+<h2 id="1-powers-of-two--data-scale">1. Powers of Two &amp; Data Scale</h2>
+<p>Computers operate in base 2. In system design, memory, disk, and network throughput are calculated using powers of 2.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Power of 2</th>
+<th style="text-align:center">Exact Value (Bytes)</th>
+<th style="text-align:center">Approximation</th>
+<th style="text-align:center">Shorthand</th>
+<th style="text-align:left">Real-World Scale Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>10</sup></span></strong></td>
+<td style="text-align:center">1,024</td>
+<td style="text-align:center"><span class="math-inline">1,000</span></td>
+<td style="text-align:center"><strong>1 KB</strong> (Kilobyte)</td>
+<td style="text-align:left">1-page plain text file (<span class="math-inline">≈ 2 KB</span>)</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>20</sup></span></strong></td>
+<td style="text-align:center">1,048,576</td>
+<td style="text-align:center"><span class="math-inline">1,000,000</span> (<span class="math-inline">10<sup>6</sup></span>)</td>
+<td style="text-align:center"><strong>1 MB</strong> (Megabyte)</td>
+<td style="text-align:left">1 smartphone photo compressed (<span class="math-inline">≈ 2 MB</span>)</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>30</sup></span></strong></td>
+<td style="text-align:center">1,073,741,824</td>
+<td style="text-align:center"><span class="math-inline">1,000,000,000</span> (<span class="math-inline">10<sup>9</sup></span>)</td>
+<td style="text-align:center"><strong>1 GB</strong> (Gigabyte)</td>
+<td style="text-align:left">1 pickup truck filled with books</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>40</sup></span></strong></td>
+<td style="text-align:center">1,099,511,627,776</td>
+<td style="text-align:center"><span class="math-inline">1,000,000,000,000</span> (<span class="math-inline">10<sup>12</sup></span>)</td>
+<td style="text-align:center"><strong>1 TB</strong> (Terabyte)</td>
+<td style="text-align:left">All books in a major university library</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>50</sup></span></strong></td>
+<td style="text-align:center">1,125,899,906,842,624</td>
+<td style="text-align:center"><span class="math-inline">10<sup>15</sup></span></td>
+<td style="text-align:center"><strong>1 PB</strong> (Petabyte)</td>
+<td style="text-align:left">13.3 years of HD video streaming</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>60</sup></span></strong></td>
+<td style="text-align:center">1,152,921,504,606,846,976</td>
+<td style="text-align:center"><span class="math-inline">10<sup>18</sup></span></td>
+<td style="text-align:center"><strong>1 EB</strong> (Exabyte)</td>
+<td style="text-align:left">50% of all words spoken by humans in history</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>70</sup></span></strong></td>
+<td style="text-align:center">1,180,591,620,717,411,303,424</td>
+<td style="text-align:center"><span class="math-inline">10<sup>21</sup></span></td>
+<td style="text-align:center"><strong>1 ZB</strong> (Zettabyte)</td>
+<td style="text-align:left">Annual global internet data traffic</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong><span class="math-inline">2<sup>80</sup></span></strong></td>
+<td style="text-align:center">1,208,925,819,614,629,174,706,176</td>
+<td style="text-align:center"><span class="math-inline">10<sup>24</sup></span></td>
+<td style="text-align:center"><strong>1 YB</strong> (Yottabyte)</td>
+<td style="text-align:left">All digital data on planet Earth</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Pro Tip (Binary vs Decimal prefixes)</strong>:
+In networking: <span class="math-inline">1 Gbps = 10<sup>9</sup> bits/sec</span> (Decimal).
+In RAM/Storage: <span class="math-inline">1 GiB = 2<sup>30</sup> bytes = 1,073,741,824 bytes</span> (Binary).
+In an interview, using <span class="math-inline">10<sup>3</sup>, 10<sup>6</sup>, 10<sup>9</sup></span> approximations is standard practice.</p>
+</blockquote>
+<hr />
+<h2 id="2-latency-numbers-every-programmer-must-know">2. Latency Numbers Every Programmer Must Know</h2>
+<p>Originally compiled by Google Fellow Jeff Dean and updated for modern hardware (DDR5, PCIe Gen5 NVMe, 100GbE cloud datacenters).</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Operation</th>
+<th style="text-align:center">Real Latency</th>
+<th style="text-align:center">Normalized to Human Scale (1 ns = 1 sec)</th>
+<th style="text-align:left">Architectural Takeaway</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>L1 CPU Cache Reference</strong></td>
+<td style="text-align:center">0.5 - 1 ns</td>
+<td style="text-align:center"><strong>1 second</strong></td>
+<td style="text-align:left">Single heartbeat. Always keep hot variables in CPU registers/L1.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Branch Mispredict</strong></td>
+<td style="text-align:center">3 - 5 ns</td>
+<td style="text-align:center"><strong>4 seconds</strong></td>
+<td style="text-align:left">CPU instruction pipeline stalls.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>L2 CPU Cache Reference</strong></td>
+<td style="text-align:center">3 - 7 ns</td>
+<td style="text-align:center"><strong>5 seconds</strong></td>
+<td style="text-align:left">Fast on-die lookup.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Mutex Lock / Unlock</strong></td>
+<td style="text-align:center">15 - 25 ns</td>
+<td style="text-align:center"><strong>20 seconds</strong></td>
+<td style="text-align:left">Low cost, but concurrent thread contention destroys scale.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Main Memory (RAM) Access</strong></td>
+<td style="text-align:center">50 - 100 ns</td>
+<td style="text-align:center"><strong>1.5 minutes</strong></td>
+<td style="text-align:left">RAM is fast, but <span class="math-inline">100×</span> slower than L1 cache.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read 1 MB Sequentially from RAM</strong></td>
+<td style="text-align:center">3 - 5 µs</td>
+<td style="text-align:center"><strong>1 hour</strong></td>
+<td style="text-align:left">Sequential memory reads are blazing fast (<span class="math-inline">≈ 25 GB/s</span>).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Modern NVMe SSD Random Read</strong></td>
+<td style="text-align:center">10 - 30 µs</td>
+<td style="text-align:center"><strong>6 hours</strong></td>
+<td style="text-align:left">Fast, but <span class="math-inline">1,000×</span> slower than RAM!</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read 1 MB Sequentially from NVMe</strong></td>
+<td style="text-align:center">100 - 250 µs</td>
+<td style="text-align:center"><strong>2 days</strong></td>
+<td style="text-align:left">High throughput (<span class="math-inline">≈ 4-7 GB/s</span>); sequential disk is cheap.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Intra-Datacenter RTT (Same Rack / AZ)</strong></td>
+<td style="text-align:center">250 - 500 µs</td>
+<td style="text-align:center"><strong>5 days</strong></td>
+<td style="text-align:left">Network RPC overhead within the same cloud data hall.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Read 1 MB Sequentially from HDD</strong></td>
+<td style="text-align:center">5 - 15 ms</td>
+<td style="text-align:center"><strong>5 months</strong></td>
+<td style="text-align:left">Spinning magnetic disks must physically move arm heads.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>HDD Disk Seek (Random Read)</strong></td>
+<td style="text-align:center">8 - 10 ms</td>
+<td style="text-align:center"><strong>3 months</strong></td>
+<td style="text-align:left">Random disk I/O on magnetic drives kills throughput (<span class="math-inline">&lt; 150 IOPS</span>).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>US Cross-Country RTT (SF to NY)</strong></td>
+<td style="text-align:center">40 - 65 ms</td>
+<td style="text-align:center"><strong>1.5 years</strong></td>
+<td style="text-align:left">Speed of light in fiber optic glass (<span class="math-inline">≈ 200,000 km/s</span>).</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Transatlantic RTT (NY to London)</strong></td>
+<td style="text-align:center">75 - 90 ms</td>
+<td style="text-align:center"><strong>2.5 years</strong></td>
+<td style="text-align:left">Undersea fiber cable crossing the Atlantic.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Transpacific RTT (SF to Singapore)</strong></td>
+<td style="text-align:center">160 - 200 ms</td>
+<td style="text-align:center"><strong>5.5 years</strong></td>
+<td style="text-align:left">High latency. Requires Edge CDNs and regional databases.</td>
+</tr>
+</tbody>
+</table>
+<figure class="chapter-diagram"><pre class="mermaid">gantt
+    title Latency on a Logarithmic Time Scale (Nanoseconds to Milliseconds)
+    dateFormat X
+    axisFormat %s
+    section Memory
+    L1 Cache (1ns)          :0, 1
+    RAM Access (100ns)       :0, 100
+    section Storage
+    NVMe SSD Read (20µs)     :0, 20000
+    HDD Random Seek (10ms)   :0, 10000000
+    section Network
+    Same AZ RTT (500µs)      :0, 500000
+    Cross-Country RTT (50ms) :0, 50000000</pre></figure>
+<hr />
+<h2 id="3-traffic--qps-quick-conversions">3. Traffic &amp; QPS Quick Conversions</h2>
+<p>There are <strong><span class="math-inline">86,400</span> seconds in one day</strong>. In interviews, approximate to <strong><span class="math-inline">100,000</span> (<span class="math-inline">10<sup>5</sup></span>)</strong> for quick mental math, or use <span class="math-inline">86,400</span> for exact numbers.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Daily Request Volume</th>
+<th style="text-align:center">Exact Average QPS (<span class="math-inline">/ 86,400</span>)</th>
+<th style="text-align:center">Mental Math Approximation (<span class="math-inline">/ 100,000</span>)</th>
+<th style="text-align:center">Peak QPS (<span class="math-inline">2×</span>)</th>
+<th style="text-align:center">Peak QPS (<span class="math-inline">5×</span>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>1 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">11.6 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">10 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">23 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">58 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>5 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">58 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">50 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">116 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">290 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>10 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">116 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">100 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">232 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">580 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>50 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">579 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">500 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">1,158 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">2,895 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>100 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">1,157 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">1,000 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">2,314 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">5,785 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>500 Million</strong></td>
+<td style="text-align:center"><span class="math-inline">5,787 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">5,000 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">11,574 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">28,935 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>1 Billion</strong></td>
+<td style="text-align:center"><span class="math-inline">11,574 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">10,000 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">23,148 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">57,870 QPS</span></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>10 Billion</strong></td>
+<td style="text-align:center"><span class="math-inline">115,740 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">100,000 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">231,480 QPS</span></td>
+<td style="text-align:center"><span class="math-inline">578,700 QPS</span></td>
+</tr>
+</tbody>
+</table>
+<h3 id="peak-multiplier-heuristics">Peak Multiplier Heuristics:</h3>
+<ul>
+<li><strong><span class="math-inline">2×</span> Peak</strong>: Standard baseline web application with global users evenly spread across timezones.</li>
+<li><strong><span class="math-inline">3×</span> to <span class="math-inline">5×</span> Peak</strong>: Single-country or regional application (e.g., food delivery lunch rush or ride-sharing commute hours).</li>
+<li><strong><span class="math-inline">10×</span> to <span class="math-inline">50×</span> Peak</strong>: Event-driven flash sales (Black Friday, Ticketmaster stadium tour drops, Super Bowl ad).</li>
+</ul>
+<hr />
+<h2 id="4-standard-data-size-estimates">4. Standard Data Size Estimates</h2>
+<p>Unless explicitly specified by the interviewer, use these standard industry sizing rules:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Data Type</th>
+<th style="text-align:center">Typical Size</th>
+<th style="text-align:left">Notes &amp; Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Boolean</strong></td>
+<td style="text-align:center">1 byte</td>
+<td style="text-align:left">True / False flag</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>32-bit Integer (<code>INT</code>)</strong></td>
+<td style="text-align:center">4 bytes</td>
+<td style="text-align:left">Handles values up to <span class="math-inline">± 2.14 billion</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>64-bit Integer (<code>BIGINT</code>)</strong></td>
+<td style="text-align:center">8 bytes</td>
+<td style="text-align:left">Snowflake IDs, Unix Epoch timestamps in ms, financial cents</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Float / Double</strong></td>
+<td style="text-align:center">4 / 8 bytes</td>
+<td style="text-align:left">IEEE 754 precision</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>UUID (String)</strong></td>
+<td style="text-align:center">36 bytes</td>
+<td style="text-align:left"><code>123e4567-e89b-12d3-a456-426614174000</code> (16 bytes if stored binary)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>SHA-256 Hash</strong></td>
+<td style="text-align:center">32 bytes binary (64 chars hex)</td>
+<td style="text-align:left">Block deduplication, cryptographic checksums</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Short Text / Username</strong></td>
+<td style="text-align:center">30 - 64 bytes</td>
+<td style="text-align:left">Usernames, category tags</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Email Address</strong></td>
+<td style="text-align:center">50 - 100 bytes</td>
+<td style="text-align:left">Average user email</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>User Profile Metadata</strong></td>
+<td style="text-align:center"><span class="math-inline">500 bytes - 1 KB</span></td>
+<td style="text-align:left">ID, name, email, avatar URL, preferences JSON</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Short Message / Tweet</strong></td>
+<td style="text-align:center">250 - 500 bytes</td>
+<td style="text-align:left">Text message + author ID + timestamp metadata</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Compressed Web Image</strong></td>
+<td style="text-align:center">200 KB - 500 KB</td>
+<td style="text-align:left">Optimized JPEG / WebP image</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>High-Resolution Photo</strong></td>
+<td style="text-align:center">2 MB - 5 MB</td>
+<td style="text-align:left">Original camera capture</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Audio Voice Note (1 min)</strong></td>
+<td style="text-align:center">1 MB - 2 MB</td>
+<td style="text-align:left">Compressed AAC / Opus</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>1080p Video Stream (1 min)</strong></td>
+<td style="text-align:center">20 MB - 30 MB</td>
+<td style="text-align:left">H.264 / H.265 encoded at 3-4 Mbps</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>4K Video Stream (1 min)</strong></td>
+<td style="text-align:center">100 MB - 150 MB</td>
+<td style="text-align:left">AV1 / HEVC encoded at 15-20 Mbps</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-the-universal-5-step-sizing-formulas">5. The Universal 5-Step Sizing Formulas</h2>
+<p>Every system design calculation follows these 5 sequential steps:</p>
+<pre><code>[ Step 1: Throughput (QPS) ]
+              │
+              ▼
+[ Step 2: Storage (5-Year Capacity) ]
+              │
+              ▼
+[ Step 3: Network Bandwidth (Ingress / Egress) ]
+              │
+              ▼
+[ Step 4: Memory / Cache (80/20 Rule) ]
+              │
+              ▼
+[ Step 5: Server Cluster Count ]
+</code></pre>
+<h3 id="step-1-throughput--qps">Step 1: Throughput &amp; QPS</h3>
+<div class="math-block">Average Read QPS = (Daily Active Users (DAU) × Reads per User per Day) / (86,400)</div>
+<div class="math-block">Average Write QPS = (DAU × Writes per User per Day) / (86,400)</div>
+<div class="math-block">Peak QPS = Average QPS × Peak Multiplier (2× to 5×)</div>
+<hr />
+<h3 id="step-2-storage-sizing-5-year-capacity">Step 2: Storage Sizing (5-Year Capacity)</h3>
+<p>Calculate raw daily storage, scale to 5 years, add <span class="math-inline">3×</span> database replication, and include a <span class="math-inline">70%</span> storage headroom safety buffer:</p>
+<div class="math-block">Daily Raw Storage = Daily Writes × Average Payload Size</div>
+<div class="math-block">5-Year Raw Storage = Daily Raw Storage × 365 × 5</div>
+<div class="math-block">Total Production Storage = (5-Year Raw Storage × Replication Factor (typically 3)) / (0.70 (Headroom Factor))</div>
+<p><em>Rule of thumb: <span class="math-inline">365 × 5 ≈ 1,825 ≈ 2,000× daily storage</span>.</em></p>
+<hr />
+<h3 id="step-3-network-bandwidth">Step 3: Network Bandwidth</h3>
+<p>Network cards measure in <strong>bits per second (bps)</strong>, while data storage is measured in <strong>bytes (B)</strong>.
+Always convert bytes to bits by multiplying by 8:</p>
+<div class="math-block">Ingress Bandwidth (Bytes/s) = Write QPS × Average Write Payload Size</div>
+<div class="math-block">Egress Bandwidth (Bytes/s) = Read QPS × Average Read Payload Size</div>
+<div class="math-block">Network Line Bandwidth (bps) = Bandwidth (Bytes/s) × 8</div>
+<p><em>Example: <span class="math-inline">12.5 MB/s × 8 = 100 Mbps</span>.</em></p>
+<hr />
+<h3 id="step-4-memory--cache-sizing-8020-rule">Step 4: Memory &amp; Cache Sizing (80/20 Rule)</h3>
+<p>According to the <strong>Pareto Principle</strong>, <span class="math-inline">20%</span> of entities (popular posts, active users, top videos) generate <span class="math-inline">80%</span> of traffic.
+We cache that <span class="math-inline">20%</span> hot working set in RAM:</p>
+<div class="math-block">Daily Read Working Set = Daily Read Requests × Payload Size</div>
+<div class="math-block">Target Cache Size (RAM) = Daily Read Working Set × 0.20</div>
+<p><em>Add a <span class="math-inline">25%</span> safety margin for Redis key overhead and memory fragmentation.</em></p>
+<hr />
+<h3 id="step-5-server-cluster-sizing">Step 5: Server Cluster Sizing</h3>
+<div class="math-block">Required Servers = ≤ft\lceil (Peak QPS) / (Single Server QPS Capacity) \right\rceil × Redundancy Factor (1.5 to 2.0)</div>
+<hr />
+<h2 id="6-high-availability-the-nines--downtime">6. High Availability: &quot;The Nines&quot; &amp; Downtime</h2>
+<p>Service Level Agreements (SLAs) determine allowable downtime:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Availability Level</th>
+<th style="text-align:center">Downtime per Year</th>
+<th style="text-align:center">Downtime per Month (30d)</th>
+<th style="text-align:center">Downtime per Week</th>
+<th style="text-align:center">Downtime per Day</th>
+<th style="text-align:left">Typical System Classification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>90%</strong> (&quot;One Nine&quot;)</td>
+<td style="text-align:center">36.5 days</td>
+<td style="text-align:center">72.0 hours</td>
+<td style="text-align:center">16.8 hours</td>
+<td style="text-align:center">2.4 hours</td>
+<td style="text-align:left">Batch prototype, non-critical cron</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>99%</strong> (&quot;Two Nines&quot;)</td>
+<td style="text-align:center">3.65 days</td>
+<td style="text-align:center">7.20 hours</td>
+<td style="text-align:center">1.68 hours</td>
+<td style="text-align:center">14.4 minutes</td>
+<td style="text-align:left">Internal tooling, dev environments</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>99.9%</strong> (&quot;Three Nines&quot;)</td>
+<td style="text-align:center">8.76 hours</td>
+<td style="text-align:center">43.8 minutes</td>
+<td style="text-align:center">10.1 minutes</td>
+<td style="text-align:center">1.44 minutes</td>
+<td style="text-align:left">Standard SaaS, consumer apps</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>99.99%</strong> (&quot;Four Nines&quot;)</td>
+<td style="text-align:center">52.6 minutes</td>
+<td style="text-align:center">4.38 minutes</td>
+<td style="text-align:center">1.01 minutes</td>
+<td style="text-align:center">8.64 seconds</td>
+<td style="text-align:left">Cloud infrastructure (AWS S3, Stripe)</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>99.999%</strong> (&quot;Five Nines&quot;)</td>
+<td style="text-align:center">5.26 minutes</td>
+<td style="text-align:center">25.9 seconds</td>
+<td style="text-align:center">6.05 seconds</td>
+<td style="text-align:center">864 ms</td>
+<td style="text-align:left">Telco carriers, core banking, hospitals</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>99.9999%</strong> (&quot;Six Nines&quot;)</td>
+<td style="text-align:center">31.5 seconds</td>
+<td style="text-align:center">2.59 seconds</td>
+<td style="text-align:center">605 ms</td>
+<td style="text-align:center">86.4 ms</td>
+<td style="text-align:left">Google TrueTime, aerospace avionics</td>
+</tr>
+</tbody>
+</table>
+<h3 id="error-budget-formula">Error Budget Formula:</h3>
+<div class="math-block">Error Budget = 100% - SLO</div>
+<p><em>If your SLO is <span class="math-inline">99.9%</span> over 30 days, your error budget is <span class="math-inline">43.8 minutes</span> of downtime. If breached, deployments are frozen to focus on reliability.</em></p>
+<hr />
+<h2 id="7-production-hardware--technology-benchmarks">7. Production Hardware &amp; Technology Benchmarks</h2>
+<p>Realistic throughput limits for individual bare-metal or cloud instances (e.g., AWS <code>c6i.4xlarge</code> or <code>r6i.4xlarge</code> with 16 vCPU, 64 GB RAM):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Technology / Component</th>
+<th style="text-align:center">Single Node Safe Capacity</th>
+<th style="text-align:left">Bottleneck Constraint</th>
+<th style="text-align:left">Scaling Technique</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Reverse Proxy (Nginx / Envoy)</strong></td>
+<td style="text-align:center"><span class="math-inline">50,000 - 100,000 req/s</span></td>
+<td style="text-align:left">Network socket limits &amp; TLS handshake CPU</td>
+<td style="text-align:left">L4 Load Balancer (Maglev / AWS NLB)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Stateless API Server (Go / Java)</strong></td>
+<td style="text-align:center"><span class="math-inline">5,000 - 15,000 req/s</span></td>
+<td style="text-align:left">CPU execution &amp; JSON serialization</td>
+<td style="text-align:left">Horizontal Auto-Scaling Groups</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Stateless API Server (Node / Python)</strong></td>
+<td style="text-align:center"><span class="math-inline">1,000 - 3,000 req/s</span></td>
+<td style="text-align:left">Single-thread event loop &amp; GIL limits</td>
+<td style="text-align:left">Process workers (Gunicorn/PM2) + Horizontal</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Redis (Single Thread / Core)</strong></td>
+<td style="text-align:center"><span class="math-inline">50,000 - 100,000 ops/s</span></td>
+<td style="text-align:left">Single-threaded memory pipeline</td>
+<td style="text-align:left">Redis Cluster Sharding (Hash Slots)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Memcached (Multi-Threaded)</strong></td>
+<td style="text-align:center"><span class="math-inline">200,000 - 500,000 ops/s</span></td>
+<td style="text-align:left">Multi-core CPU &amp; 25GbE network throughput</td>
+<td style="text-align:left">Consistent Hashing Ring</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>PostgreSQL / MySQL (Reads)</strong></td>
+<td style="text-align:center"><span class="math-inline">5,000 - 10,000 QPS</span></td>
+<td style="text-align:left">Disk I/O &amp; Buffer Pool RAM hit ratio</td>
+<td style="text-align:left">Read Replicas + Caching</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>PostgreSQL / MySQL (Writes)</strong></td>
+<td style="text-align:center"><span class="math-inline">1,000 - 3,000 TPS</span></td>
+<td style="text-align:left">WAL sync to disk (<code>fsync</code>) &amp; row locks</td>
+<td style="text-align:left">Database Sharding (Citus, Vitess)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cassandra / ScyllaDB (Writes)</strong></td>
+<td style="text-align:center"><span class="math-inline">20,000 - 50,000 writes/s</span></td>
+<td style="text-align:left">Sequential append-only CommitLog &amp; LSM</td>
+<td style="text-align:left">Horizontal Peer Nodes (Leaderless)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Apache Kafka (Per Partition)</strong></td>
+<td style="text-align:center"><span class="math-inline">10 - 25 MB/s</span> (<span class="math-inline">≈ 20,000 msgs/s</span>)</td>
+<td style="text-align:left">OS PageCache memory &amp; disk controller bus</td>
+<td style="text-align:left">Add Partitions across broker nodes</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Elasticsearch (Per Shard)</strong></td>
+<td style="text-align:center"><span class="math-inline">1,000 - 2,500 queries/s</span></td>
+<td style="text-align:left">Lucene inverted index segment memory</td>
+<td style="text-align:left">Shard replicas + query caching</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-mental-math-tricks-for-the-interview">8. Mental Math Tricks for the Interview</h2>
+<ol>
+<li>
+<p><strong>The <span class="math-inline">10<sup>5</sup></span> Day Trick</strong>:
+<span class="math-inline">86,400 seconds/day ≈ 10<sup>5</sup> seconds/day</span>.
+To find QPS from daily requests: divide by <span class="math-inline">100,000</span>.
+<em>Example: <span class="math-inline">500M requests/day / 100,000 = 5,000 QPS</span> (exact is <span class="math-inline">5,787</span>; within <span class="math-inline">15%</span>, completely acceptable).</em></p>
+</li>
+<li>
+<p><strong>The Exponent Addition Rule</strong>:</p>
+</li>
+</ol>
+<div class="math-block">10^A × 10^B = 10<sup>A+B</sup></div>
+<p><em>Example: <span class="math-inline">200 bytes (2 × 10<sup>2</sup>) × 1 Billion writes (10<sup>9</sup>) = 2 × 10<sup>11</sup> bytes = 200 GB</span>.</em></p>
+<ol start="3">
+<li>
+<p><strong>Mega- to Giga- to Tera-</strong>:</p>
+<ul>
+<li><span class="math-inline">Million (10<sup>6</sup>) × Kilobyte (10<sup>3</sup>) = Gigabyte (10<sup>9</sup>)</span>.</li>
+<li><span class="math-inline">Million (10<sup>6</sup>) × Megabyte (10<sup>6</sup>) = Terabyte (10<sup>12</sup>)</span>.</li>
+<li><span class="math-inline">Billion (10<sup>9</sup>) × Kilobyte (10<sup>3</sup>) = Terabyte (10<sup>12</sup>)</span>.</li>
+<li><span class="math-inline">Billion (10<sup>9</sup>) × Megabyte (10<sup>6</sup>) = Petabyte (10<sup>15</sup>)</span>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Bandwidth Byte-to-Bit Conversion</strong>:</p>
+</li>
+</ol>
+<div class="math-block">Bytes/s × 8 = bits/s</div>
+<ul>
+<li><span class="math-inline">1 MB/s = 8 Mbps</span></li>
+<li><span class="math-inline">125 MB/s = 1 Gbps</span></li>
+<li><span class="math-inline">1.25 GB/s = 10 Gbps</span></li>
+</ul>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

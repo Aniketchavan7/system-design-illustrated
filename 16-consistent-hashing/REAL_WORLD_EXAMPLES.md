@@ -39,7 +39,7 @@
 #### A. The Consistent Hash Ring Mechanics
 - Discord projects both **Server Nodes** and **Guild IDs** onto a 32-bit (or 64-bit) circular hash space ($[0, 2^{32}-1]$).
 - A guild is assigned to the first server node encountered moving clockwise around the ring:
-  $$	ext{Target Node} = \min(\{n \in 	ext{Ring} \mid 	ext{hash}(n) \ge 	ext{hash}(	ext{guild\_id})\})$$
+  $$\text{Target Node} = \min(\{n \in \text{Ring} \mid \text{hash}(n) \ge \text{hash}(\text{guild\_id})\})$$
 
 #### B. Minimizing Rebalance Impact
 - When Discord adds a new server node to the cluster:
@@ -74,11 +74,11 @@ In theory, consistent hashing distributes keys evenly. In practice, with small n
 
 #### A. The Mechanics of Virtual Nodes
 - Instead of placing each physical server onto the ring once, each physical server is mapped to **$V$ virtual positions** (typically $V = 128$ to $256$) using independent hash salts:
-  $$	ext{hash}(	ext{"Server1\#vnode1"}), 	ext{hash}(	ext{"Server1\#vnode2"}), \dots$$
+  $$\text{hash}(\text{"Server1\#vnode1"}), \text{hash}(\text{"Server1\#vnode2"}), \dots$$
 - Virtual nodes of different physical servers are uniformly interleaved across the entire circle.
 
 #### B. The Law of Large Numbers (Uniform Spread)
-- By expanding 10 physical machines into $10 	imes 256 = 2,560$ virtual nodes, the variance of the key distribution shrinks to less than **1-2%**, achieving near-perfect mathematical balance.
+- By expanding 10 physical machines into $10 \times 256 = 2,560$ virtual nodes, the variance of the key distribution shrinks to less than **1-2%**, achieving near-perfect mathematical balance.
 - **Capacity Weighting**: If Server A has twice the RAM of Server B, Amazon assigns Server A 512 virtual nodes and Server B 256 virtual nodes.
 
 #### C. Smooth Failure Dispersion (No Domino Effect)
@@ -100,5 +100,5 @@ In theory, consistent hashing distributes keys evenly. In practice, with small n
 
 ## 🎯 System Design Interview Takeaways
 1. **Always Mention Virtual Nodes**: If an interviewer asks you to design a distributed cache (Memcached/Redis) or storage ring, never stop at basic consistent hashing. Immediately explain that **Virtual Nodes (vnodes)** are required to prevent hot segments and cascading domino failures.
-2. **Quantify the Movement Invariant**: Explicitly state that when scaling from $N$ to $N+1$ nodes, consistent hashing rebalances only **$K/N$ keys** (where $K$ is total keys), compared to $K 	imes \frac{N}{N+1}$ in standard modulus hashing.
+2. **Quantify the Movement Invariant**: Explicitly state that when scaling from $N$ to $N+1$ nodes, consistent hashing rebalances only **$K/N$ keys** (where $K$ is total keys), compared to $K \times \frac{N}{N+1}$ in standard modulus hashing.
 3. **Handling Hot Keys**: Remind the interviewer that consistent hashing distributes keys evenly, but *not* read volume for a single viral key (e.g., celebrity post). Viral keys require local replication or near-cache layers.

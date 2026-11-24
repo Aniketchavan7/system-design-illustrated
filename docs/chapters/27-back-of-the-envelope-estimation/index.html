@@ -22,33 +22,33 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="27--back-of-the-envelope-estimation">27 · Back-of-the-Envelope Estimation</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="27--back-of-the-envelope-estimation">27 · Back-of-the-Envelope Estimation</h1>
 <blockquote>
 <p><strong>Part 0 · Foundations</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Jeff Dean's latency rules) &amp; <strong>Netflix</strong> (capacity planning for 260M subscribers) execute real-world estimations are documented in <a href="../27-back-of-the-envelope-estimation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (Jeff Dean's latency rules) &amp; <strong>Netflix</strong> (capacity planning for 260M subscribers) execute real-world estimations are documented in <a href="../../chapters/27-back-of-the-envelope-estimation/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
-<p>Back-of-the-envelope estimation is the art of <strong>rapidly calculating system scale (QPS, memory, disk storage, network bandwidth)</strong> before writing a single line of architecture. It is not about finding the exact decimal; it is about finding the <strong>order of magnitude</strong> ($10	ext{ RPS}$ vs $10,000	ext{ RPS}$; $10	ext{ GB}$ vs $10	ext{ TB}$).</p>
+<p>Back-of-the-envelope estimation is the art of <strong>rapidly calculating system scale (QPS, memory, disk storage, network bandwidth)</strong> before writing a single line of architecture. It is not about finding the exact decimal; it is about finding the <strong>order of magnitude</strong> (<span class="math-inline">10 RPS</span> vs <span class="math-inline">10,000 RPS</span>; <span class="math-inline">10 GB</span> vs <span class="math-inline">10 TB</span>).</p>
 <ul>
 <li><strong>Powers of 10 shortcuts</strong>:
 <ul>
-<li>$1	ext{ Million requests/day} \approx \mathbf{12	ext{ requests/second (RPS)}}$.</li>
-<li>$1	ext{ Billion requests/day} \approx \mathbf{12,000	ext{ RPS}}$.</li>
-<li>Peak traffic is typically estimated at $\mathbf{2	imes 	ext{average}}$.</li>
+<li><span class="math-inline">1 Million requests/day ≈ 12 requests/second (RPS)</span>.</li>
+<li><span class="math-inline">1 Billion requests/day ≈ 12,000 RPS</span>.</li>
+<li>Peak traffic is typically estimated at <span class="math-inline">2× average</span>.</li>
 </ul>
 </li>
-<li><strong>Hardware Latency Reality</strong>: Reading from RAM ($\approx 100	ext{ ns}$) is <strong>100,000 times faster</strong> than reading from a spinning disk ($\approx 10	ext{ ms}$) and <strong>1,500,000 times faster</strong> than a cross-ocean network round trip ($\approx 150	ext{ ms}$).</li>
+<li><strong>Hardware Latency Reality</strong>: Reading from RAM (<span class="math-inline">≈ 100 ns</span>) is <strong>100,000 times faster</strong> than reading from a spinning disk (<span class="math-inline">≈ 10 ms</span>) and <strong>1,500,000 times faster</strong> than a cross-ocean network round trip (<span class="math-inline">≈ 150 ms</span>).</li>
 </ul>
 <hr />
 <h2 id="everyday-analogy-planning-a-wedding-banquet">🍕 Everyday analogy: Planning a Wedding Banquet</h2>
 <p>Imagine planning a wedding:</p>
 <ul>
-<li>You don't need to know if Uncle Bob eats exactly $412	ext{ grams}$ or $420	ext{ grams}$ of chicken.</li>
-<li>You estimate: <em>&quot;150 guests $	imes$ 1 main dish $\approx$ 150 meals. Plus 20% buffer for hungry eaters $\approx$ 180 portions.&quot;</em></li>
+<li>You don't need to know if Uncle Bob eats exactly <span class="math-inline">412 grams</span> or <span class="math-inline">420 grams</span> of chicken.</li>
+<li>You estimate: <em>&quot;150 guests <span class="math-inline">×</span> 1 main dish <span class="math-inline">≈</span> 150 meals. Plus 20% buffer for hungry eaters <span class="math-inline">≈</span> 180 portions.&quot;</em></li>
 <li>If your rough estimate said 150 portions and you prepared for 15, your guests starve. If you prepared for 15,000, food rots and you go bankrupt.</li>
 </ul>
 <p>Back-of-the-envelope estimation gives you the exact ballpark to pick the right server size, database tier, and caching budget.</p>
@@ -56,12 +56,15 @@
 <h2 id="the-problem-it-solves">🧩 The Problem It Solves</h2>
 <p>Without back-of-the-envelope estimations:</p>
 <ol>
-<li><strong>Architectural Over-Engineering</strong>: A candidate proposes a multi-datacenter Kafka cluster with Cassandra sharding for a service receiving $5	ext{ requests/minute}$.</li>
-<li><strong>Catastrophic Under-Provisioning</strong>: A team provisions a standard $20/mo SQL database for a service expected to ingest $50	ext{ GB of telemetry logs per second}$, causing Day 1 production crashes.</li>
+<li><strong>Architectural Over-Engineering</strong>: A candidate proposes a multi-datacenter Kafka cluster with Cassandra sharding for a service receiving <span class="math-inline">5 requests/minute</span>.</li>
+<li><strong>Catastrophic Under-Provisioning</strong>: A team provisions a standard &lt;span class=&quot;math-inline&quot;&gt;20/mo SQL database for a service expected to ingest</span>50\text{ GB of telemetry logs per second}$, causing Day 1 production crashes.</li>
 <li><strong>Interview Disqualification</strong>: Top-tier tech companies (Google, Meta, Amazon) explicitly score candidates on whether they can calculate QPS, storage growth, and RAM sizing in under 3 minutes.</li>
 </ol>
 <hr />
 <h2 id="the-cheat-sheet-powers-of-2--10">🔢 The Cheat Sheet: Powers of 2 &amp; 10</h2>
+<p align="center">
+  <img src="./assets/latency_scale_pyramid.svg" alt="Hardware Latency & Scale Reference" width="100%" />
+</p>
 <table>
 <thead>
 <tr>
@@ -74,44 +77,44 @@
 </thead>
 <tbody>
 <tr>
-<td style="text-align:left">$2^{10}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>10</sup></span></td>
 <td style="text-align:left">1,024</td>
-<td style="text-align:left">$1	ext{ Thousand } (10^3)$</td>
+<td style="text-align:left"><span class="math-inline">1 Thousand (10<sup>3</sup>)</span></td>
 <td style="text-align:left"><strong>1 KB</strong></td>
 <td style="text-align:left">Small JSON API response</td>
 </tr>
 <tr>
-<td style="text-align:left">$2^{20}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>20</sup></span></td>
 <td style="text-align:left">1,048,576</td>
-<td style="text-align:left">$1	ext{ Million } (10^6)$</td>
+<td style="text-align:left"><span class="math-inline">1 Million (10<sup>6</sup>)</span></td>
 <td style="text-align:left"><strong>1 MB</strong></td>
 <td style="text-align:left">High-res thumbnail / photo</td>
 </tr>
 <tr>
-<td style="text-align:left">$2^{30}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>30</sup></span></td>
 <td style="text-align:left">1,073,741,824</td>
-<td style="text-align:left">$1	ext{ Billion } (10^9)$</td>
+<td style="text-align:left"><span class="math-inline">1 Billion (10<sup>9</sup>)</span></td>
 <td style="text-align:left"><strong>1 GB</strong></td>
 <td style="text-align:left">1 hour of SD video stream</td>
 </tr>
 <tr>
-<td style="text-align:left">$2^{40}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>40</sup></span></td>
 <td style="text-align:left">1,099,511,627,776</td>
-<td style="text-align:left">$1	ext{ Trillion } (10^{12})$</td>
+<td style="text-align:left"><span class="math-inline">1 Trillion (10<sup>12</sup>)</span></td>
 <td style="text-align:left"><strong>1 TB</strong></td>
 <td style="text-align:left">Standard server NVMe SSD</td>
 </tr>
 <tr>
-<td style="text-align:left">$2^{50}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>50</sup></span></td>
 <td style="text-align:left">1,125,899,906,842,624</td>
-<td style="text-align:left">$1	ext{ Quadrillion } (10^{15})$</td>
+<td style="text-align:left"><span class="math-inline">1 Quadrillion (10<sup>15</sup>)</span></td>
 <td style="text-align:left"><strong>1 PB</strong></td>
 <td style="text-align:left">Daily YouTube upload ingestion</td>
 </tr>
 <tr>
-<td style="text-align:left">$2^{60}$</td>
+<td style="text-align:left"><span class="math-inline">2<sup>60</sup></span></td>
 <td style="text-align:left">1,152,921,504,606,846,976</td>
-<td style="text-align:left">$1	ext{ Quintillion } (10^{18})$</td>
+<td style="text-align:left"><span class="math-inline">1 Quintillion (10<sup>18</sup>)</span></td>
 <td style="text-align:left"><strong>1 EB</strong></td>
 <td style="text-align:left">Total storage of global cloud providers</td>
 </tr>
@@ -131,69 +134,69 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>L1 CPU Cache Reference</strong></td>
-<td style="text-align:left">$0.5	ext{ ns}$</td>
+<td style="text-align:left"><span class="math-inline">0.5 ns</span></td>
 <td style="text-align:left">0.5 seconds (A single heartbeat)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Branch Mispredict</strong></td>
-<td style="text-align:left">$5	ext{ ns}$</td>
+<td style="text-align:left"><span class="math-inline">5 ns</span></td>
 <td style="text-align:left">5 seconds</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>L2 CPU Cache Reference</strong></td>
-<td style="text-align:left">$7	ext{ ns}$</td>
+<td style="text-align:left"><span class="math-inline">7 ns</span></td>
 <td style="text-align:left">7 seconds</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Mutex Lock / Unlock</strong></td>
-<td style="text-align:left">$25	ext{ ns}$</td>
+<td style="text-align:left"><span class="math-inline">25 ns</span></td>
 <td style="text-align:left">25 seconds</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Main Memory (RAM) Reference</strong></td>
-<td style="text-align:left">$100	ext{ ns}$</td>
+<td style="text-align:left"><span class="math-inline">100 ns</span></td>
 <td style="text-align:left">1.6 minutes</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Compress 1KB with Snappy</strong></td>
-<td style="text-align:left">$2,000	ext{ ns } (2	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left"><span class="math-inline">2,000 ns (2 μs)</span></td>
 <td style="text-align:left">33 minutes</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Read 1MB Sequentially from Memory</strong></td>
-<td style="text-align:left">$5,000	ext{ ns } (5	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left"><span class="math-inline">5,000 ns (5 μs)</span></td>
 <td style="text-align:left">1.4 hours</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Read 1MB Sequentially from NVMe SSD</strong></td>
-<td style="text-align:left">$10,000	ext{ ns } (10	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left"><span class="math-inline">10,000 ns (10 μs)</span></td>
 <td style="text-align:left">2.8 hours</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>SSD Random Read (NVMe)</strong></td>
-<td style="text-align:left">$20,000	ext{ ns } (20	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left"><span class="math-inline">20,000 ns (20 μs)</span></td>
 <td style="text-align:left">5.5 hours</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Send 1KB Packet over 1Gbps LAN</strong></td>
-<td style="text-align:left">$10,000	ext{ ns } (10	ext{ }\mu	ext{s})$</td>
+<td style="text-align:left"><span class="math-inline">10,000 ns (10 μs)</span></td>
 <td style="text-align:left">2.8 hours</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>HDD Spinning Disk Seek</strong></td>
-<td style="text-align:left">$10,000,000	ext{ ns } (10	ext{ ms})$</td>
+<td style="text-align:left"><span class="math-inline">10,000,000 ns (10 ms)</span></td>
 <td style="text-align:left"><strong>4 months!</strong></td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Round Trip Time (RTT): US to Europe</strong></td>
-<td style="text-align:left">$150,000,000	ext{ ns } (150	ext{ ms})$</td>
+<td style="text-align:left"><span class="math-inline">150,000,000 ns (150 ms)</span></td>
 <td style="text-align:left"><strong>5 years!</strong></td>
 </tr>
 </tbody>
 </table>
 <h3 id="the-core-architectural-takeaways">The Core Architectural Takeaways:</h3>
 <ol>
-<li><strong>RAM is $100,000	imes$ faster than disk seeks</strong>: Keep hot data in cache.</li>
+<li><strong>RAM is <span class="math-inline">100,000×</span> faster than disk seeks</strong>: Keep hot data in cache.</li>
 <li><strong>Sequential disk I/O matches network speed</strong>: Log-structured storage (Kafka, LSM-trees) is fast because it uses sequential disk writes.</li>
 <li><strong>Cross-region network latency dominates everything</strong>: Avoid synchronous cross-datacenter round-trips on write paths.</li>
 </ol>
@@ -203,24 +206,28 @@
 <h3 id="1-traffic-qps-math">1. Traffic (QPS) Math</h3>
 <ul>
 <li><strong>Input</strong>: Daily Active Users (DAU) and average actions per user per day.</li>
-<li><strong>Formula</strong>:
-$$	ext{Average QPS} = \frac{	ext{DAU} 	imes 	ext{Requests per user}}{86,400	ext{ seconds}}$$</li>
-<li><strong>Rule of Thumb</strong>: Round $86,400$ to <strong>$100,000$</strong> for fast mental math:
-$$	ext{Average QPS} \approx \frac{	ext{Total Daily Requests}}{100,000}$$</li>
-<li><strong>Peak QPS</strong>: $	ext{Peak QPS} = 	ext{Average QPS} 	imes 2$.</li>
+<li><strong>Formula</strong>:</li>
+</ul>
+<div class="math-block">Average QPS = (DAU × Requests per user) / (86,400 seconds)</div>
+<ul>
+<li><strong>Rule of Thumb</strong>: Round <span class="math-inline">86,400</span> to <strong><span class="math-inline">100,000</span></strong> for fast mental math:</li>
+</ul>
+<div class="math-block">Average QPS ≈ (Total Daily Requests) / (100,000)</div>
+<ul>
+<li><strong>Peak QPS</strong>: <span class="math-inline">Peak QPS = Average QPS × 2</span>.</li>
 </ul>
 <h3 id="2-storage-estimation-math">2. Storage Estimation Math</h3>
 <ul>
-<li><strong>Formula</strong>:
-$$	ext{Daily Storage} = 	ext{Daily Writes} 	imes 	ext{Average Payload Size}$$
-$$	ext{5-Year Storage} = 	ext{Daily Storage} 	imes 365 	imes 5 \approx 	ext{Daily Storage} 	imes 2,000$$</li>
+<li><strong>Formula</strong>:</li>
 </ul>
+<div class="math-block">Daily Storage = Daily Writes × Average Payload Size</div>
+<div class="math-block">5-Year Storage = Daily Storage × 365 × 5 ≈ Daily Storage × 2,000</div>
 <h3 id="3-memory-cache-sizing-math-the-8020-rule">3. Memory (Cache Sizing) Math: The 80/20 Rule</h3>
 <ul>
-<li><strong>The Pareto Principle</strong>: $20%$ of hot content generates $80%$ of read traffic.</li>
-<li><strong>Formula</strong>:
-$$	ext{RAM Required} = 	ext{Daily Read Volume (Bytes)} 	imes 0.20$$</li>
+<li><strong>The Pareto Principle</strong>: <span class="math-inline">20%</span> of hot content generates <span class="math-inline">80%</span> of read traffic.</li>
+<li><strong>Formula</strong>:</li>
 </ul>
+<div class="math-block">RAM Required = Daily Read Volume (Bytes) × 0.20</div>
 <hr />
 <h2 id="try-it-yourself">💻 Try It Yourself</h2>
 <p>The companion script <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/27-back-of-the-envelope-estimation/demo.py"><code>demo.py</code></a> is an interactive estimation tool that takes DAU, read/write ratios, and payload sizes to generate complete infrastructure sizing reports in milliseconds.</p>
@@ -241,32 +248,34 @@ $$	ext{RAM Required} = 	ext{Daily Read Volume (Bytes)} 	imes 0.20$$</li>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <p>State your assumptions clearly:</p>
 <ol>
-<li><em>&quot;Assume $100	ext{M DAU}$ and each user makes 10 requests per day.&quot;</em></li>
-<li>Total requests $= 1	ext{ Billion requests/day}$.</li>
-<li>Divide by $100,000$ seconds (rounding $86,400$):
-$$	ext{Average QPS} \approx \frac{1,000,000,000}{100,000} = \mathbf{10,000	ext{ QPS}}$$</li>
-<li>Apply peak multiplier ($2	imes$):
-$$	ext{Peak QPS} = 10,000 	imes 2 = \mathbf{20,000	ext{ QPS}}$$
-Interviewers reward fast, clean arithmetic over struggling with exact decimals.</li>
+<li><em>&quot;Assume <span class="math-inline">100M DAU</span> and each user makes 10 requests per day.&quot;</em></li>
+<li>Total requests <span class="math-inline">= 1 Billion requests/day</span>.</li>
+<li>Divide by <span class="math-inline">100,000</span> seconds (rounding <span class="math-inline">86,400</span>):</li>
 </ol>
+<div class="math-block">Average QPS ≈ (1,000,000,000) / (100,000) = 10,000 QPS</div>
+<ol start="4">
+<li>Apply peak multiplier (<span class="math-inline">2×</span>):</li>
+</ol>
+<div class="math-block">Peak QPS = 10,000 × 2 = 20,000 QPS</div>
+<p>Interviewers reward fast, clean arithmetic over struggling with exact decimals.</p>
 </details>
 <hr />
 <h3 id="q2-estimate-the-storage-required-for-twitter-over-5-years">Q2: &quot;Estimate the storage required for Twitter over 5 years.&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <ol>
-<li>Assume $300	ext{M DAU}$. $100	ext{M}$ users post 2 tweets/day $= 200	ext{M tweets/day}$.</li>
-<li>Each tweet is 280 chars $+$ metadata (User ID, timestamp) $\approx 500	ext{ bytes}$.</li>
-<li>Assume 20% of tweets contain an image ($200	ext{ KB}$):
+<li>Assume <span class="math-inline">300M DAU</span>. <span class="math-inline">100M</span> users post 2 tweets/day <span class="math-inline">= 200M tweets/day</span>.</li>
+<li>Each tweet is 280 chars <span class="math-inline">+</span> metadata (User ID, timestamp) <span class="math-inline">≈ 500 bytes</span>.</li>
+<li>Assume 20% of tweets contain an image (<span class="math-inline">200 KB</span>):
 <ul>
-<li>Text storage: $200	ext{M} 	imes 500	ext{B} = 100	ext{ GB/day}$.</li>
-<li>Media storage: $40	ext{M} 	imes 200	ext{ KB} = 8,000	ext{ GB/day} = 8	ext{ TB/day}$.</li>
-<li>Total daily storage $\approx 8.1	ext{ TB/day}$.</li>
+<li>Text storage: <span class="math-inline">200M × 500B = 100 GB/day</span>.</li>
+<li>Media storage: <span class="math-inline">40M × 200 KB = 8,000 GB/day = 8 TB/day</span>.</li>
+<li>Total daily storage <span class="math-inline">≈ 8.1 TB/day</span>.</li>
 </ul>
 </li>
-<li>5-Year Storage:
-$$8.1	ext{ TB} 	imes 365 	imes 5 \approx 8.1	ext{ TB} 	imes 1,825 \approx \mathbf{14.8	ext{ Petabytes}}$$</li>
+<li>5-Year Storage:</li>
 </ol>
+<div class="math-block">8.1 TB × 365 × 5 ≈ 8.1 TB × 1,825 ≈ 14.8 Petabytes</div>
 </details>
 <hr />
 <h3 id="q3-how-do-you-size-the-ram-needed-for-a-redis-caching-tier">Q3: &quot;How do you size the RAM needed for a Redis caching tier?&quot;</h3>
@@ -274,12 +283,16 @@ $$8.1	ext{ TB} 	imes 365 	imes 5 \approx 8.1	ext{ TB} 	imes 1,825 \approx \mathb
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <p>Apply the <strong>80/20 Pareto rule</strong>:</p>
 <ol>
-<li>Calculate daily read volume. If daily active data volume is $5	ext{ TB}$.</li>
-<li>To satisfy 80% of reads from RAM, you need:
-$$5	ext{ TB} 	imes 0.20 = \mathbf{1	ext{ TB of RAM}}$$</li>
-<li>Account for Redis memory overhead (pointers, hash tables, slab allocation) $\approx 25%$ extra buffer:
-$$	ext{Total RAM} \approx 1	ext{ TB} 	imes 1.25 = \mathbf{1.25	ext{ TB}}$$</li>
-<li>Provision four $256	ext{ GB}$ or eight $128	ext{ GB}$ Redis cluster instances.</li>
+<li>Calculate daily read volume. If daily active data volume is <span class="math-inline">5 TB</span>.</li>
+<li>To satisfy 80% of reads from RAM, you need:</li>
+</ol>
+<div class="math-block">5 TB × 0.20 = 1 TB of RAM</div>
+<ol start="3">
+<li>Account for Redis memory overhead (pointers, hash tables, slab allocation) <span class="math-inline">≈ 25%</span> extra buffer:</li>
+</ol>
+<div class="math-block">Total RAM ≈ 1 TB × 1.25 = 1.25 TB</div>
+<ol start="4">
+<li>Provision four <span class="math-inline">256 GB</span> or eight <span class="math-inline">128 GB</span> Redis cluster instances.</li>
 </ol>
 </details>
 <hr />
@@ -294,10 +307,12 @@ $$	ext{Total RAM} \approx 1	ext{ TB} 	imes 1.25 = \mathbf{1.25	ext{ TB}}$$</li>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <ol>
 <li>Assume 1 Billion hours of video watched per day.</li>
-<li>Average bitrate across mobile and desktop: $2.5	ext{ Mbps}$.</li>
-<li>Continuous egress bandwidth:
-$$	ext{Bandwidth} = \frac{1,000,000,000	ext{ hrs} 	imes 3600	ext{s} 	imes 2.5	ext{ Mbps}}{86,400	ext{s}} \approx \mathbf{104	ext{ Terabits per second (Tbps)}}$$</li>
-<li>With a 98% CDN cache offload, origin egress drops to only $\approx 2	ext{ Tbps}$.</li>
+<li>Average bitrate across mobile and desktop: <span class="math-inline">2.5 Mbps</span>.</li>
+<li>Continuous egress bandwidth:</li>
+</ol>
+<div class="math-block">Bandwidth = (1,000,000,000 hrs × 3600s × 2.5 Mbps) / (86,400s) ≈ 104 Terabits per second (Tbps)</div>
+<ol start="4">
+<li>With a 98% CDN cache offload, origin egress drops to only <span class="math-inline">≈ 2 Tbps</span>.</li>
 </ol>
 </details>
 <hr />
@@ -309,7 +324,11 @@ $$	ext{Bandwidth} = \frac{1,000,000,000	ext{ hrs} 	imes 3600	ext{s} 	imes 2.5	ex
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

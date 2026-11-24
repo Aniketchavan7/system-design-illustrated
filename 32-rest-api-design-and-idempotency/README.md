@@ -48,6 +48,10 @@ $$\forall x, \quad f(f(x)) = f(x)$$
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/idempotency_flow.svg" alt="Idempotent Payment API Request State Machine" width="100%" />
+</p>
+
 ```mermaid
 sequenceDiagram
     autonumber

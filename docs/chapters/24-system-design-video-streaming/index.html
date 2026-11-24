@@ -22,20 +22,20 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="24---system-design-petabyte-scale-video-streaming-youtube--netflix">24 - System Design: Petabyte-Scale Video Streaming (YouTube / Netflix)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="24---system-design-petabyte-scale-video-streaming-youtube--netflix">24 - System Design: Petabyte-Scale Video Streaming (YouTube / Netflix)</h1>
 <blockquote>
-<p><strong>Executive Summary:</strong> Serving video at global scale (YouTube handles 500 hours uploaded per minute; Netflix accounts for $\approx 15%$ of global internet downstream traffic) is fundamentally different from serving standard web APIs. Monolithic video files cannot be streamed over fluctuating mobile networks. A production video architecture relies on <strong>Distributed DAG Transcoding</strong>, slicing videos into short 2–6 second chunks encoded across multiple bitrate profiles, indexed by <strong>HLS / MPEG-DASH manifests</strong> (<code>.m3u8</code>), dynamically navigated via <strong>Adaptive Bitrate Streaming (ABR)</strong>, and cached across global Edge CDN PoPs (e.g. Netflix Open Connect).</p>
+<p><strong>Executive Summary:</strong> Serving video at global scale (YouTube handles 500 hours uploaded per minute; Netflix accounts for <span class="math-inline">≈ 15%</span> of global internet downstream traffic) is fundamentally different from serving standard web APIs. Monolithic video files cannot be streamed over fluctuating mobile networks. A production video architecture relies on <strong>Distributed DAG Transcoding</strong>, slicing videos into short 2–6 second chunks encoded across multiple bitrate profiles, indexed by <strong>HLS / MPEG-DASH manifests</strong> (<code>.m3u8</code>), dynamically navigated via <strong>Adaptive Bitrate Streaming (ABR)</strong>, and cached across global Edge CDN PoPs (e.g. Netflix Open Connect).</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../24-system-design-video-streaming/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/24-system-design-video-streaming/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP flow control, bandwidth-delay product, and packet buffering.</li>
-<li><a href="../12-content-delivery-networks/index.html">12 - Content Delivery Networks</a>: Edge Points of Presence (PoPs), Origin Shielding, and cache hit rates.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous task queues coordinating distributed workers.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP flow control, bandwidth-delay product, and packet buffering.</li>
+<li><a href="../../chapters/12-content-delivery-networks/index.html">12 - Content Delivery Networks</a>: Edge Points of Presence (PoPs), Origin Shielding, and cache hit rates.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Asynchronous task queues coordinating distributed workers.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -105,17 +105,17 @@
 <h3 id="how-modern-video-streaming-solves-this">How Modern Video Streaming Solves This</h3>
 <ol>
 <li>Slices the video into discrete <strong>4-second chunks</strong>.</li>
-<li>Encodes each chunk into multiple resolution/bitrate tiers ($360\text{p}, 480\text{p}, 720\text{p}, 1080\text{p}, 4\text{K}$).</li>
-<li>The client video player monitors its own download buffer in real-time. If the buffer shrinks, it requests the next 4-second chunk in $720\text{p}$ rather than $1080\text{p}$. <strong>Buffering drops to zero.</strong></li>
+<li>Encodes each chunk into multiple resolution/bitrate tiers (<span class="math-inline">360p, 480p, 720p, 1080p, 4K</span>).</li>
+<li>The client video player monitors its own download buffer in real-time. If the buffer shrinks, it requests the next 4-second chunk in <span class="math-inline">720p</span> rather than <span class="math-inline">1080p</span>. <strong>Buffering drops to zero.</strong></li>
 </ol>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
 <h3 id="high-resolution-video-streaming-animation">High-Resolution Video Streaming Animation</h3>
-<p>Below is an animated trace of video chunking, distributed DAG transcoding, and real-time Adaptive Bitrate playback switching from 1080p $\rightarrow$ 720p with zero freezing:</p>
+<p>Below is an animated trace of video chunking, distributed DAG transcoding, and real-time Adaptive Bitrate playback switching from 1080p <span class="math-inline">→</span> 720p with zero freezing:</p>
 <p><img src="./assets/video_streaming.gif" alt="Video Streaming Architecture" /></p>
 <hr />
 <h3 id="end-to-end-transcoding--playback-pipeline">End-to-End Transcoding &amp; Playback Pipeline</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Ingestion[&quot;1. Ingestion Tier&quot;]
         Creator[&quot;📹 Video Creator&quot;] --&gt;|Multipart Upload| S3Raw[(&quot;Raw Video Bucket&lt;br/&gt;(S3 / GCS Master)&quot;)]
         S3Raw --&gt; Slicer[&quot;Video Slicer&lt;br/&gt;(Splits into 4s GOP chunks)&quot;]
@@ -145,40 +145,43 @@
     style Ingestion fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style Transcode fill:#161b22,stroke:#3fb950,stroke-width:2px;
     style CDN fill:#161b22,stroke:#d29922,stroke-width:2px;
-    style Playback fill:#161b22,stroke:#a371f7,stroke-width:2px;
-</code></pre>
+    style Playback fill:#161b22,stroke:#a371f7,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's estimate storage, compute, and bandwidth for a platform at <strong>YouTube / Netflix scale</strong>:</p>
 <h3 id="1-ingestion--storage-estimation">1. Ingestion &amp; Storage Estimation</h3>
 <ul>
-<li><strong>Upload Rate</strong>: $500\text{ hours of video uploaded / minute}$.</li>
-<li>Raw video storage: Assume compressed master is $\approx 2\text{ GB / hour}$.</li>
-<li>Daily hours uploaded: $500 \times 60 \times 24 = \mathbf{720,000\text{ hours / day}}$.</li>
-<li>Daily raw master storage:
-$$\text{Raw Storage} = 720,000\text{ hrs} \times 2\text{ GB} = \mathbf{1,440\text{ Terabytes / day (1.44 PB/day)}}$$</li>
-<li><strong>Transcoded Storage Multiplier</strong>:
-Each video is encoded into 4 resolution profiles (1080p, 720p, 480p, 360p), adding $\approx 150%$ overhead:
-$$\text{Total Daily Storage} \approx 1.44\text{ PB} \times 2.5 = \mathbf{3.6\text{ Petabytes / day!}}$$</li>
+<li><strong>Upload Rate</strong>: <span class="math-inline">500 hours of video uploaded / minute</span>.</li>
+<li>Raw video storage: Assume compressed master is <span class="math-inline">≈ 2 GB / hour</span>.</li>
+<li>Daily hours uploaded: <span class="math-inline">500 × 60 × 24 = 720,000 hours / day</span>.</li>
+<li>Daily raw master storage:</li>
 </ul>
+<div class="math-block">Raw Storage = 720,000 hrs × 2 GB = 1,440 Terabytes / day (1.44 PB/day)</div>
+<ul>
+<li><strong>Transcoded Storage Multiplier</strong>:
+Each video is encoded into 4 resolution profiles (1080p, 720p, 480p, 360p), adding <span class="math-inline">≈ 150%</span> overhead:</li>
+</ul>
+<div class="math-block">Total Daily Storage ≈ 1.44 PB × 2.5 = 3.6 Petabytes / day!</div>
 <h3 id="2-egress-bandwidth--cdn-offload-math">2. Egress Bandwidth &amp; CDN Offload Math</h3>
 <ul>
-<li><strong>Global Watch Time</strong>: Assume $1\text{ Billion hours watched per day}$.</li>
-<li>Average streaming bitrate (weighted across mobile and TV): $\approx 3.0\text{ Mbps} = 375\text{ KB/second}$.</li>
-<li>Data transferred daily:
-$$\text{Total Daily Egress} = 1,000,000,000\text{ hrs} \times 3600\text{s} \times 375\text{ KB/s} \approx \mathbf{1.35\text{ Exabytes / day!}}$$</li>
-<li>Average Continuous Egress Bandwidth:
-$$\text{Bandwidth} = \frac{1\text{ Billion hrs} \times 3\text{ Mbps} \times 3600\text{s}}{86,400\text{s}} = \mathbf{125\text{ Terabits / second (125 Tbps)!}}$$</li>
+<li><strong>Global Watch Time</strong>: Assume <span class="math-inline">1 Billion hours watched per day</span>.</li>
+<li>Average streaming bitrate (weighted across mobile and TV): <span class="math-inline">≈ 3.0 Mbps = 375 KB/second</span>.</li>
+<li>Data transferred daily:</li>
 </ul>
+<div class="math-block">Total Daily Egress = 1,000,000,000 hrs × 3600s × 375 KB/s ≈ 1.35 Exabytes / day!</div>
+<ul>
+<li>Average Continuous Egress Bandwidth:</li>
+</ul>
+<div class="math-block">Bandwidth = (1 Billion hrs × 3 Mbps × 3600s) / (86,400s) = 125 Terabits / second (125 Tbps)!</div>
 <p><strong>Why Edge CDNs are Mandatory</strong>:</p>
 <ul>
 <li>No central datacenter on Earth has 125 Tbps of transit capacity.</li>
-<li>With a <strong>$98%$ CDN edge cache hit rate</strong>, origin traffic drops from 125 Tbps to only <strong>2.5 Tbps</strong>, distributed across thousands of local ISP peering exchanges.</li>
+<li>With a <strong><span class="math-inline">98%</span> CDN edge cache hit rate</strong>, origin traffic drops from 125 Tbps to only <strong>2.5 Tbps</strong>, distributed across thousands of local ISP peering exchanges.</li>
 </ul>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-modern-video-codecs--formats">1. Modern Video Codecs &amp; Formats</h3>
-<p>A raw uncompressed $4\text{K}$ video frame ($3840 \times 2160 \times 3\text{ bytes}$) is $24.8\text{ MB per frame}$! At 60 fps, that is <strong>$1.48\text{ GB per second}$</strong>. Video codecs use temporal and spatial compression to reduce file sizes by $&gt;99%$:</p>
+<p>A raw uncompressed <span class="math-inline">4K</span> video frame (<span class="math-inline">3840 × 2160 × 3 bytes</span>) is <span class="math-inline">24.8 MB per frame</span>! At 60 fps, that is <strong><span class="math-inline">1.48 GB per second</span></strong>. Video codecs use temporal and spatial compression to reduce file sizes by <span class="math-inline">&gt;99%</span>:</p>
 <table>
 <thead>
 <tr>
@@ -222,7 +225,7 @@ $$\text{Bandwidth} = \frac{1\text{ Billion hrs} \times 3\text{ Mbps} \times 3600
 </table>
 <hr />
 <h3 id="2-the-hls-http-live-streaming-protocol--manifests">2. The HLS (HTTP Live Streaming) Protocol &amp; Manifests</h3>
-<p>HLS (RFC 8216) works entirely over standard HTTP/HTTPS ports ($80/443$). There are no proprietary streaming server sockets!</p>
+<p>HLS (RFC 8216) works entirely over standard HTTP/HTTPS ports (<span class="math-inline">80/443</span>). There are no proprietary streaming server sockets!</p>
 <ol>
 <li>The client player requests the <strong>Master Manifest</strong> (<code>master.m3u8</code>):
 <em>(Refer to the companion playlist file <a href="https://github.com/Aniketchavan7/system-design-illustrated/blob/main/24-system-design-video-streaming/master.m3u8"><code>master.m3u8</code></a> for the multi-bitrate index manifest.)</em></li>
@@ -297,7 +300,7 @@ $$\text{Bandwidth} = \frac{1\text{ Billion hrs} \times 3\text{ Mbps} \times 3600
 <p><strong>Serving Video Chunks Directly from S3/Origin</strong>:</p>
 <ul>
 <li><em>Pitfall</em>: Letting user video players fetch <code>.ts</code> chunks directly from AWS S3.</li>
-<li><em>Result</em>: Catastrophic cloud egress bills ($0.08 per GB). At 100 TB daily egress, S3 egress alone costs <strong>$8,000 per day</strong>! Always put an Edge CDN (CloudFront/Cloudflare) in front with an aggressive 30-day cache header.</li>
+<li><em>Result</em>: Catastrophic cloud egress bills (&lt;span class=&quot;math-inline&quot;&gt;0.08 per GB). At 100 TB daily egress, S3 egress alone costs <strong>&lt;/span&gt;8,000 per day</strong>! Always put an Edge CDN (CloudFront/Cloudflare) in front with an aggressive 30-day cache header.</li>
 </ul>
 </li>
 <li>
@@ -323,8 +326,8 @@ $$\text{Bandwidth} = \frac{1\text{ Billion hrs} \times 3\text{ Mbps} \times 3600
 <hr />
 <h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
 <ul>
-<li><strong>Netflix Open Connect</strong>: Netflix manufactures its own custom storage and streaming hardware appliances (Open Connect Appliances - OCAs) and provides them <strong>free of charge directly inside local ISP data centers globally</strong>. Over $95%$ of Netflix traffic is served directly from inside the user's local internet provider without touching the public internet backbone!</li>
-<li><strong>YouTube</strong>: Deploys the world's largest video transcoding infrastructure using custom Google-designed chips (Argos VCU - Video Coding Units), speeding up compute efficiency by $30\times$ compared to standard servers.</li>
+<li><strong>Netflix Open Connect</strong>: Netflix manufactures its own custom storage and streaming hardware appliances (Open Connect Appliances - OCAs) and provides them <strong>free of charge directly inside local ISP data centers globally</strong>. Over <span class="math-inline">95%</span> of Netflix traffic is served directly from inside the user's local internet provider without touching the public internet backbone!</li>
+<li><strong>YouTube</strong>: Deploys the world's largest video transcoding infrastructure using custom Google-designed chips (Argos VCU - Video Coding Units), speeding up compute efficiency by <span class="math-inline">30×</span> compared to standard servers.</li>
 <li><strong>Twitch</strong>: Ingests live video from streamers over RTMP/WebRTC, transcodes into HLS in real-time with sub-2-second latency (Low-Latency HLS - LL-HLS).</li>
 </ul>
 <hr />
@@ -337,12 +340,16 @@ $$\text{Bandwidth} = \frac{1\text{ Billion hrs} \times 3\text{ Mbps} \times 3600
 <li>The server pre-encodes the video into multiple discrete bitrate streams (e.g. 1080p @ 6 Mbps, 720p @ 2.5 Mbps, 360p @ 400 kbps) sliced into uniform 2–6 second chunks, described by a master <code>.m3u8</code> playlist.</li>
 <li>The client video player runs an <strong>ABR Decision Engine</strong> governed by two metrics:
 <ul>
-<li><strong>Throughput-Based Estimation</strong>: Measuring the download duration of the preceding chunk:
-$$\text{Estimated Bandwidth} = \frac{\text{Chunk Size (Bits)}}{\text{Download Duration (Seconds)}}$$</li>
-<li><strong>Buffer-Based Estimation</strong>: Monitoring the number of seconds of decoded video remaining in the player's forward buffer (e.g. 15 seconds ahead).</li>
+<li><strong>Throughput-Based Estimation</strong>: Measuring the download duration of the preceding chunk:</li>
 </ul>
 </li>
-<li>If network throughput drops or the forward buffer dips below a safety threshold (e.g. $&lt;5$ seconds), the player proactively requests the next chunk in a lower resolution (e.g. 720p).</li>
+</ol>
+<div class="math-block">Estimated Bandwidth = (Chunk Size (Bits)) / (Download Duration (Seconds))</div>
+<ul>
+<li><strong>Buffer-Based Estimation</strong>: Monitoring the number of seconds of decoded video remaining in the player's forward buffer (e.g. 15 seconds ahead).</li>
+</ul>
+<ol start="3">
+<li>If network throughput drops or the forward buffer dips below a safety threshold (e.g. <span class="math-inline">&lt;5</span> seconds), the player proactively requests the next chunk in a lower resolution (e.g. 720p).</li>
 <li>Because all resolution streams are strictly aligned on identical timestamp boundaries, the player seamlessly splices the lower-resolution chunk into playback without any audio popping, frame jitter, or buffering freezes.&quot;</li>
 </ol>
 <hr />
@@ -392,7 +399,7 @@ $$\text{Estimated Bandwidth} = \frac{\text{Chunk Size (Bits)}}{\text{Download Du
 <li><strong>Transcoding Compute</strong>:
 <ul>
 <li>VoD uses multi-pass high-compression encoding (e.g. AV1/HEVC taking 10x real-time).</li>
-<li>Live streaming requires real-time single-pass hardware encoding (GPU/ASIC) outputting frames in $&lt;50\text{ ms}$.&quot;</li>
+<li>Live streaming requires real-time single-pass hardware encoding (GPU/ASIC) outputting frames in <span class="math-inline">&lt;50 ms</span>.&quot;</li>
 </ul>
 </li>
 </ol>
@@ -410,7 +417,7 @@ $$\text{Estimated Bandwidth} = \frac{\text{Chunk Size (Bits)}}{\text{Download Du
 <li>Places an intermediate caching proxy cluster geographically close to the S3 storage bucket.</li>
 <li>All 300 edge PoPs query the Origin Shield rather than S3.</li>
 <li>When Tokyo and London miss, Tokyo pulls from the Shield. The Shield pulls once from S3. When London queries 100 ms later, the Shield serves the chunk directly.</li>
-<li>This collapses 300 separate origin fetches into <strong>exactly 1 origin fetch</strong>, cutting S3 storage request costs by up to $99%$.&quot;</li>
+<li>This collapses 300 separate origin fetches into <strong>exactly 1 origin fetch</strong>, cutting S3 storage request costs by up to <span class="math-inline">99%</span>.&quot;</li>
 </ul>
 <hr />
 <h2 id="check-yourself-flash-quiz">✅ Check Yourself: Flash Quiz</h2>
@@ -440,15 +447,28 @@ Because I-frames are the only frames that contain complete, self-contained image
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP flow control and packet mechanics.</li>
-<li><a href="../12-content-delivery-networks/index.html">12 - Content Delivery Networks</a>: Global edge caching and origin shielding.</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Coordinating distributed transcoding tasks.</li>
-<li><a href="../21-system-design-url-shortener/index.html">21 - System Design: URL Shortener</a>: High-scale read-heavy caching patterns.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: TCP flow control and packet mechanics.</li>
+<li><a href="../../chapters/12-content-delivery-networks/index.html">12 - Content Delivery Networks</a>: Global edge caching and origin shielding.</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Distributed Logs</a>: Coordinating distributed transcoding tasks.</li>
+<li><a href="../../chapters/21-system-design-url-shortener/index.html">21 - System Design: URL Shortener</a>: High-scale read-heavy caching patterns.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

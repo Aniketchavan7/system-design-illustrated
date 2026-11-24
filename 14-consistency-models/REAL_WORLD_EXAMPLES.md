@@ -35,15 +35,15 @@
 
 #### A. The TrueTime Invariant
 Instead of returning a single discrete time, `TrueTime.now()` returns an uncertainty interval:
-$$[t.	ext{earliest}, t.	ext{latest}] \quad 	ext{where} \quad t.	ext{latest} - t.	ext{earliest} = 2\epsilon$$
+$$[t.\text{earliest}, t.\text{latest}] \quad \text{where} \quad t.\text{latest} - t.\text{earliest} = 2\epsilon$$
 - Because Google maintains atomic clocks in every data center, the maximum uncertainty $\epsilon$ is mathematically bounded to **less than 7 milliseconds**.
 
 #### B. The TrueTime Commit Wait Rule
 To guarantee strict linearizability without cross-datacenter locking between readers and writers:
 1. When a transaction $T_1$ prepares to commit, the coordinator requests `TrueTime.now()`.
-2. It picks an absolute commit timestamp $s \ge t_1.	ext{latest}$.
+2. It picks an absolute commit timestamp $s \ge t_1.\text{latest}$.
 3. **The Commit Wait**: The coordinator delays responding to the client until it is physically certain that the absolute real-world time has passed $s$:
-   $$	ext{Wait until } TrueTime.now().	ext{earliest} > s$$
+   $$\text{Wait until } TrueTime.now().\text{earliest} > s$$
 4. **The Mathematical Guarantee**: Any subsequent transaction $T_2$ that begins anywhere on Earth will receive a timestamp $s_2 > s_1$. Causality is physically preserved worldwide!
 
 ---

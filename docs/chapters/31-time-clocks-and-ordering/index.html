@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="31--time-clocks--ordering">31 · Time, Clocks &amp; Ordering</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="31--time-clocks--ordering">31 · Time, Clocks &amp; Ordering</h1>
 <blockquote>
-<p><strong>Part 4 · Distributed-systems thinking</strong> · ⏱️ ~25 min read · Prerequisites: <a href="../14-consistency-models/index.html">14 · Consistency Models</a></p>
+<p><strong>Part 4 · Distributed-systems thinking</strong> · ⏱️ ~25 min read · Prerequisites: <a href="../../chapters/14-consistency-models/index.html">14 · Consistency Models</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (TrueTime API bounding clock uncertainty with atomic clocks) and <strong>Amazon</strong> (Dynamo Vector Clocks for shopping carts) manage distributed time are documented in <a href="../31-time-clocks-and-ordering/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> (TrueTime API bounding clock uncertainty with atomic clocks) and <strong>Amazon</strong> (Dynamo Vector Clocks for shopping carts) manage distributed time are documented in <a href="../../chapters/31-time-clocks-and-ordering/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
@@ -54,7 +54,7 @@
 <li>Detective 2 writes: <em>&quot;Suspect arrested at 2:00 PM&quot;</em>.</li>
 <li>Looking at the wall times, it appears the suspect was arrested <em>before</em> the witness was interviewed! In reality, Detective 2's watch was just running slow.</li>
 <li><strong>The Solution (Logical Ordering)</strong>: The detectives exchange numbered police dispatch messages:
-<code>Dispatch #101</code> $	o$ <code>Dispatch #102</code> $	o$ <code>Dispatch #103</code>.
+<code>Dispatch #101</code> <span class="math-inline">→</span> <code>Dispatch #102</code> <span class="math-inline">→</span> <code>Dispatch #103</code>.
 Regardless of what their broken wristwatches say, Dispatch #103 is guaranteed to have happened <em>after</em> Dispatch #102.</li>
 </ul>
 <hr />
@@ -67,7 +67,10 @@ Regardless of what their broken wristwatches say, Dispatch #103 is guaranteed to
 </ol>
 <hr />
 <h2 id="picture-it-lamport-timestamps-vs-vector-clocks">🖼️ Picture It: Lamport Timestamps vs Vector Clocks</h2>
-<pre><code class="language-mermaid">sequenceDiagram
+<p align="center">
+  <img src="./assets/truetime_ordering.svg" alt="Physical Clocks, Uncertainty & TrueTime Commit Wait" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     participant NodeA as 🖥️ Node A
     participant NodeB as 🖥️ Node B
@@ -78,8 +81,7 @@ Regardless of what their broken wristwatches say, Dispatch #103 is guaranteed to
     Note over NodeB: Receives Msg: Clock = max(0, 1) + 1 = 2
     NodeB-&gt;&gt;NodeC: Send Message (Clock: 2)
     Note over NodeC: Receives Msg: Clock = max(0, 2) + 1 = 3
-    Note over NodeC: Event order guaranteed: 1 -&gt; 2 -&gt; 3!
-</code></pre>
+    Note over NodeC: Event order guaranteed: 1 -&gt; 2 -&gt; 3!</pre></figure>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-monotonic-clocks-vs-time-of-day-clocks">1. Monotonic Clocks vs Time-of-Day Clocks</h3>
@@ -90,25 +92,27 @@ Regardless of what their broken wristwatches say, Dispatch #103 is guaranteed to
 <h3 id="2-lamport-timestamps-total-order">2. Lamport Timestamps (Total Order)</h3>
 <p>Every node maintains a single integer counter <code>L</code>:</p>
 <ol>
-<li>Before executing an event, increment counter: $L = L + 1$.</li>
-<li>When sending a message, attach $L$ to the payload.</li>
-<li>When receiving a message with timestamp $L_{	ext{msg}}$:
-$$L_{	ext{local}} = \max(L_{	ext{local}}, L_{	ext{msg}}) + 1$$</li>
+<li>Before executing an event, increment counter: <span class="math-inline">L = L + 1</span>.</li>
+<li>When sending a message, attach <span class="math-inline">L</span> to the payload.</li>
+<li>When receiving a message with timestamp <span class="math-inline">L<sub>msg</sub></span>:</li>
 </ol>
+<div class="math-block">L<sub>local</sub> = \max(L<sub>local</sub>, L<sub>msg</sub>) + 1</div>
 <ul>
-<li><strong>Limitation</strong>: If $L(A) &lt; L(B)$, you cannot tell whether $A$ caused $B$ or if they occurred concurrently without knowledge of each other.</li>
+<li><strong>Limitation</strong>: If <span class="math-inline">L(A) &lt; L(B)</span>, you cannot tell whether <span class="math-inline">A</span> caused <span class="math-inline">B</span> or if they occurred concurrently without knowledge of each other.</li>
 </ul>
 <h3 id="3-vector-clocks-detecting-concurrency">3. Vector Clocks (Detecting Concurrency)</h3>
-<p>For a cluster of $N$ nodes, each node maintains a vector of size $N$:
-$$V = [v_1, v_2, \dots, v_n]$$</p>
+<p>For a cluster of <span class="math-inline">N</span> nodes, each node maintains a vector of size <span class="math-inline">N</span>:</p>
+<div class="math-block">V = [v<sub>1</sub>, v<sub>2</sub>, …, v<sub>n</sub>]</div>
 <ul>
-<li>When Node $i$ performs an event: $V[i] = V[i] + 1$.</li>
-<li>When Node $i$ receives vector $V_{	ext{msg}}$ from Node $j$:
-$$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$</li>
+<li>When Node <span class="math-inline">i</span> performs an event: <span class="math-inline">V[i] = V[i] + 1</span>.</li>
+<li>When Node <span class="math-inline">i</span> receives vector <span class="math-inline">V<sub>msg</sub></span> from Node <span class="math-inline">j</span>:</li>
+</ul>
+<div class="math-block">V[k] = \max(V[k], V<sub>msg</sub>[k]) for all k</div>
+<ul>
 <li><strong>Causality Invariant</strong>:
 <ul>
-<li>Event $A$ happened before Event $B$ if every element in $V_A \le V_B$ and at least one element is strictly $&lt;$.</li>
-<li>If neither $V_A \le V_B$ nor $V_B \le V_A$, the events are <strong>concurrent conflicts</strong> that require application-level reconciliation (e.g. merging shopping carts).</li>
+<li>Event <span class="math-inline">A</span> happened before Event <span class="math-inline">B</span> if every element in <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> and at least one element is strictly <span class="math-inline">&lt;</span>.</li>
+<li>If neither <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> nor <span class="math-inline">V<sub>B</sub> ≤ V<sub>A</sub></span>, the events are <strong>concurrent conflicts</strong> that require application-level reconciliation (e.g. merging shopping carts).</li>
 </ul>
 </li>
 </ul>
@@ -150,7 +154,7 @@ $$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$</li>
 <td style="text-align:left"><strong>Vector Clocks</strong></td>
 <td style="text-align:left">Attach vector to messages</td>
 <td style="text-align:center"><strong>✅ True Concurrency</strong></td>
-<td style="text-align:center">Grows with node count ($O(N)$)</td>
+<td style="text-align:center">Grows with node count (<span class="math-inline">O(N)</span>)</td>
 <td style="text-align:left">Shopping carts, Riak, Dynamo</td>
 </tr>
 </tbody>
@@ -191,7 +195,7 @@ $$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$</li>
 <hr />
 <h2 id="where-youll-see-it-in-production">🌍 Where You'll See It in Production</h2>
 <ul>
-<li><strong>Google Cloud Spanner</strong>: Solved clock uncertainty using the <strong>TrueTime API</strong>, installing physical atomic clocks and GPS receivers in every datacenter to bound uncertainty $\epsilon &lt; 7	ext{ms}$.</li>
+<li><strong>Google Cloud Spanner</strong>: Solved clock uncertainty using the <strong>TrueTime API</strong>, installing physical atomic clocks and GPS receivers in every datacenter to bound uncertainty <span class="math-inline">ε &lt; 7ms</span>.</li>
 <li><strong>Amazon Dynamo (Original)</strong>: Used <strong>Vector Clocks</strong> to allow shoppers to add items to carts during datacenter partitions without dropping items.</li>
 <li><strong>Git</strong>: Commit hashes form a directed acyclic graph (DAG) of logical causal history, independent of the developer's computer clock!</li>
 </ul>
@@ -215,17 +219,17 @@ $$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$</li>
 <h3 id="q3-how-do-vector-clocks-detect-whether-two-events-are-causally-related-or-concurrent">Q3: &quot;How do Vector Clocks detect whether two events are causally related or concurrent?&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
-<p>Given two vector timestamps $V_A$ and $V_B$:</p>
+<p>Given two vector timestamps <span class="math-inline">V<sub>A</sub></span> and <span class="math-inline">V<sub>B</sub></span>:</p>
 <ul>
-<li>$V_A \le V_B$ if every element $V_A[k] \le V_B[k]$ for all nodes $k$. If $V_A \le V_B$ and at least one element is strictly smaller, $A$ causally preceded $B$ ($A 	o B$).</li>
-<li>If neither $V_A \le V_B$ nor $V_B \le V_A$ (for example, $V_A = [2, 1]$ and $V_B = [1, 2]$), the events occurred <strong>concurrently without causal knowledge of each other</strong>, signaling a write conflict that must be resolved.</li>
+<li><span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> if every element <span class="math-inline">V<sub>A</sub>[k] ≤ V<sub>B</sub>[k]</span> for all nodes <span class="math-inline">k</span>. If <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> and at least one element is strictly smaller, <span class="math-inline">A</span> causally preceded <span class="math-inline">B</span> (<span class="math-inline">A → B</span>).</li>
+<li>If neither <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> nor <span class="math-inline">V<sub>B</sub> ≤ V<sub>A</sub></span> (for example, <span class="math-inline">V<sub>A</sub> = [2, 1]</span> and <span class="math-inline">V<sub>B</sub> = [1, 2]</span>), the events occurred <strong>concurrently without causal knowledge of each other</strong>, signaling a write conflict that must be resolved.</li>
 </ul>
 </details>
 <hr />
 <h3 id="q4-how-did-google-spanner-eliminate-the-need-for-vector-clocks">Q4: &quot;How did Google Spanner eliminate the need for Vector Clocks?&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
-<p>Google deployed dedicated <strong>GPS receivers and Rubidium atomic clocks</strong> in every datacenter and created the <strong>TrueTime API</strong>. TrueTime bounds physical clock uncertainty to a guaranteed interval $[t - \epsilon, t + \epsilon]$ where $\epsilon &lt; 7	ext{ms}$. When committing a transaction, the leader waits out the uncertainty window ($2\epsilon$) before releasing locks (<strong>Commit Wait</strong>). This guarantees that any subsequent transaction anywhere in the world receives a strictly larger timestamp, achieving linearizability without Vector Clocks.</p>
+<p>Google deployed dedicated <strong>GPS receivers and Rubidium atomic clocks</strong> in every datacenter and created the <strong>TrueTime API</strong>. TrueTime bounds physical clock uncertainty to a guaranteed interval <span class="math-inline">[t - ε, t + ε]</span> where <span class="math-inline">ε &lt; 7ms</span>. When committing a transaction, the leader waits out the uncertainty window (<span class="math-inline">2ε</span>) before releasing locks (<strong>Commit Wait</strong>). This guarantees that any subsequent transaction anywhere in the world receives a strictly larger timestamp, achieving linearizability without Vector Clocks.</p>
 </details>
 <hr />
 <h3 id="q5-what-is-the-main-limitation-of-lamport-timestamps-compared-to-vector-clocks">Q5: &quot;What is the main limitation of Lamport Timestamps compared to Vector Clocks?&quot;</h3>
@@ -242,7 +246,20 @@ $$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$</li>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

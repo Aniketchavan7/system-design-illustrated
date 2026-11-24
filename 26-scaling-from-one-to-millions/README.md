@@ -48,7 +48,7 @@ Imagine opening a small food business:
 
 ## 🧩 The Problem It Solves
 
-When an application experiences exponential growth (e.g., $10 	o 10,000 	o 10,000,000	ext{ users}$), scaling by simply buying a larger computer (**Vertical Scaling / Scaling Up**) hits hard physical limits:
+When an application experiences exponential growth (e.g., $10 \to 10,000 \to 10,000,000\text{ users}$), scaling by simply buying a larger computer (**Vertical Scaling / Scaling Up**) hits hard physical limits:
 1. **CPU & RAM Ceilings**: Even a server with 128 cores and 1TB RAM maxes out during traffic spikes.
 2. **Cost Asymmetry**: High-end enterprise servers cost exponentially more than equivalent commodity servers.
 3. **Single Point of Failure (SPOF)**: If your one giant server suffers a power glitch, hardware defect, or kernel panic, your entire business goes dark.
@@ -58,6 +58,10 @@ When an application experiences exponential growth (e.g., $10 	o 10,000 	o 10,00
 ---
 
 ## 🖼️ Picture It: The 9-Stage Evolution
+
+<p align="center">
+  <img src="./assets/scaling_stages.svg" alt="Scaling Architecture Evolution (1 to 10M+ Users)" width="100%" />
+</p>
 
 ```mermaid
 flowchart TD
@@ -92,18 +96,18 @@ Let's trace how infrastructure demands change from **1,000 users to 10,000,000 D
 
 ### Scale Milestones:
 1. **At 1,000 Users**:
-   - $1,000	ext{ DAU} 	imes 20	ext{ requests/day} = 20,000	ext{ requests/day} \approx \mathbf{0.23	ext{ requests/second}}$.
+   - $1,000\text{ DAU} \times 20\text{ requests/day} = 20,000\text{ requests/day} \approx \mathbf{0.23\text{ requests/second}}$.
    - Single \$10/mo VPS (2 vCPUs, 4GB RAM) handles this comfortably.
 2. **At 100,000 Users**:
-   - $100,000	ext{ DAU} 	imes 50	ext{ requests/day} = 5,000,000	ext{ req/day} \approx \mathbf{58	ext{ RPS average (150 RPS peak)}}$.
+   - $100,000\text{ DAU} \times 50\text{ requests/day} = 5,000,000\text{ req/day} \approx \mathbf{58\text{ RPS average (150 RPS peak)}}$.
    - Separate web server from PostgreSQL database. Add Redis for caching hot queries.
 3. **At 10,000,000 Users (The 10M Milestone)**:
-   - $10,000,000	ext{ DAU} 	imes 100	ext{ requests/day} = 1,000,000,000	ext{ req/day}$.
-   - **Average QPS**: $\frac{10^9}{86,400	ext{s}} \approx \mathbf{11,574	ext{ QPS}}$.
-   - **Peak QPS ($2	imes$)**: $\approx \mathbf{23,000	ext{ QPS}}$.
+   - $10,000,000\text{ DAU} \times 100\text{ requests/day} = 1,000,000,000\text{ req/day}$.
+   - **Average QPS**: $\frac{10^9}{86,400\text{s}} \approx \mathbf{11,574\text{ QPS}}$.
+   - **Peak QPS ($2\times$)**: $\approx \mathbf{23,000\text{ QPS}}$.
    - **Infrastructure Required**:
      - 40–60 Stateless web application containers behind load balancers.
-     - 10+ Redis cache cluster nodes serving $90\%$ of reads in $<1	ext{ms}$.
+     - 10+ Redis cache cluster nodes serving $90\%$ of reads in $<1\text{ms}$.
      - 4–8 Horizontally sharded database clusters with primary-replica replication.
      - CDN absorbing $95\%$ of all bandwidth egress.
 
@@ -129,11 +133,11 @@ When database writes exceed the I/O capacity of a single primary database:
 
 | Evolution Step | Primary Benefit | Operational Cost / Trade-Off | When to Implement |
 | :--- | :--- | :--- | :--- |
-| **Separate DB Box** | Eliminates CPU contention between app & DB | Additional network latency hop (1–2ms) | $>1,000	ext{ users}$ |
-| **Load Balancer** | Eliminates single point of failure | SSL termination overhead; health checking | $>10,000	ext{ users}$ |
-| **In-Memory Cache** | Drops DB read load by 80–95% | Cache invalidation complexity; stale data risk | $>50,000	ext{ users}$ |
-| **Message Queue** | Absorbs traffic spikes; non-blocking APIs | Eventual consistency; dead-letter queue handling | $>100,000	ext{ users}$ |
-| **Database Sharding** | Unlimited horizontal write scaling | Joins across shards are impossible; resharding | $>1,000,000	ext{ users}$ |
+| **Separate DB Box** | Eliminates CPU contention between app & DB | Additional network latency hop (1–2ms) | $>1,000\text{ users}$ |
+| **Load Balancer** | Eliminates single point of failure | SSL termination overhead; health checking | $>10,000\text{ users}$ |
+| **In-Memory Cache** | Drops DB read load by 80–95% | Cache invalidation complexity; stale data risk | $>50,000\text{ users}$ |
+| **Message Queue** | Absorbs traffic spikes; non-blocking APIs | Eventual consistency; dead-letter queue handling | $>100,000\text{ users}$ |
+| **Database Sharding** | Unlimited horizontal write scaling | Joins across shards are impossible; resharding | $>1,000,000\text{ users}$ |
 
 ---
 

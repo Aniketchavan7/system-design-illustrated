@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Structured prep tracks, timed mock interview rubrics, and whiteboarding checklist.">
+  <title>System Design Interview Study Guide | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="system-design-interview-study-guide--practice-framework">🧭 System Design Interview Study Guide &amp; Practice Framework</h1>
+<blockquote>
+<p>A battle-tested preparation blueprint, structured study tracks, and a 45-minute timed interview execution framework for senior engineering roles at FAANG / Tier-1 tech companies.</p>
+</blockquote>
+<hr />
+<p>Use the <a href="../guides/resource-reading-map.html">book-to-course reading map</a> to find exercises for each chapter of Kleppmann and Xu.</p>
+<p>Start with one of these routes. The reading and paper exercises are free and need only a browser.</p>
+<ul>
+<li><strong><a href="https://aniketchavan7.github.io/system-design-illustrated/">First pass on the course site</a></strong> · Follow one fictional website through <a href="../chapters/01-client-server-networking/index.html#first-pass">networking</a>, <a href="../chapters/02-domain-name-system/index.html#first-pass">DNS</a>, and <a href="../chapters/03-load-balancing/index.html#first-pass">load balancing</a>. Finish by tracing a request through a server failure. Then draw a <a href="../chapters/21-system-design-url-shortener/index.html">URL shortener</a> and estimate its traffic.</li>
+<li><strong>Interview prep</strong> · Review the <a href="../guides/cheatsheet.html">estimation cheat sheet</a> and <a href="../guides/decision-flowcharts.html">decision flowcharts</a>, then try the <a href="#timed-mock-interviews">timed mock interviews</a>.</li>
+<li><strong>Production reliability</strong> · Read about <a href="../chapters/17-message-queues/index.html">queues</a> and <a href="../chapters/32-rest-api-design-and-idempotency/index.html">idempotency</a>, run the <a href="../guides/order-processing-lab.html">order lab</a>, and work through <a href="../guides/multi-region-recovery.html">regional recovery</a> and <a href="../guides/authentication-and-authorization.html">tenant authorization</a>.</li>
+<li><strong>Open source community</strong> · Found a gap, typo, or want to share your team's production war stories? Read our <a href="../guides/contributing.html">contributing guide</a>, <a href="../guides/code-of-conduct.html">code of conduct</a>, and <a href="../guides/community.html">Reddit community discussions</a>.</li>
+</ul>
+<h2 id="the-3-study-tracks">🎯 The 3 Study Tracks</h2>
+<p>Choose the track that fits your preparation timeline:</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
+    Start([&quot;📅 Choose Your Prep Timeline&quot;]) --&gt; A{&quot;Available Time?&quot;}
+    A --&gt;|&quot;1 Week (Urgent Interview)&quot;| T1[&quot;🚀 1-Week Crash Course&lt;br/&gt;10 High-Frequency Patterns&quot;]
+    A --&gt;|&quot;4 Weeks (Targeted Prep)&quot;| T2[&quot;⏱️ 4-Week Core Track&lt;br/&gt;25 Core System Modules&quot;]
+    A --&gt;|&quot;8-12 Weeks (Comprehensive)&quot;| T3[&quot;🎓 Full Mastery Track&lt;br/&gt;All 45 Modules + Runnable Labs&quot;]
+
+    T1 --&gt; Finish([&quot;🏆 Senior Interview Ready&quot;])
+    T2 --&gt; Finish
+    T3 --&gt; Finish</pre></figure>
+<hr />
+<h3 id="track-1--1-week-crash-course-10-highest-yield-modules">Track 1: 🚀 1-Week Crash Course (10 Highest-Yield Modules)</h3>
+<p><em>Best for: Candidates with an interview scheduled this week.</em></p>
+<p>Focus strictly on the concepts tested in 80%+ of senior system design interviews:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Day</th>
+<th style="text-align:left">Focus Topic</th>
+<th style="text-align:left">Core Modules</th>
+<th style="text-align:left">Key Interview Question</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>Day 1</strong></td>
+<td style="text-align:left"><strong>Estimation &amp; Traffic</strong></td>
+<td style="text-align:left"><a href="../chapters/27-back-of-the-envelope-estimation/index.html">27 - Estimation</a> · <a href="../chapters/03-load-balancing/index.html">03 - Load Balancing</a></td>
+<td style="text-align:left"><em>&quot;How many servers do you need for 100k QPS?&quot;</em></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 2</strong></td>
+<td style="text-align:left"><strong>Databases &amp; Sharding</strong></td>
+<td style="text-align:left"><a href="../chapters/06-relational-and-non-relational-databases/index.html">06 - SQL vs NoSQL</a> · <a href="../chapters/08-database-partitioning/index.html">08 - Partitioning</a></td>
+<td style="text-align:left"><em>&quot;How would you shard user data when 1 node runs out of disk?&quot;</em></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 3</strong></td>
+<td style="text-align:left"><strong>Replication &amp; Consensus</strong></td>
+<td style="text-align:left"><a href="../chapters/07-database-replication/index.html">07 - Replication</a> · <a href="../chapters/13-cap-and-pacelc-theorems/index.html">13 - CAP/PACELC</a></td>
+<td style="text-align:left"><em>&quot;Why can't a distributed database guarantee both strong consistency and 100% availability?&quot;</em></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 4</strong></td>
+<td style="text-align:left"><strong>Caching &amp; Rate Limiting</strong></td>
+<td style="text-align:left"><a href="../chapters/10-caching-patterns/index.html">10 - Caching</a> · <a href="../chapters/05-rate-limiting/index.html">05 - Rate Limiting</a></td>
+<td style="text-align:left"><em>&quot;How do you prevent a cache stampede during a hot-key write spike?&quot;</em></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 5</strong></td>
+<td style="text-align:left"><strong>Async &amp; Queues</strong></td>
+<td style="text-align:left"><a href="../chapters/17-message-queues/index.html">17 - Message Queues</a> · <a href="../chapters/20-fault-tolerance-and-resilience/index.html">20 - Resilience</a></td>
+<td style="text-align:left"><em>&quot;How does Kafka guarantee message ordering across consumer instances?&quot;</em></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 6</strong></td>
+<td style="text-align:left"><strong>Full System Design #1</strong></td>
+<td style="text-align:left"><a href="../chapters/34-system-design-news-feed/index.html">34 - News Feed</a> · <a href="../chapters/21-system-design-url-shortener/index.html">21 - URL Shortener</a></td>
+<td style="text-align:left">Fanout-on-write vs Fanout-on-read trade-offs.</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Day 7</strong></td>
+<td style="text-align:left"><strong>Full System Design #2</strong></td>
+<td style="text-align:left"><a href="../chapters/40-system-design-payment-system/index.html">40 - Payment System</a> · <a href="../chapters/39-system-design-proximity-service/index.html">39 - Proximity Service</a></td>
+<td style="text-align:left">Double-entry bookkeeping, idempotency keys, and spatial indexing.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="track-2--4-week-core-track-25-core-modules">Track 2: ⏱️ 4-Week Core Track (25 Core Modules)</h3>
+<p><em>Best for: Systematic preparation with balanced theory and architecture.</em></p>
+<ul>
+<li><strong>Week 1 · Foundations &amp; Networking</strong>:
+<ul>
+<li>Modules 26, 27, 28, 01, 02, 03, 04, 05</li>
+<li>Learn capacity estimation formulas, L4 vs L7 load balancing, Anycast DNS, and distributed unique ID generation.</li>
+</ul>
+</li>
+<li><strong>Week 2 · Storage, Replication &amp; Caching</strong>:
+<ul>
+<li>Modules 06, 07, 08, 09, 29, 10, 11, 12</li>
+<li>Deep-dive into B-Trees vs LSM-Trees, multi-region replication lag, cache-aside vs write-through, and CDN edge PoPs.</li>
+</ul>
+</li>
+<li><strong>Week 3 · Distributed Consistency &amp; Resilience</strong>:
+<ul>
+<li>Modules 13, 14, 15, 16, 31, 17, 18, 19, 20</li>
+<li>Master PACELC, linearizability vs eventual consistency, Raft leader election, Snowflake IDs, and 2PC vs Saga transactions.</li>
+</ul>
+</li>
+<li><strong>Week 4 · End-to-End System Designs</strong>:
+<ul>
+<li>Modules 21, 23, 24, 34, 39, 40, 41, 42</li>
+<li>Practice designing real-time chat, video streaming, nearby driver matching, and hotel reservation systems under timed conditions.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="track-3--8-week-complete-mastery-all-45-modules">Track 3: 🎓 8-Week Complete Mastery (All 45 Modules)</h3>
+<p><em>Best for: Staff / Principal engineer candidates aiming for top-band offers.</em></p>
+<ul>
+<li>Complete every module in sequential order from <code>01</code> to <code>45</code>.</li>
+<li>Execute all 45 runnable <code>demo.py</code> scripts to verify internal state machines and failure handling.</li>
+<li>Study both <strong>Google</strong> and <strong>Netflix</strong> production case studies in every module's <code>REAL_WORLD_EXAMPLES.md</code>.</li>
+<li>Run the <a href="../guides/order-processing-lab.html">Event-Driven Order Processing Lab</a> in Docker Compose to master the Transactional Outbox pattern.</li>
+</ul>
+<hr />
+<p><a id="timed-mock-interviews"></a></p>
+<h2 id="the-45-minute-timed-interview-framework">⏱️ The 45-Minute Timed Interview Framework</h2>
+<p>In senior system design interviews, pacing determines whether you pass or fail. Use this structured 5-phase framework:</p>
+<figure class="chapter-diagram"><pre class="mermaid">timeline
+    title 45-Minute Interview Time Allocation
+    00-05 min : Phase 1 - Requirements &amp; Estimation
+    05-15 min : Phase 2 - High-Level Architecture &amp; APIs
+    15-30 min : Phase 3 - Deep Dive into Core Bottlenecks
+    30-40 min : Phase 4 - Fault Tolerance &amp; Edge Cases
+    40-45 min : Phase 5 - Wrap-Up &amp; Trade-off Review</pre></figure>
+<h3 id="phase-1-clarify-requirements--scope-0000--0500">Phase 1: Clarify Requirements &amp; Scope (00:00 – 05:00)</h3>
+<ul>
+<li><strong>Functional Requirements</strong>: Pick the top 2–3 core features. Explicitly state what is <em>out of scope</em>.</li>
+<li><strong>Non-Functional Requirements</strong>:
+<ul>
+<li>Latency SLA (e.g. p99 &lt; 100ms)</li>
+<li>Availability target (e.g. 99.99% = 52.6 minutes downtime/year)</li>
+<li>Read-to-Write ratio and consistency needs (Strong Linearizable vs Eventual)</li>
+</ul>
+</li>
+<li><strong>Back-of-the-Envelope Math</strong>:
+<ul>
+<li>QPS (Average &amp; Peak): <span class="math-inline">DAU × Ops/Day / 86,400</span></li>
+<li>Ingress/Egress Bandwidth: <span class="math-inline">Peak QPS × Payload Size</span></li>
+<li>5-Year Storage Capacity: <span class="math-inline">Daily Storage × 365 × 5 × 3 (rep factor)</span></li>
+<li>Use the repository <a href="../guides/cheatsheet.html">Master Cheat Sheet</a> formulas.</li>
+</ul>
+</li>
+</ul>
+<h3 id="phase-2-high-level-architecture--api-design-0500--1500">Phase 2: High-Level Architecture &amp; API Design (05:00 – 15:00)</h3>
+<ul>
+<li>Draft clean REST/gRPC endpoints with request/response payloads.</li>
+<li>Draw the end-to-end data flow: Client <span class="math-inline">→</span> DNS <span class="math-inline">→</span> CDN/LB <span class="math-inline">→</span> API Gateway <span class="math-inline">→</span> Stateless Services <span class="math-inline">→</span> Caches <span class="math-inline">→</span> DBs.</li>
+<li>Identify read and write paths clearly on the whiteboard or diagram.</li>
+</ul>
+<h3 id="phase-3-deep-dive-into-core-bottlenecks-1500--3000">Phase 3: Deep Dive into Core Bottlenecks (15:00 – 30:00)</h3>
+<ul>
+<li>The interviewer will pivot here. Focus on the hard distributed systems challenges:
+<ul>
+<li><strong>Data Model &amp; Partitioning</strong>: Choose partition keys (<code>user_id</code>, <code>geohash</code>, <code>time_bucket</code>) to avoid hot spots.</li>
+<li><strong>Caching Strategy</strong>: Cache-Aside vs Write-Through; invalidation rules; TTL jitter to prevent thundering herd.</li>
+<li><strong>Concurrency Control</strong>: Optimistic locking (<code>version</code> column) vs Distributed Locks (Redis/ZooKeeper).</li>
+</ul>
+</li>
+</ul>
+<h3 id="phase-4-fault-tolerance-failure-modes--edge-cases-3000--4000">Phase 4: Fault Tolerance, Failure Modes &amp; Edge Cases (30:00 – 40:00)</h3>
+<ul>
+<li>What happens when a primary database crashes? (Leader election, replica promotion, split-brain mitigation).</li>
+<li>What happens when network partitions isolate a region? (PACELC trade-off, multi-region active-active vs active-passive).</li>
+<li>How do you handle cascade failures? (Circuit breakers, exponential backoff with full jitter, bulkheads).</li>
+</ul>
+<h3 id="phase-5-wrap-up--trade-off-review-4000--4500">Phase 5: Wrap-Up &amp; Trade-off Review (40:00 – 45:00)</h3>
+<ul>
+<li>Summarize the top 3 architectural trade-offs made (e.g., opted for eventual consistency in timeline feeds to maximize write availability).</li>
+<li>Propose monitoring metrics (p99 latency, error rates, queue consumer lag).</li>
+<li>Answer any remaining interviewer questions.</li>
+</ul>
+<hr />
+<h2 id="senior-interview-readiness-checklist">📋 Senior Interview Readiness Checklist</h2>
+<p>Before your on-site interview, ensure you can confidently answer and draw diagrams for:</p>
+<ul>
+<li>[ ] <strong>Quant sizing</strong>: Can you convert 100M daily requests to average QPS in 30 seconds without a calculator?</li>
+<li>[ ] <strong>Database choice</strong>: Can you articulate why MongoDB or Cassandra fits high write-throughput, but Postgres fits transactional billing?</li>
+<li>[ ] <strong>Replication</strong>: Can you explain why async replica lag can lead to stale reads and how to implement &quot;Read-Your-Own-Writes&quot;?</li>
+<li>[ ] <strong>Consensus</strong>: Can you explain why Raft requires a minimum of 3 nodes for single failure tolerance (<span class="math-inline">2F+1</span> quorum)?</li>
+<li>[ ] <strong>Sharding</strong>: Can you explain why resharding a hash-modulo (<span class="math-inline">N ±od M</span>) database requires moving 90%+ of keys, and how Consistent Hashing fixes it?</li>
+<li>[ ] <strong>Idempotency</strong>: Can you draw how Stripe or payment systems prevent double-charges using an idempotency key and a durable record of the operation?</li>
+<li>[ ] <strong>Flashcards</strong>: Can you explain the cards you marked for review in the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">Interactive Flashcard Web App</a>?</li>
+</ul>
+<h2 id="timed-mock-interviews">Timed mock interviews</h2>
+<p>For each prompt, spend five minutes clarifying requirements and five estimating load. Divide the remaining time between drawing the design and explaining its failure modes. Give yourself one point per rubric item you address concretely.</p>
+<h3 id="url-shortener--25-minutes">URL shortener · 25 minutes</h3>
+<p>Design for 100 million redirects and 2 million new links per day. Links must work during a cache outage. Explain custom aliases and how a link owner can disable a link.</p>
+<details>
+<summary>Rubric and walkthrough</summary>
+<ul>
+<li>Estimate read and write rates separately and state a peak assumption.</li>
+<li>Define create and redirect APIs and explain identifier collisions.</li>
+<li>Trace cache hits, misses, and an outage.</li>
+<li>Explain how disabling a link reaches caches and how long a stale redirect could survive.</li>
+<li>Choose a latency or availability objective and justify one trade-off.</li>
+</ul>
+<p><a href="../chapters/21-system-design-url-shortener/index.html">URL shortener walkthrough</a></p>
+</details>
+<h3 id="notifications--35-minutes">Notifications · 35 minutes</h3>
+<p>Design email and push notifications for five million recipients. Users can opt out of promotions. A provider begins timing out during a campaign. Explain how alerts and promotions share capacity.</p>
+<details>
+<summary>Rubric and walkthrough</summary>
+<ul>
+<li>Separate transactional and promotional requirements and size a burst.</li>
+<li>Draw the producer, queue, workers, and delivery state.</li>
+<li>Explain when preferences are enforced and how updates affect queued work.</li>
+<li>Bound retries and describe how duplicate deliveries and provider outages are handled.</li>
+<li>Explain priority or isolation and name a metric that reveals backlog.</li>
+</ul>
+<p><a href="../chapters/35-system-design-notification-system/index.html">Notification walkthrough</a></p>
+</details>
+<h3 id="hotel-reservation--40-minutes">Hotel reservation · 40 minutes</h3>
+<p>Two people try to book the last suitable room over three nights. A payment succeeds, but the response times out. Design inventory, holds, and payment confirmation.</p>
+<details>
+<summary>Rubric and walkthrough</summary>
+<ul>
+<li>Clarify room type versus specific room assignment and model the full stay.</li>
+<li>Choose a transaction rule that prevents partial holds and overbooking.</li>
+<li>Describe expiry and what happens when confirmation races with it.</li>
+<li>Use a stable payment idempotency key and explain how an unknown outcome is reconciled.</li>
+<li>Draw the reservation states and show what support can inspect after a failure.</li>
+</ul>
+<p><a href="../chapters/41-system-design-hotel-reservation/index.html">Hotel reservation walkthrough</a></p>
+</details>
+<hr />
+<h2 id="community-contributions">🤝 Community Contributions</h2>
+<p>Have an alternative solution, post-mortem war story, or interview question? We welcome community contributions! Check out <a href="../guides/contributing.html">CONTRIBUTING.md</a> to see how you can add your own knowledge to this guide.</p>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

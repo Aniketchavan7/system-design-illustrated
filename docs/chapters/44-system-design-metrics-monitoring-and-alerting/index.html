@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-44-system-design--metrics-monitoring--alerting-system">Module 44: System Design — Metrics Monitoring &amp; Alerting System</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-44-system-design--metrics-monitoring--alerting-system">Module 44: System Design — Metrics Monitoring &amp; Alerting System</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a large-scale Metrics Monitoring &amp; Alerting System (Prometheus, Datadog, Google Monarch, Netflix Atlas), covering Time-Series Databases (TSDB), Gorilla compression, Pull vs. Push collection models, and sliding-window alert evaluation.</p>
 </blockquote>
@@ -30,10 +30,10 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling metrics monitoring systems, review these core modules:</p>
 <ul>
-<li><a href="../09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (LSM-trees vs Append-only time-series engines)</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (High-throughput metric ingestion pipelines)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Alert deduplication, flapping prevention, on-call paging)</li>
-<li><a href="../35-system-design-notification-system/index.html">35 - Global Notification System</a> (PagerDuty, Slack, SMS dispatch)</li>
+<li><a href="../../chapters/09-storage-engines-and-indexing/index.html">09 - Storage Engines &amp; Indexing</a> (LSM-trees vs Append-only time-series engines)</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Streaming</a> (High-throughput metric ingestion pipelines)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Alert deduplication, flapping prevention, on-call paging)</li>
+<li><a href="../../chapters/35-system-design-notification-system/index.html">35 - Global Notification System</a> (PagerDuty, Slack, SMS dispatch)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -70,11 +70,11 @@
 <tr>
 <td style="text-align:left"><strong>Compressing Identical Altitude Readings</strong></td>
 <td style="text-align:left">Gorilla Compression (Delta-of-Delta)</td>
-<td style="text-align:left">Bitwise compression reducing 16 bytes per datapoint to $\approx 1.37\text{ bytes}$.</td>
+<td style="text-align:left">Bitwise compression reducing 16 bytes per datapoint to <span class="math-inline">≈ 1.37 bytes</span>.</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Alarm Buzzer when Plane Altitude &lt; 1,000ft for 30s</strong></td>
-<td style="text-align:left">Alert Rule Evaluation (<code>PENDING</code> $\rightarrow$ <code>FIRING</code>)</td>
+<td style="text-align:left">Alert Rule Evaluation (<code>PENDING</code> <span class="math-inline">→</span> <code>FIRING</code>)</td>
 <td style="text-align:left">Evaluates rules over sliding time windows before triggering PagerDuty.</td>
 </tr>
 </tbody>
@@ -83,13 +83,16 @@
 <h2 id="the-problem-it-solves">The Problem It Solves</h2>
 <p>Operating thousands of microservice instances across multi-region cloud clusters presents massive observability challenges:</p>
 <ol>
-<li><strong>Unprecedented Data Volume</strong>: 50,000 microservice pods emitting 100 metrics every 10 seconds generates <strong>500,000 datapoints/second</strong> ($43.2\text{ billion datapoints/day}$).</li>
+<li><strong>Unprecedented Data Volume</strong>: 50,000 microservice pods emitting 100 metrics every 10 seconds generates <strong>500,000 datapoints/second</strong> (<span class="math-inline">43.2 billion datapoints/day</span>).</li>
 <li><strong>Heavy Read vs Write Asymmetry</strong>: Ingestion is 99% writes, while human engineers and dashboards execute complex aggregations (p99 latency over 7 days).</li>
 <li><strong>Storage Cost</strong>: Storing billions of uncompressed 64-bit float numbers in standard SQL databases consumes hundreds of terabytes and results in query timeouts.</li>
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/tsdb_metrics_pipeline.svg" alt="Metrics Collection, Gorilla TSDB Compression & Alerting" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Instrumentation[&quot;1. Metrics Collection Layer&quot;]
         AppPod1[&quot;Microservice Pod A (/metrics)&quot;]
         AppPod2[&quot;Microservice Pod B (/metrics)&quot;]
@@ -118,8 +121,7 @@
         StateCheck --&gt;|&quot;Breached &gt; 3m&quot;| Firing[&quot;State: FIRING (Page Engineer)&quot;]
         Firing --&gt; AlertMgr[&quot;AlertManager (Deduplicate &amp; Group)&quot;]
         AlertMgr --&gt; PagerDuty[&quot;PagerDuty / Slack / Email&quot;]
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
 <p>Consider a system monitoring <strong>50,000 Microservice Pods</strong>:</p>
@@ -128,17 +130,17 @@
 <ul>
 <li>Each pod emits 100 unique metrics (CPU, RAM, request latency, error count, connection pools).</li>
 <li>Metrics collected every 10 seconds:</li>
-<li>Metric streams: $50,000 \times 100 = 5\text{ million time series}$.</li>
-<li>Ingestion rate: $5\text{M} / 10\text{ s} = 500,000\text{ metric datapoints/second}$.</li>
-<li>Daily datapoints: $500,000 \times 86,400 \approx 43.2\text{ billion datapoints/day}$.</li>
+<li>Metric streams: <span class="math-inline">50,000 × 100 = 5 million time series</span>.</li>
+<li>Ingestion rate: <span class="math-inline">5M / 10 s = 500,000 metric datapoints/second</span>.</li>
+<li>Daily datapoints: <span class="math-inline">500,000 × 86,400 ≈ 43.2 billion datapoints/day</span>.</li>
 </ul>
 </li>
 <li><strong>Gorilla Compression Sizing</strong>:
 <ul>
 <li>Raw uncompressed datapoint: 8-byte Unix timestamp + 8-byte IEEE 754 float = 16 bytes.</li>
-<li>Raw daily volume: $43.2\text{B} \times 16\text{ bytes} \approx 691.2\text{ Gigabytes/day}$.</li>
-<li>With <strong>Gorilla XOR Compression</strong> ($\approx 1.37\text{ bytes/datapoint}$ $\approx 12\times$ compression):</li>
-<li>Compressed daily volume: $43.2\text{B} \times 1.37\text{ bytes} \approx 59.2\text{ Gigabytes/day}$!</li>
+<li>Raw daily volume: <span class="math-inline">43.2B × 16 bytes ≈ 691.2 Gigabytes/day</span>.</li>
+<li>With <strong>Gorilla XOR Compression</strong> (<span class="math-inline">≈ 1.37 bytes/datapoint</span> <span class="math-inline">≈ 12×</span> compression):</li>
+<li>Compressed daily volume: <span class="math-inline">43.2B × 1.37 bytes ≈ 59.2 Gigabytes/day</span>!</li>
 <li>59.2 GB fits easily on modern high-speed NVMe SSD drives.</li>
 </ul>
 </li>
@@ -182,16 +184,16 @@
 <ul>
 <li><strong>Timestamp Compression (Delta-of-Delta)</strong>:
 <ul>
-<li>Metrics arrive at predictable intervals (every 10s: $T_0, T_0+10, T_0+20$).</li>
-<li>The first delta is $D = T_n - T_{n-1} = 10$.</li>
-<li>The delta-of-delta is $\Delta = D_n - D_{n-1} = 10 - 10 = 0$.</li>
-<li>If $\Delta = 0$, store a single bit <code>0</code>! 95%+ of timestamps compress down to a single bit.</li>
+<li>Metrics arrive at predictable intervals (every 10s: <span class="math-inline">T<sub>0</sub>, T<sub>0</sub>+10, T<sub>0</sub>+20</span>).</li>
+<li>The first delta is <span class="math-inline">D = T<sub>n</sub> - T<sub>n-1</sub> = 10</span>.</li>
+<li>The delta-of-delta is <span class="math-inline">Δ = D<sub>n</sub> - D<sub>n-1</sub> = 10 - 10 = 0</span>.</li>
+<li>If <span class="math-inline">Δ = 0</span>, store a single bit <code>0</code>! 95%+ of timestamps compress down to a single bit.</li>
 </ul>
 </li>
 <li><strong>Value Compression (XOR Floating Point)</strong>:
 <ul>
 <li>Metric values rarely fluctuate wildly (e.g., CPU 42.1%, then 42.15%).</li>
-<li>XOR the current float with the previous float: $V_n \oplus V_{n-1}$.</li>
+<li>XOR the current float with the previous float: <span class="math-inline">V<sub>n</sub> \oplus V<sub>n-1</sub></span>.</li>
 <li>Most leading and trailing bits are identical zeroes, allowing variable-length bit packing.</li>
 </ul>
 </li>
@@ -250,7 +252,7 @@
 </ol>
 <hr />
 <h2 id="try-it-yourself">Try It Yourself</h2>
-<p>A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (<code>OK</code> $\rightarrow$ <code>PENDING</code> $\rightarrow$ <code>FIRING</code>) is included in this directory.</p>
+<p>A runnable, zero-dependency Python simulation demonstrating time-series metric ingestion, Gorilla-style delta compression, downsampling rollups, and rule-based alert state transitions (<code>OK</code> <span class="math-inline">→</span> <code>PENDING</code> <span class="math-inline">→</span> <code>FIRING</code>) is included in this directory.</p>
 <p>Run the simulation:</p>
 <pre><code class="language-bash">python demo.py
 </code></pre>
@@ -266,14 +268,14 @@
 <h3 id="q1-how-does-gorilla-compression-achieve-a-10x-reduction-in-time-series-storage-size">Q1: How does Gorilla compression achieve a 10x reduction in time-series storage size?</h3>
 <p><strong>Model Answer</strong>: Gorilla compresses timestamps and floating-point values independently:</p>
 <ol>
-<li><strong>Delta-of-Delta for Timestamps</strong>: Because metrics are scraped at regular intervals (e.g., every 10s), the difference between consecutive time deltas ($\Delta = (T_n - T_{n-1}) - (T_{n-1} - T_{n-2})$) is zero most of the time. When $\Delta = 0$, Gorilla stores a single bit <code>0</code>.</li>
-<li><strong>XOR Floating-Point Compression</strong>: Successive float values (e.g., CPU percentage) have similar binary representations. By computing $V_n \oplus V_{n-1}$, identical leading and trailing bits become zeros. Gorilla only encodes the number of leading and trailing zeros followed by the meaningful bits.
+<li><strong>Delta-of-Delta for Timestamps</strong>: Because metrics are scraped at regular intervals (e.g., every 10s), the difference between consecutive time deltas (<span class="math-inline">Δ = (T<sub>n</sub> - T<sub>n-1</sub>) - (T<sub>n-1</sub> - T<sub>n-2</sub>)</span>) is zero most of the time. When <span class="math-inline">Δ = 0</span>, Gorilla stores a single bit <code>0</code>.</li>
+<li><strong>XOR Floating-Point Compression</strong>: Successive float values (e.g., CPU percentage) have similar binary representations. By computing <span class="math-inline">V<sub>n</sub> \oplus V<sub>n-1</sub></span>, identical leading and trailing bits become zeros. Gorilla only encodes the number of leading and trailing zeros followed by the meaningful bits.
 Together, these techniques compress 16-byte datapoints down to an average of <strong>1.37 bytes</strong>.</li>
 </ol>
 <h3 id="q2-what-is-the-high-cardinality-problem-in-metrics-monitoring-and-how-do-you-prevent-it">Q2: What is the &quot;High Cardinality Problem&quot; in metrics monitoring, and how do you prevent it?</h3>
 <p><strong>Model Answer</strong>: In time-series databases, a unique time-series stream is created for every unique combination of metric name and key-value label pairs.</p>
 <ul>
-<li>If a developer adds a high-cardinality tag like <code>user_id</code> ($10	ext{M}$ values) or <code>order_id</code> ($100	ext{M}$ values) to a metric, the system must allocate 10 million independent time-series streams in memory.</li>
+<li>If a developer adds a high-cardinality tag like <code>user_id</code> (<span class="math-inline">10M</span> values) or <code>order_id</code> (<span class="math-inline">100M</span> values) to a metric, the system must allocate 10 million independent time-series streams in memory.</li>
 <li>This results in memory exhaustion, massive index bloat, and TSDB crashes.</li>
 <li><strong>Prevention</strong>: Enforce strict admission control and linting rejecting UUIDs or dynamic strings in label keys. High-cardinality attributes belong in distributed tracing (OpenTelemetry) or structured logs, never metric labels.</li>
 </ul>
@@ -286,7 +288,7 @@ Together, these techniques compress 16-byte datapoints down to an average of <st
 <h3 id="q4-how-do-you-prevent-alert-fatigue-and-flapping-alerts">Q4: How do you prevent &quot;Alert Fatigue&quot; and flapping alerts?</h3>
 <p><strong>Model Answer</strong>:</p>
 <ol>
-<li><strong>Sustained Duration Condition (<code>FOR</code> clause)</strong>: Require the metric to breach the threshold continuously for $M$ minutes (e.g., <code>CPU &gt; 90% FOR 5m</code>) before advancing from <code>PENDING</code> to <code>FIRING</code>.</li>
+<li><strong>Sustained Duration Condition (<code>FOR</code> clause)</strong>: Require the metric to breach the threshold continuously for <span class="math-inline">M</span> minutes (e.g., <code>CPU &gt; 90% FOR 5m</code>) before advancing from <code>PENDING</code> to <code>FIRING</code>.</li>
 <li><strong>AlertManager Deduplication &amp; Grouping</strong>: Group related alerts into a single notification (e.g., if a datacenter switch fails, group 50 individual server unreachable alerts into <em>&quot;Datacenter Switch Offline: 50 pods affected&quot;</em>).</li>
 <li><strong>Inhibit Rules</strong>: Suppress downstream alerts when a root dependency has already triggered (e.g., if the entire database cluster is down, mute downstream API latency alerts).</li>
 </ol>
@@ -342,7 +344,20 @@ D) Consistent Hashing<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

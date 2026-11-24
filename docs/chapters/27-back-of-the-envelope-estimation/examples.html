@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-back-of-the-envelope-estimation">Real-World Production Deep Dives: Back-of-the-Envelope Estimation</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-back-of-the-envelope-estimation">Real-World Production Deep Dives: Back-of-the-Envelope Estimation</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix</strong> use quantitative estimation models for global capacity planning, datastore sizing, and network bandwidth forecasting.</p>
 </blockquote>
@@ -37,13 +37,15 @@
 <p>When Google sized its crawling and index storage:</p>
 <ol>
 <li><strong>The Crawl Target</strong>: Estimate 20 Billion web pages indexed.</li>
-<li><strong>Page Content</strong>: Average HTML page after compression is $\approx 20	ext{ KB}$.</li>
-<li><strong>Raw Storage Requirement</strong>:
-$$20,000,000,000 	imes 20	ext{ KB} = 400	ext{ Terabytes of raw text}$$</li>
+<li><strong>Page Content</strong>: Average HTML page after compression is <span class="math-inline">≈ 20 KB</span>.</li>
+<li><strong>Raw Storage Requirement</strong>:</li>
+</ol>
+<div class="math-block">20,000,000,000 × 20 KB = 400 Terabytes of raw text</div>
+<ol start="4">
 <li><strong>The Storage Multipliers</strong>:
 <ul>
-<li>Inverted word index + PageRank link graph adds $2	imes$ overhead $	o 800	ext{ TB}$.</li>
-<li>3x GFS / Colossus distributed replication $	o \mathbf{2.4	ext{ Petabytes}}$.</li>
+<li>Inverted word index + PageRank link graph adds <span class="math-inline">2×</span> overhead <span class="math-inline">→ 800 TB</span>.</li>
+<li>3x GFS / Colossus distributed replication <span class="math-inline">→ 2.4 Petabytes</span>.</li>
 </ul>
 </li>
 <li><strong>Memory Sizing</strong>:
@@ -73,16 +75,15 @@ $$20,000,000,000 	imes 20	ext{ KB} = 400	ext{ Terabytes of raw text}$$</li>
 <li>Each custom Netflix OCA server has a <strong>100Gbps network interface card</strong> and <strong>200TB of NVMe flash storage</strong>.</li>
 </ul>
 </li>
-<li><strong>Server Count Calculation</strong>:
-$$	ext{Servers Needed} = \frac{1,200	ext{ Gbps}}{100	ext{ Gbps/server}} = 12	ext{ Servers}$$
-Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Servers}}$ deployed in the Chicago IXP rack.</li>
-<li><strong>Storage Sizing</strong>:
-<ul>
-<li>14 servers $	imes$ 200TB $= 2.8	ext{ Petabytes}$ of local flash storage.</li>
-<li>Completely holds the top 4,000 most popular movies and episodes, delivering a <strong>$98%$ local cache hit rate</strong> with zero origin bandwidth consumption during prime time!</li>
-</ul>
-</li>
+<li><strong>Server Count Calculation</strong>:</li>
 </ol>
+<div class="math-block">Servers Needed = (1,200 Gbps) / (100 Gbps/server) = 12 Servers</div>
+<p>Add <span class="math-inline">N+2</span> redundancy for hardware failure <span class="math-inline">→ 14 Open Connect Servers</span> deployed in the Chicago IXP rack.
+4. <strong>Storage Sizing</strong>:</p>
+<ul>
+<li>14 servers <span class="math-inline">×</span> 200TB <span class="math-inline">= 2.8 Petabytes</span> of local flash storage.</li>
+<li>Completely holds the top 4,000 most popular movies and episodes, delivering a <strong><span class="math-inline">98%</span> local cache hit rate</strong> with zero origin bandwidth consumption during prime time!</li>
+</ul>
 <hr />
 <h2 id="comparative-estimation-matrix">⚖️ Comparative Estimation Matrix</h2>
 <table>
@@ -106,8 +107,8 @@ Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Serve
 </tr>
 <tr>
 <td><strong>Safety Headroom Factor</strong></td>
-<td>$1.5	imes$ to $2.0	imes$ peak traffic headroom</td>
-<td>Provisioned for $N+2$ server rack failures</td>
+<td><span class="math-inline">1.5×</span> to <span class="math-inline">2.0×</span> peak traffic headroom</td>
+<td>Provisioned for <span class="math-inline">N+2</span> server rack failures</td>
 </tr>
 <tr>
 <td><strong>Cost Tradeoff</strong></td>
@@ -119,14 +120,18 @@ Add $N+2$ redundancy for hardware failure $	o \mathbf{14	ext{ Open Connect Serve
 <hr />
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Memorize the Rule of Thumb</strong>: Remember that $1	ext{M requests/day} \approx 12	ext{ QPS}$ and $1	ext{B requests/day} \approx 12,000	ext{ QPS}$. It allows you to produce immediate QPS answers in seconds.</li>
-<li><strong>Always Account for Replication Overhead</strong>: When calculating storage, never stop at raw data size. Always multiply by $3	imes$ for distributed replication (e.g. S3, GFS, Cassandra).</li>
+<li><strong>Memorize the Rule of Thumb</strong>: Remember that <span class="math-inline">1M requests/day ≈ 12 QPS</span> and <span class="math-inline">1B requests/day ≈ 12,000 QPS</span>. It allows you to produce immediate QPS answers in seconds.</li>
+<li><strong>Always Account for Replication Overhead</strong>: When calculating storage, never stop at raw data size. Always multiply by <span class="math-inline">3×</span> for distributed replication (e.g. S3, GFS, Cassandra).</li>
 <li><strong>Buffer for Caching Overhead</strong>: In RAM estimation, always add a 20–30% memory buffer for data structure pointers, slab fragmentation, and hash map overhead.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

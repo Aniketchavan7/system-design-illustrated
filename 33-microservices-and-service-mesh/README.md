@@ -48,6 +48,10 @@ A **Service Mesh** extracts all networking, observability, security, and traffic
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/service_mesh_planes.svg" alt="Microservices Control Plane vs. Envoy Sidecar Data Plane" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph ControlPlane["Service Mesh Control Plane (e.g., Istio)"]

@@ -22,18 +22,22 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="load-balancing-in-production">Load balancing in production</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/simulator.html">Traffic &amp; server failure simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="load-balancing-in-production">Load balancing in production</h1>
 <h2 id="google--maglev">Google · Maglev</h2>
 <p>Google's 2016 NSDI paper describes Maglev as a software network load balancer. Routers distribute packets to Maglev instances using equal-cost multipath routing. Each instance selects service endpoints and uses consistent hashing and connection tracking to reduce disruption to existing connections during failures. The paper reports that a single Maglev machine could saturate a <strong>10 Gbps</strong> link using small packets in the setup it evaluated. That is a historical packet-processing result for Maglev. <a href="https://research.google/pubs/maglev-a-fast-and-reliable-software-network-load-balancer/">Google's 2016 Maglev paper</a></p>
 <p><strong>Apply it to Trail Notes.</strong> When a backend disappears, distinguish what should happen to new requests from what can happen to a connection already assigned to the failed backend.</p>
 <h2 id="netflix--routing-and-overload">Netflix · Routing and overload</h2>
 <p>Netflix's original Zuul write-up describes using Ribbon for outbound client-side load balancing. Its November 2020 engineering post describes how Zuul shed lower-priority requests progressively under pressure to protect playback. The team reported that its streaming availability metric held steady during the incident shown in the post. <a href="https://netflixtechblog.com/announcing-zuul-edge-service-in-the-cloud-ab3af5be08ee">Netflix's original Zuul write-up</a> · <a href="https://netflixtechblog.com/keeping-netflix-reliable-using-prioritized-load-shedding-6cc827b02f94">Netflix's 2020 load-shedding write-up</a></p>
 <p><strong>Apply it to Trail Notes.</strong> In the hypothetical lesson workload, protect the guide request first during a sustained capacity shortfall. Optional work, such as recommendations, may be a candidate for shedding. Decide which requests qualify and measure whether essential requests still meet their latency target.</p>
-<p><a href="../03-load-balancing/index.html#first-pass">Return to the load-balancing lesson</a></p>
+<p><a href="../../chapters/03-load-balancing/index.html#first-pass">Return to the load-balancing lesson</a></p>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

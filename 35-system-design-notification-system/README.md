@@ -46,6 +46,10 @@ A notification service must process billions of outbound events daily while solv
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/notification_pipeline.svg" alt="High-Throughput Multi-Channel Notification Platform" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion Layer"]

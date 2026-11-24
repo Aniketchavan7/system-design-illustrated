@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-45-system-design--ad-click-aggregation--event-analytics">Module 45: System Design — Ad Click Aggregation &amp; Event Analytics</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-45-system-design--ad-click-aggregation--event-analytics">Module 45: System Design — Ad Click Aggregation &amp; Event Analytics</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a Real-Time Ad Click Aggregation and Analytics System (Google Ads, Meta Ads, TikTok), covering stream processing (Flink/Spark), windowing strategies (Tumbling, Hopping, Sliding), Watermark heuristics for late-arriving events, and click-fraud deduplication.</p>
 </blockquote>
@@ -30,10 +30,10 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling ad click aggregation, review these core modules:</p>
 <ul>
-<li><a href="../17-message-queues/index.html">17 - Message Queues &amp; Event Streaming</a> (Kafka topics, consumer groups, partitions)</li>
-<li><a href="../27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Calculating click throughput and aggregation storage)</li>
-<li><a href="../31-time-clocks-and-ordering/index.html">31 - Time, Clocks &amp; Ordering</a> (Event time vs Processing time vs Ingestion time)</li>
-<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent tracking endpoints)</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues &amp; Event Streaming</a> (Kafka topics, consumer groups, partitions)</li>
+<li><a href="../../chapters/27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Calculating click throughput and aggregation storage)</li>
+<li><a href="../../chapters/31-time-clocks-and-ordering/index.html">31 - Time, Clocks &amp; Ordering</a> (Event time vs Processing time vs Ingestion time)</li>
+<li><a href="../../chapters/32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotent tracking endpoints)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -84,12 +84,15 @@
 <p>Digital advertising engines (Google Search Ads, Instagram Sponsored Posts) power multi-billion dollar ecosystems:</p>
 <ol>
 <li><strong>Financial Integrity</strong>: Advertisers pay real money per click (Cost-Per-Click: CPC). Over-counting due to network retries causes advertiser lawsuits; under-counting loses revenue.</li>
-<li><strong>Massive Scale</strong>: Platforms process <strong>10 billion ad impressions and 1 billion clicks daily</strong> ($&gt; 50,000\text{ clicks/second}$ peak).</li>
+<li><strong>Massive Scale</strong>: Platforms process <strong>10 billion ad impressions and 1 billion clicks daily</strong> (<span class="math-inline">&gt; 50,000 clicks/second</span> peak).</li>
 <li><strong>Event Time vs. Processing Time Discrepancies</strong>: A user clicks an ad at <code>14:00:00</code> on a subway train; their phone loses signal and delivers the click payload at <code>14:12:30</code>. The system must attribute the click to the <code>14:00:00</code> window for accurate analytics.</li>
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/ad_click_streaming.svg" alt="Real-Time Ad Click Aggregation (Flink Exactly-Once Pipeline)" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Clients[&quot;1. Ingestion Layer&quot;]
         UserPhone[&quot;User Mobile / Web Client&quot;] --&gt;|&quot;POST /v1/ad_clicks&quot;| LB[&quot;Global Load Balancer&quot;]
         LB --&gt; EdgeGW[&quot;Click Tracking Ingestion Service&quot;]
@@ -109,26 +112,25 @@
         CountAgg --&gt; KafkaAgg[&quot;Kafka: aggregated-clicks-topic&quot;]
         KafkaAgg --&gt; OLAP[(&quot;ClickHouse / Apache Pinot (Advertiser Dashboard)&quot;)]
         KafkaAgg --&gt; BillingDB[(&quot;Double-Entry Billing DB (PostgreSQL / Spanner)&quot;)]
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
 <p>Consider an ad network handling <strong>1 Billion Ad Clicks Daily</strong>:</p>
 <ul>
 <li><strong>Throughput Sizing</strong>:
 <ul>
-<li>$1\text{B} / 86,400 \approx 11,570\text{ clicks/second}$ average.</li>
-<li>Peak click throughput ($3\times$): <strong>$35,000\text{ clicks/second}$</strong>.</li>
+<li><span class="math-inline">1B / 86,400 ≈ 11,570 clicks/second</span> average.</li>
+<li>Peak click throughput (<span class="math-inline">3×</span>): <strong><span class="math-inline">35,000 clicks/second</span></strong>.</li>
 </ul>
 </li>
 <li><strong>Storage Reduction via 1-Minute Aggregation</strong>:
 <ul>
-<li>Raw click event: <code>(click_id, ad_id, campaign_id, user_id, ip, timestamp, bid_price)</code> $\approx 200\text{ bytes}$.</li>
-<li>Raw daily storage: $1\text{B} \times 200\text{ bytes} = 200\text{ Gigabytes/day}$.</li>
+<li>Raw click event: <code>(click_id, ad_id, campaign_id, user_id, ip, timestamp, bid_price)</code> <span class="math-inline">≈ 200 bytes</span>.</li>
+<li>Raw daily storage: <span class="math-inline">1B × 200 bytes = 200 Gigabytes/day</span>.</li>
 <li>If 50,000 active ad campaigns receive clicks every minute:</li>
-<li>1-minute aggregation produces $50,000 \times 60 \times 24 = 72\text{ million rows/day}$.</li>
-<li>Aggregated row: <code>(ad_id, minute_timestamp, click_count, total_cost)</code> $\approx 32\text{ bytes}$.</li>
-<li>Aggregated daily storage: $72\text{M} \times 32\text{ bytes} \approx 2.3\text{ Gigabytes/day}$!</li>
+<li>1-minute aggregation produces <span class="math-inline">50,000 × 60 × 24 = 72 million rows/day</span>.</li>
+<li>Aggregated row: <code>(ad_id, minute_timestamp, click_count, total_cost)</code> <span class="math-inline">≈ 32 bytes</span>.</li>
+<li>Aggregated daily storage: <span class="math-inline">72M × 32 bytes ≈ 2.3 Gigabytes/day</span>!</li>
 <li><strong>98.8% storage reduction</strong> while powering sub-100ms dashboard queries!</li>
 </ul>
 </li>
@@ -162,13 +164,15 @@
 <li><strong>Processing Time</strong>: The timestamp when the stream processor (Flink) processes the event.</li>
 <li><strong>The Watermark Algorithm</strong>:
 <ul>
-<li>A Watermark $W(t)$ is a declaration: <em>&quot;We assert that all events with Event Time $\le t$ have arrived&quot;</em>.</li>
-<li>To handle network delays, we set <strong>Bounded Out-of-Orderness</strong> (e.g., 5 minutes):
-$$W(t) = \max(\text{Event Time seen so far}) - 5\text{ minutes}$$</li>
-<li>When the Watermark passes <code>12:05:00</code>, the <code>[12:00 - 12:05]</code> window closes and outputs final numbers.</li>
-<li>Events arriving <em>after</em> the watermark are either processed via <strong>Side Outputs</strong> or dropped as late anomalies.</li>
+<li>A Watermark <span class="math-inline">W(t)</span> is a declaration: <em>&quot;We assert that all events with Event Time <span class="math-inline">≤ t</span> have arrived&quot;</em>.</li>
+<li>To handle network delays, we set <strong>Bounded Out-of-Orderness</strong> (e.g., 5 minutes):</li>
 </ul>
 </li>
+</ul>
+<div class="math-block">W(t) = \max(Event Time seen so far) - 5 minutes</div>
+<ul>
+<li>When the Watermark passes <code>12:05:00</code>, the <code>[12:00 - 12:05]</code> window closes and outputs final numbers.</li>
+<li>Events arriving <em>after</em> the watermark are either processed via <strong>Side Outputs</strong> or dropped as late anomalies.</li>
 </ul>
 <h3 id="3-click-fraud--bot-detection">3. Click-Fraud &amp; Bot Detection</h3>
 <p>Fraudulent networks generate fake clicks to drain competitor ad budgets.</p>
@@ -240,11 +244,11 @@ $$W(t) = \max(\text{Event Time seen so far}) - 5\text{ minutes}$$</li>
 For financial billing and business analytics, <strong>Event Time</strong> is mandatory because network lags and queue buffering introduce random delays between event occurrence and stream processing.</li>
 </ul>
 <h3 id="q2-how-do-watermarks-handle-late-arriving-events-in-apache-flink-or-google-cloud-dataflow">Q2: How do Watermarks handle late-arriving events in Apache Flink or Google Cloud Dataflow?</h3>
-<p><strong>Model Answer</strong>: A Watermark is a monotonically increasing timestamp emitted into the stream that acts as a completion horizon: $W(t) = \max(	ext{Event Time seen}) - 	ext{Allowed Latency } \Delta$.</p>
+<p><strong>Model Answer</strong>: A Watermark is a monotonically increasing timestamp emitted into the stream that acts as a completion horizon: <span class="math-inline">W(t) = \max(Event Time seen) - Allowed Latency Δ</span>.</p>
 <ul>
-<li>A Watermark $W(12:05)$ guarantees to downstream operators that no further events with timestamp $\le 12:05$ are expected to arrive.</li>
-<li>When $W(t)$ passes the end of a window (e.g., 12:00), the window closes and emits its final aggregated output.</li>
-<li>If a late event arrives with $t &lt; W$, Flink handles it using an <strong>Allowed Lateness Policy</strong>: it can either update the window via a retraction stream or divert the event to a <strong>Side Output</strong> for manual reconciliation.</li>
+<li>A Watermark <span class="math-inline">W(12:05)</span> guarantees to downstream operators that no further events with timestamp <span class="math-inline">≤ 12:05</span> are expected to arrive.</li>
+<li>When <span class="math-inline">W(t)</span> passes the end of a window (e.g., 12:00), the window closes and emits its final aggregated output.</li>
+<li>If a late event arrives with <span class="math-inline">t &lt; W</span>, Flink handles it using an <strong>Allowed Lateness Policy</strong>: it can either update the window via a retraction stream or divert the event to a <strong>Side Output</strong> for manual reconciliation.</li>
 </ul>
 <h3 id="q3-how-do-you-achieve-exactly-once-processing-in-an-ad-click-aggregation-pipeline">Q3: How do you achieve Exactly-Once Processing in an ad click aggregation pipeline?</h3>
 <p><strong>Model Answer</strong>: Exactly-once processing is achieved through end-to-end alignment across three pipeline stages:</p>
@@ -263,9 +267,9 @@ For financial billing and business analytics, <strong>Event Time</strong> is man
 <h3 id="q5-why-is-clickhouse-or-apache-pinot-preferred-over-postgresql-for-storing-aggregated-ad-analytics">Q5: Why is ClickHouse or Apache Pinot preferred over PostgreSQL for storing aggregated ad analytics?</h3>
 <p><strong>Model Answer</strong>:</p>
 <ul>
-<li><strong>Columnar Storage</strong>: Aggregated analytics queries calculate aggregate functions over specific columns (<code>SELECT ad_id, SUM(clicks), SUM(cost) WHERE date = '2026-11-23' GROUP BY ad_id</code>). Columnar databases only read the requested columns off disk, scanning $10	imes$ to $50	imes$ less data than row-oriented PostgreSQL.</li>
+<li><strong>Columnar Storage</strong>: Aggregated analytics queries calculate aggregate functions over specific columns (<code>SELECT ad_id, SUM(clicks), SUM(cost) WHERE date = '2026-11-23' GROUP BY ad_id</code>). Columnar databases only read the requested columns off disk, scanning <span class="math-inline">10×</span> to <span class="math-inline">50×</span> less data than row-oriented PostgreSQL.</li>
 <li><strong>Vectorized Query Execution</strong>: ClickHouse processes SIMD vector CPU instructions across column arrays, aggregating hundreds of millions of rows per second per core.</li>
-<li><strong>Massive Compression</strong>: Columnar compression (DoubleDelta, Zstandard) achieves $5	imes$ to $10	imes$ higher compression ratios than row-based storage engines.</li>
+<li><strong>Massive Compression</strong>: Columnar compression (DoubleDelta, Zstandard) achieves <span class="math-inline">5×</span> to <span class="math-inline">10×</span> higher compression ratios than row-based storage engines.</li>
 </ul>
 <hr />
 <h2 id="check-yourself-quiz">Check Yourself Quiz</h2>
@@ -312,7 +316,20 @@ D) MongoDB Document Store<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

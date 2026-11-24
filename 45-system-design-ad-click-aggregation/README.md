@@ -45,6 +45,10 @@ Digital advertising engines (Google Search Ads, Instagram Sponsored Posts) power
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/ad_click_streaming.svg" alt="Real-Time Ad Click Aggregation (Flink Exactly-Once Pipeline)" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Clients["1. Ingestion Layer"]
@@ -164,7 +168,7 @@ python demo.py
 For financial billing and business analytics, **Event Time** is mandatory because network lags and queue buffering introduce random delays between event occurrence and stream processing.
 
 ### Q2: How do Watermarks handle late-arriving events in Apache Flink or Google Cloud Dataflow?
-**Model Answer**: A Watermark is a monotonically increasing timestamp emitted into the stream that acts as a completion horizon: $W(t) = \max(	ext{Event Time seen}) - 	ext{Allowed Latency } \Delta$.
+**Model Answer**: A Watermark is a monotonically increasing timestamp emitted into the stream that acts as a completion horizon: $W(t) = \max(\text{Event Time seen}) - \text{Allowed Latency } \Delta$.
 - A Watermark $W(12:05)$ guarantees to downstream operators that no further events with timestamp $\le 12:05$ are expected to arrive.
 - When $W(t)$ passes the end of a window (e.g., 12:00), the window closes and emits its final aggregated output.
 - If a late event arrives with $t < W$, Flink handles it using an **Allowed Lateness Policy**: it can either update the window via a retraction stream or divert the event to a **Side Output** for manual reconciliation.
@@ -183,9 +187,9 @@ For financial billing and business analytics, **Event Time** is mandatory becaus
 
 ### Q5: Why is ClickHouse or Apache Pinot preferred over PostgreSQL for storing aggregated ad analytics?
 **Model Answer**:
-- **Columnar Storage**: Aggregated analytics queries calculate aggregate functions over specific columns (`SELECT ad_id, SUM(clicks), SUM(cost) WHERE date = '2026-11-23' GROUP BY ad_id`). Columnar databases only read the requested columns off disk, scanning $10	imes$ to $50	imes$ less data than row-oriented PostgreSQL.
+- **Columnar Storage**: Aggregated analytics queries calculate aggregate functions over specific columns (`SELECT ad_id, SUM(clicks), SUM(cost) WHERE date = '2026-11-23' GROUP BY ad_id`). Columnar databases only read the requested columns off disk, scanning $10\times$ to $50\times$ less data than row-oriented PostgreSQL.
 - **Vectorized Query Execution**: ClickHouse processes SIMD vector CPU instructions across column arrays, aggregating hundreds of millions of rows per second per core.
-- **Massive Compression**: Columnar compression (DoubleDelta, Zstandard) achieves $5	imes$ to $10	imes$ higher compression ratios than row-based storage engines.
+- **Massive Compression**: Columnar compression (DoubleDelta, Zstandard) achieves $5\times$ to $10\times$ higher compression ratios than row-based storage engines.
 
 ---
 

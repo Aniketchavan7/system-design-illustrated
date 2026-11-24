@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Share feedback, post-mortem insights, and architectural debates on Reddit.">
+  <title>Community &amp; Reddit Discussions | System Design Illustrated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../course/course.css">
+
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header container">
+    <a class="wordmark" href="../" aria-label="System Design Illustrated home">System Design <span>Illustrated</span></a>
+    <nav aria-label="Main navigation">
+      <a href="../#lessons">Lessons</a>
+      <a href="../library.html">Library</a>
+      <a href="../learn/simulator.html">Simulator</a>
+      <a href="../flashcards.html">Flashcards</a>
+    </nav>
+  </header>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Guide links"><a href="../library.html">Topic library</a> · <a href="../">Trail Notes course</a> · <a href="../flashcards.html">Flashcards</a></nav><article><h1 id="community-discussions--feedback-on-reddit">💬 Community Discussions &amp; Feedback on Reddit</h1>
+<blockquote>
+<p><strong>&quot;We use Reddit as an open, public forum to discuss system design tradeoffs, share production insights, collect feedback, and learn together.&quot;</strong></p>
+</blockquote>
+<p>Welcome to the <strong>System Design Illustrated</strong> community! Beyond GitHub pull requests and issues, our community gathers on Reddit to share real-world engineering insights, debate architectural tradeoffs, and gather feedback on the curriculum.</p>
+<hr />
+<h2 id="why-we-use-reddit-for-feedback--insights">🌐 Why We Use Reddit for Feedback &amp; Insights</h2>
+<ol>
+<li><strong>Open &amp; Transparent Discussions</strong>: System design questions rarely have a single &quot;correct&quot; answer. Different scale, hardware budgets, and team constraints lead to vastly different architectural choices. Reddit provides a searchable, threaded platform where multiple senior engineers can debate the pros and cons of different approaches.</li>
+<li><strong>Real-World War Stories</strong>: Engineers from hundreds of companies share their actual production post-mortems, unexpected edge cases, and hard-earned lessons.</li>
+<li><strong>Continuous Curriculum Feedback</strong>: When readers find an explanation confusing, an analogy that doesn't click, or a missing pattern, discussing it on Reddit helps us refine the repository content before codifying it into markdown.</li>
+</ol>
+<hr />
+<h2 id="primary-community-hubs-on-reddit">📌 Primary Community Hubs on Reddit</h2>
+<p>We participate and recommend sharing insights in these relevant subreddits:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Subreddit</th>
+<th style="text-align:left">Focus Area</th>
+<th style="text-align:left">Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong><a href="https://www.reddit.com/r/systemdesign/">r/systemdesign</a></strong></td>
+<td style="text-align:left">Core System Design &amp; Architecture</td>
+<td style="text-align:left">Architectural deep dives, tradeoff debates, and mock interview questions.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong><a href="https://www.reddit.com/r/softwareengineering/">r/softwareengineering</a></strong></td>
+<td style="text-align:left">Production Engineering &amp; Practices</td>
+<td style="text-align:left">Real-world scaling war stories, microservice patterns, and failure modes.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong><a href="https://www.reddit.com/r/cscareerquestions/">r/cscareerquestions</a></strong></td>
+<td style="text-align:left">Career Growth &amp; Technical Interviews</td>
+<td style="text-align:left">Interview experiences, study roadmap pacing, and hiring bar expectations.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong><a href="https://www.reddit.com/r/programming/">r/programming</a></strong></td>
+<td style="text-align:left">General Software Development</td>
+<td style="text-align:left">Broader architectural discussions and open-source tooling releases.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="what-to-share-on-reddit">💡 What to Share on Reddit</h2>
+<p>We warmly invite you to share:</p>
+<h3 id="1-module-feedback--clarifications">1. Module Feedback &amp; Clarifications</h3>
+<ul>
+<li><em>&quot;I read Module 13 (CAP &amp; PACELC) and had a question about DynamoDB's consistent read latency vs availability...&quot;</em></li>
+<li><em>&quot;The analogy in Module 05 made sense, but here is another real-world physical metaphor that helped me visualize token buckets...&quot;</em></li>
+</ul>
+<h3 id="2-production-war-stories--case-studies">2. Production War Stories &amp; Case Studies</h3>
+<ul>
+<li>Share how your team solved a tricky scalability issue:
+<ul>
+<li>How did you handle cache thundering herds or stampedes?</li>
+<li>What happened during a multi-region database failover?</li>
+<li>Why did you choose gRPC over REST, or Kafka over RabbitMQ?</li>
+</ul>
+</li>
+<li>Your real-world experience can be turned into a new FAANG/Tier-1 case study in <code>REAL_WORLD_EXAMPLES.md</code>!</li>
+</ul>
+<h3 id="3-interview-debriefs--practice-insights">3. Interview Debriefs &amp; Practice Insights</h3>
+<ul>
+<li>What questions did you encounter in recent senior or staff engineering interviews?</li>
+<li>How did the 45-minute structured interview rubric from the <a href="../guides/study-guide.html">Study Guide</a> perform during real mock interviews?</li>
+</ul>
+<h3 id="4-topic--lab-suggestions">4. Topic &amp; Lab Suggestions</h3>
+<ul>
+<li>Which emerging patterns or distributed systems primitives should we cover next? (e.g. Vector databases for AI retrieval, CRDTs for collaborative documents, or serverless streaming pipelines).</li>
+</ul>
+<hr />
+<h2 id="how-reddit-feedback-becomes-repository-updates">🔄 How Reddit Feedback Becomes Repository Updates</h2>
+<p>We actively monitor community discussions on Reddit and turn constructive feedback into repository improvements:</p>
+<pre><code>┌───────────────────────────────────────────────────────────────┐
+│ Reddit Discussion or Feedback Thread                          │
+│                     │                                         │
+│                     ▼                                         │
+│ Maintainer &amp; Community Discussion on Tradeoffs                │
+│                     │                                         │
+│                     ▼                                         │
+│ GitHub Issue Created (Tagged: `community-feedback`)           │
+│                     │                                         │
+│                     ▼                                         │
+│ Community PR Submitted -&gt; Reviewed by @Aniketchavan7          │
+│                     │                                         │
+│                     ▼                                         │
+│ Merged into `main` -&gt; Deployed to Live Flashcard Web App     │
+└───────────────────────────────────────────────────────────────┘
+</code></pre>
+<hr />
+<h2 id="community-etiquette">🤝 Community Etiquette</h2>
+<p>When participating in discussions on Reddit or GitHub:</p>
+<ul>
+<li><strong>Respect Diverse Viewpoints</strong>: Engineering is about tradeoffs. A pattern that makes sense at Google or Netflix scale might be massive over-engineering for a startup. Value context.</li>
+<li><strong>Focus on Technical Merit</strong>: Critique architectures, algorithms, and numbers—never individuals.</li>
+<li><strong>Credit Original Authors</strong>: When citing internal papers, engineering blogs, or benchmarks, include direct links so everyone can read the primary sources.</li>
+</ul>
+<p>Thank you for being part of our open engineering community! See you on Reddit! 🚀</p>
+</article></main>
+  <footer class="course-footer container">
+    <a href="../#lessons">All lessons</a>
+    <a href="../library.html">Topic library</a>
+    <a href="../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../guides/contributing.html">Contribute</a>
+    <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
+  </footer>
+
+</body>
+</html>

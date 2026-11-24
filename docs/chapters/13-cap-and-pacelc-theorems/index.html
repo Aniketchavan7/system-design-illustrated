@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="13---cap--pacelc-theorems-distributed-trade-offs">13 - CAP &amp; PACELC Theorems: Distributed Trade-offs</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/quorum-lab.html">Quorum &amp; CAP trade-off lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="13---cap--pacelc-theorems-distributed-trade-offs">13 - CAP &amp; PACELC Theorems: Distributed Trade-offs</h1>
 <blockquote>
-<p><strong>Executive Summary:</strong> Distributed systems span multiple physical machines connected by networks that can delay, drop, or reorder packets. Eric Brewer's <strong>CAP Theorem</strong> (proven by Gilbert &amp; Lynch) proves that when a network partition ($P$) occurs, a system must fundamentally choose between <strong>Consistency ($C$)</strong> and <strong>Availability ($A$)</strong>—the popular idea of &quot;picking 2 of 3&quot; is mathematically false because partitions are an unavoidable property of physics. Daniel Abadi extended this with the <strong>PACELC Theorem</strong>, highlighting that even when the network is completely healthy (<strong>E</strong>lse), you must choose between <strong>Latency ($L$)</strong> and <strong>Consistency ($C$)</strong>.</p>
+<p><strong>Executive Summary:</strong> Distributed systems span multiple physical machines connected by networks that can delay, drop, or reorder packets. Eric Brewer's <strong>CAP Theorem</strong> (proven by Gilbert &amp; Lynch) proves that when a network partition (<span class="math-inline">P</span>) occurs, a system must fundamentally choose between <strong>Consistency (<span class="math-inline">C</span>)</strong> and <strong>Availability (<span class="math-inline">A</span>)</strong>—the popular idea of &quot;picking 2 of 3&quot; is mathematically false because partitions are an unavoidable property of physics. Daniel Abadi extended this with the <strong>PACELC Theorem</strong>, highlighting that even when the network is completely healthy (<strong>E</strong>lse), you must choose between <strong>Latency (<span class="math-inline">L</span>)</strong> and <strong>Consistency (<span class="math-inline">C</span>)</strong>.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../13-cap-and-pacelc-theorems/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/13-cap-and-pacelc-theorems/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Packet loss, latency, timeouts, and network round-trips.</li>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Read/write replication topologies.</li>
-<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Synchronous vs. asynchronous replication lag.</li>
-<li><strong>Set Theory &amp; Logic</strong>: Majority quorums ($R + W &gt; N$).</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: Packet loss, latency, timeouts, and network round-trips.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Read/write replication topologies.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 - Database Replication</a>: Synchronous vs. asynchronous replication lag.</li>
+<li><strong>Set Theory &amp; Logic</strong>: Majority quorums (<span class="math-inline">R + W &gt; N</span>).</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -44,7 +44,7 @@
 <ul>
 <li>Normally, when a customer deposits $100 with Alice, Alice calls Bob over the phone to update his notebook.</li>
 <li>One day, an excavator accidentally cuts the telephone wire between Alice and Bob (<strong>Network Partition</strong>).</li>
-<li>A customer walks into Alice's branch to deposit $50, while the customer's partner walks into Bob's branch to withdraw $100.
+<li>A customer walks into Alice's branch to deposit &lt;span class=&quot;math-inline&quot;&gt;50, while the customer's partner walks into Bob's branch to withdraw &lt;/span&gt;100.
 <ul>
 <li><strong>Choice 1 (CP - Consistency)</strong>: Alice and Bob say: <em>&quot;Our phone line is cut. We refuse to process any transactions until the line is repaired.&quot;</em> (Transactions fail, but the bank's account balance is never wrong).</li>
 <li><strong>Choice 2 (AP - Availability)</strong>: Alice accepts the deposit, and Bob allows the withdrawal. Both branches remain open and fast, but their notebooks are now out of sync, and the account might be overdrawn.</li>
@@ -69,17 +69,17 @@
 <td style="text-align:left">Independent database instances in different Availability Zones</td>
 </tr>
 <tr>
-<td style="text-align:left"><strong>Network Partition ($P$)</strong></td>
+<td style="text-align:left"><strong>Network Partition (<span class="math-inline">P</span>)</strong></td>
 <td style="text-align:left">Backhoe cuts telephone cable connecting Alice and Bob</td>
 <td style="text-align:left">Switch failure, fiber cut, or GC pause dropping inter-node packets</td>
 </tr>
 <tr>
-<td style="text-align:left"><strong>Consistency ($C$)</strong></td>
+<td style="text-align:left"><strong>Consistency (<span class="math-inline">C</span>)</strong></td>
 <td style="text-align:left">Every customer sees the exact same balance regardless of branch</td>
 <td style="text-align:left"><strong>Linearizability</strong>: Reads return the most recent write or an error</td>
 </tr>
 <tr>
-<td style="text-align:left"><strong>Availability ($A$)</strong></td>
+<td style="text-align:left"><strong>Availability (<span class="math-inline">A</span>)</strong></td>
 <td style="text-align:left">Every branch serves every customer immediately without errors</td>
 <td style="text-align:left">Every non-failing node returns a non-error response</td>
 </tr>
@@ -106,15 +106,15 @@
 <p>In casual blog posts, CAP is frequently explained as a triangle where you can freely choose any two: &quot;CA&quot;, &quot;CP&quot;, or &quot;AP&quot;.
 <strong>This is factually false.</strong></p>
 <ul>
-<li>In any distributed system involving physical networks, network partitions ($P$) are not an architectural preference; they are an inevitable physical reality. Switches crash, BGP routes flap, firewalls misconfigure, and hardware fails.</li>
+<li>In any distributed system involving physical networks, network partitions (<span class="math-inline">P</span>) are not an architectural preference; they are an inevitable physical reality. Switches crash, BGP routes flap, firewalls misconfigure, and hardware fails.</li>
 <li>Therefore, you <strong>cannot pick &quot;CA&quot;</strong>. A system that operates in CA mode is a single-node system running on a single motherboard.</li>
-<li>The real theorem states: <strong>When a network partition ($P$) occurs, you must choose between Consistency ($C$) and Availability ($A$)</strong>.</li>
+<li>The real theorem states: <strong>When a network partition (<span class="math-inline">P</span>) occurs, you must choose between Consistency (<span class="math-inline">C</span>) and Availability (<span class="math-inline">A</span>)</strong>.</li>
 </ul>
 <h3 id="the-blindspot-of-cap-what-happens-in-normal-times">The Blindspot of CAP: What Happens in Normal Times?</h3>
-<p>Network partitions typically occur $&lt;0.1%$ of the year. For the other $99.9%$ of the time, the network is completely healthy!
+<p>Network partitions typically occur <span class="math-inline">&lt;0.1%</span> of the year. For the other <span class="math-inline">99.9%</span> of the time, the network is completely healthy!
 CAP tells you <strong>nothing</strong> about how a system behaves when there is no partition.
-This is where Abadi's <strong>PACELC</strong> theorem completes the picture:
-$$\text{If } \mathbf{P} \text{ (Partition)} \implies \mathbf{A} \text{ vs } \mathbf{C} \quad \Big| \quad \mathbf{E} \text{ (Else / Normal)} \implies \mathbf{L} \text{ vs } \mathbf{C}$$</p>
+This is where Abadi's <strong>PACELC</strong> theorem completes the picture:</p>
+<div class="math-block">If P (Partition) ⇒ A vs C \Big| E (Else / Normal) ⇒ L vs C</div>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
 <h3 id="high-resolution-cap--pacelc-animation">High-Resolution CAP &amp; PACELC Animation</h3>
@@ -122,7 +122,7 @@ $$\text{If } \mathbf{P} \text{ (Partition)} \implies \mathbf{A} \text{ vs } \mat
 <p><img src="./assets/cap_pacelc.gif" alt="CAP and PACELC Theorems" /></p>
 <hr />
 <h3 id="pacelc-decision-flowchart">PACELC Decision Flowchart</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     Start[&quot;Distributed System Request&quot;] --&gt; IsPartition{&quot;Is there a Network Partition (P)?&quot;}
 
     %% Partition Branch
@@ -138,22 +138,21 @@ $$\text{If } \mathbf{P} \text{ (Partition)} \implies \mathbf{A} \text{ vs } \mat
     style CP fill:#161b22,stroke:#f85149,stroke-width:2px;
     style AP fill:#161b22,stroke:#3fb950,stroke-width:2px;
     style EL fill:#161b22,stroke:#58a6ff,stroke-width:2px;
-    style EC fill:#161b22,stroke:#d29922,stroke-width:2px;
-</code></pre>
+    style EC fill:#161b22,stroke:#d29922,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
-<p>Let's model the mathematical mechanics behind quorum consensus ($R + W &gt; N$) and availability calculations:</p>
+<p>Let's model the mathematical mechanics behind quorum consensus (<span class="math-inline">R + W &gt; N</span>) and availability calculations:</p>
 <h3 id="1-quorum-intersection-math-the-core-of-cp-systems">1. Quorum Intersection Math: The Core of CP Systems</h3>
-<p>Consider an $N$-node cluster:</p>
+<p>Consider an <span class="math-inline">N</span>-node cluster:</p>
 <ul>
-<li>$N = 5$ replicas.</li>
-<li>Write Quorum ($W$): Number of nodes that must acknowledge a write before returning success.</li>
-<li>Read Quorum ($R$): Number of nodes that must be queried before returning the value.</li>
+<li><span class="math-inline">N = 5</span> replicas.</li>
+<li>Write Quorum (<span class="math-inline">W</span>): Number of nodes that must acknowledge a write before returning success.</li>
+<li>Read Quorum (<span class="math-inline">R</span>): Number of nodes that must be queried before returning the value.</li>
 </ul>
-<p>$$\mathbf{R + W &gt; N}$$</p>
-<p>By the <strong>Pigeonhole Principle</strong>, any read quorum of size $R$ and any write quorum of size $W$ must overlap in at least one node:
-$$\text{Overlap} = (R + W) - N = (3 + 3) - 5 = 1 \text{ node}$$
-That single overlapping node is guaranteed to hold the latest version of the data!</p>
+<div class="math-block">R + W > N</div>
+<p>By the <strong>Pigeonhole Principle</strong>, any read quorum of size <span class="math-inline">R</span> and any write quorum of size <span class="math-inline">W</span> must overlap in at least one node:</p>
+<div class="math-block">Overlap = (R + W) - N = (3 + 3) - 5 = 1 node</div>
+<p>That single overlapping node is guaranteed to hold the latest version of the data!</p>
 <pre><code>Total Nodes: [ Node 1 | Node 2 | Node 3 | Node 4 | Node 5 ]
 Write (W=3): [   ✓    |   ✓    |   ✓    |        |        ] (Updated to v2)
 Read  (R=3): [        |        |   ✓    |   ✓    |   ✓    ] (Node 3 has v2!)
@@ -163,28 +162,28 @@ Read  (R=3): [        |        |   ✓    |   ✓    |   ✓    ] (Node 3 has v2
 <h3 id="2-the-cost-of-partition-failures-availability-math">2. The Cost of Partition Failures (Availability Math)</h3>
 <ul>
 <li>Suppose a cluster has 3 nodes distributed across 3 data centers.</li>
-<li>Individual node availability: $99.9%$ (down $\sim 8.7$ hours/year).</li>
-<li>Inter-DC network link partition probability: $0.05%$ per month.</li>
-<li><strong>In an AP system</strong>: If DC-3 is partitioned, DC-1 and DC-2 handle 100% of their local traffic, and DC-3 handles its local traffic. Overall platform availability: <strong>$99.99%$</strong>.</li>
-<li><strong>In a CP system</strong>: DC-3 (the minority) must reject all incoming writes (returns HTTP 503). If 33% of users are connected to DC-3, overall platform write availability immediately drops to <strong>$66.7%$</strong> during the partition!</li>
+<li>Individual node availability: <span class="math-inline">99.9%</span> (down <span class="math-inline">~ 8.7</span> hours/year).</li>
+<li>Inter-DC network link partition probability: <span class="math-inline">0.05%</span> per month.</li>
+<li><strong>In an AP system</strong>: If DC-3 is partitioned, DC-1 and DC-2 handle 100% of their local traffic, and DC-3 handles its local traffic. Overall platform availability: <strong><span class="math-inline">99.99%</span></strong>.</li>
+<li><strong>In a CP system</strong>: DC-3 (the minority) must reject all incoming writes (returns HTTP 503). If 33% of users are connected to DC-3, overall platform write availability immediately drops to <strong><span class="math-inline">66.7%</span></strong> during the partition!</li>
 </ul>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-what-the-cap-terms-actually-mean-formal-definitions">1. What the CAP Terms Actually Mean (Formal Definitions)</h3>
 <p>Many engineering arguments stem from vague definitions. In the formal proof (Gilbert &amp; Lynch, 2002):</p>
 <ul>
-<li><strong>Consistency ($C$)</strong>: Specifically means <strong>Linearizability</strong> (Atomic / External Consistency).
+<li><strong>Consistency (<span class="math-inline">C</span>)</strong>: Specifically means <strong>Linearizability</strong> (Atomic / External Consistency).
 <ul>
-<li>If client A writes value $v$ at time $t_1$, any client B that begins a read operation at time $t_2 &gt; t_1$ <strong>must</strong> read value $v$ or a newer value. It appears as if there is only a single copy of the item in the entire universe.</li>
+<li>If client A writes value <span class="math-inline">v</span> at time <span class="math-inline">t<sub>1</sub></span>, any client B that begins a read operation at time <span class="math-inline">t<sub>2</sub> &gt; t<sub>1</sub></span> <strong>must</strong> read value <span class="math-inline">v</span> or a newer value. It appears as if there is only a single copy of the item in the entire universe.</li>
 <li><em>Note</em>: It does <strong>not</strong> mean ACID consistency (which refers to relational database foreign key invariants).</li>
 </ul>
 </li>
-<li><strong>Availability ($A$)</strong>: Every <strong>non-failing node</strong> must return a <strong>non-error response</strong> to every request it receives.
+<li><strong>Availability (<span class="math-inline">A</span>)</strong>: Every <strong>non-failing node</strong> must return a <strong>non-error response</strong> to every request it receives.
 <ul>
 <li>Returning an HTTP 500, a timeout, or a &quot;Partition Error&quot; is considered an availability failure under CAP.</li>
 </ul>
 </li>
-<li><strong>Partition Tolerance ($P$)</strong>: The network is allowed to arbitrarily drop or delay an unlimited number of messages between nodes without causing system crash.</li>
+<li><strong>Partition Tolerance (<span class="math-inline">P</span>)</strong>: The network is allowed to arbitrarily drop or delay an unlimited number of messages between nodes without causing system crash.</li>
 </ul>
 <hr />
 <h3 id="2-the-pacelc-taxonomy-matrix">2. The PACELC Taxonomy Matrix</h3>
@@ -194,8 +193,8 @@ Read  (R=3): [        |        |   ✓    |   ✓    |   ✓    ] (Node 3 has v2
 <tr>
 <th style="text-align:left">Database</th>
 <th style="text-align:left">PACELC Classification</th>
-<th style="text-align:left">Partition Behavior ($P$)</th>
-<th style="text-align:left">Normal Behavior ($E$)</th>
+<th style="text-align:left">Partition Behavior (<span class="math-inline">P</span>)</th>
+<th style="text-align:left">Normal Behavior (<span class="math-inline">E</span>)</th>
 <th style="text-align:left">Common Production Use Cases</th>
 </tr>
 </thead>
@@ -326,7 +325,7 @@ Read  (R=3): [        |        |   ✓    |   ✓    |   ✓    ] (Node 3 has v2
 <ul>
 <li><strong>Stripe &amp; PayPal (CP/PC/EC)</strong>: Ledger balance updates and authorizations strictly choose Consistency. If an account balance partition occurs, Stripe will reject the charge rather than allow a double-spend.</li>
 <li><strong>Amazon Retail Shopping Cart (AP/PA/EL)</strong>: Described in the seminal 2007 Dynamo paper: <em>&quot;Customers should never be prevented from adding an item to their shopping cart.&quot;</em> If network links break, carts diverge and are merged later (even if deleted items occasionally reappear).</li>
-<li><strong>Google Spanner (PC/EC)</strong>: Spanner relies on GPS receivers and atomic clocks in every Google data center (TrueTime API) to achieve bounded uncertainty ($\le 7\text{ ms}$), providing strict linearizability globally while maximizing availability.</li>
+<li><strong>Google Spanner (PC/EC)</strong>: Spanner relies on GPS receivers and atomic clocks in every Google data center (TrueTime API) to achieve bounded uncertainty (<span class="math-inline">≤ 7 ms</span>), providing strict linearizability globally while maximizing availability.</li>
 </ul>
 <hr />
 <h2 id="top-interview-questions--deep-answers">🎯 Top Interview Questions &amp; Deep Answers</h2>
@@ -338,17 +337,17 @@ When a partition occurs between Node 1 and Node 2, and a write arrives at Node 1
 <ul>
 <li>If you accept the write on Node 1, Node 2 is out of date. If a client reads from Node 2, you have sacrificed <strong>Consistency</strong>.</li>
 <li>If you reject the write to prevent inconsistency, you have sacrificed <strong>Availability</strong>.
-Therefore, you cannot choose to avoid the partition ($P$). You can only choose your system's response <em>during</em> a partition: either refuse the request to maintain Consistency (CP), or accept the request to maintain Availability (AP). The only true 'CA' system is a single-node database running on a single machine, where no network partitions can occur.&quot;</li>
+Therefore, you cannot choose to avoid the partition (<span class="math-inline">P</span>). You can only choose your system's response <em>during</em> a partition: either refuse the request to maintain Consistency (CP), or accept the request to maintain Availability (AP). The only true 'CA' system is a single-node database running on a single machine, where no network partitions can occur.&quot;</li>
 </ul>
 <hr />
 <h3 id="q2-what-is-the-pacelc-theorem-and-what-gap-does-it-address-in-the-original-cap-theorem">Q2: &quot;What is the PACELC theorem, and what gap does it address in the original CAP theorem?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Assessing modern distributed systems architecture knowledge beyond outdated 2000-era simplifications.</p>
 <p><strong>Model Answer</strong>:
-&quot;The CAP theorem only describes system behavior during a network partition ($P$), which is a rare failure mode occurring $&lt;0.1%$ of the time. It is silent about how systems behave during normal healthy operations ($99.9%$ of the time).</p>
+&quot;The CAP theorem only describes system behavior during a network partition (<span class="math-inline">P</span>), which is a rare failure mode occurring <span class="math-inline">&lt;0.1%</span> of the time. It is silent about how systems behave during normal healthy operations (<span class="math-inline">99.9%</span> of the time).</p>
 <p>Daniel Abadi formulated <strong>PACELC</strong> to describe the complete trade-off spectrum:</p>
 <ul>
-<li><strong>If Partition ($P$)</strong>: Choose between <strong>Availability ($A$)</strong> and <strong>Consistency ($C$)</strong>.</li>
-<li><strong>Else ($E$)</strong>: Choose between <strong>Latency ($L$)</strong> and <strong>Consistency ($C$)</strong>.</li>
+<li><strong>If Partition (<span class="math-inline">P</span>)</strong>: Choose between <strong>Availability (<span class="math-inline">A</span>)</strong> and <strong>Consistency (<span class="math-inline">C</span>)</strong>.</li>
+<li><strong>Else (<span class="math-inline">E</span>)</strong>: Choose between <strong>Latency (<span class="math-inline">L</span>)</strong> and <strong>Consistency (<span class="math-inline">C</span>)</strong>.</li>
 </ul>
 <p>Even without network failures, replicating data across multiple servers takes time. If you require strong consistency (<strong>C</strong>), you must wait for synchronous round-trip acknowledgments from replicas, increasing latency (<strong>L</strong>). If you want sub-millisecond write latency, you must return immediately and replicate asynchronously, accepting eventual consistency.&quot;</p>
 <hr />
@@ -359,7 +358,7 @@ Therefore, you cannot choose to avoid the partition ($P$). You can only choose y
 <ol>
 <li><strong>Last-Write-Wins (LWW)</strong>: The write with the highest timestamp wins. While simple, it suffers from clock drift—an NTP synchronization discrepancy can silently drop newer updates.</li>
 <li><strong>Vector Clocks / Version Vectors</strong>: Each node increments its own counter in a version tuple <code>[NodeA:2, NodeB:1]</code>. The system detects concurrent conflicting writes and surfaces both versions to the client application to resolve (e.g., merging two shopping carts).</li>
-<li><strong>CRDTs (Conflict-free Replicated Data Types)</strong>: Mathematically structured data types (e.g., Grow-only Sets, PN-Counters) where state merges are commutative and associative ($A \cup B = B \cup A$). They guarantee convergence to identical state without requiring coordination or central locks.</li>
+<li><strong>CRDTs (Conflict-free Replicated Data Types)</strong>: Mathematically structured data types (e.g., Grow-only Sets, PN-Counters) where state merges are commutative and associative (<span class="math-inline">A \cup B = B \cup A</span>). They guarantee convergence to identical state without requiring coordination or central locks.</li>
 <li><strong>Read Repair &amp; Anti-Entropy</strong>: When a client performs a read, the system compares versions across replicas in the background and writes the latest value back to stale nodes. In addition, background Merkle tree sync processes identify and heal divergent key ranges.&quot;</li>
 </ol>
 <hr />
@@ -367,22 +366,22 @@ Therefore, you cannot choose to avoid the partition ($P$). You can only choose y
 <p><strong>Interviewer Goal</strong>: Testing understanding of TrueTime and high-availability engineering in CP systems.</p>
 <p><strong>Model Answer</strong>:
 &quot;Technically, Google Spanner is a <strong>CP system</strong> (PC/EC under PACELC)—if a network partition occurs, Spanner will choose consistency and fail requests in a partitioned minority.</p>
-<p>However, in practice, Spanner achieves $99.999%$ (five nines) availability through two extraordinary innovations:</p>
+<p>However, in practice, Spanner achieves <span class="math-inline">99.999%</span> (five nines) availability through two extraordinary innovations:</p>
 <ol>
-<li><strong>TrueTime API</strong>: Every Google data center contains dedicated GPS receivers and atomic clocks. TrueTime provides an API that returns a time interval $[t_{\text{earliest}}, t_{\text{latest}}]$ with a guaranteed maximum uncertainty bound ($\epsilon \le 7\text{ ms}$). By waiting out the uncertainty window ($\ge 2\epsilon$), Spanner guarantees global linearizable transactions without expensive cross-region consensus on read operations.</li>
+<li><strong>TrueTime API</strong>: Every Google data center contains dedicated GPS receivers and atomic clocks. TrueTime provides an API that returns a time interval <span class="math-inline">[t<sub>earliest</sub>, t<sub>latest</sub>]</span> with a guaranteed maximum uncertainty bound (<span class="math-inline">ε ≤ 7 ms</span>). By waiting out the uncertainty window (<span class="math-inline">≥ 2ε</span>), Spanner guarantees global linearizable transactions without expensive cross-region consensus on read operations.</li>
 <li><strong>Private Global Fiber Infrastructure</strong>: Google owns and manages its own global physical fiber optic network with redundant paths and multi-homed BGP routing. Network partitions are made so exceedingly rare that Spanner practically operates with five-nines availability while remaining mathematically CP.&quot;</li>
 </ol>
 <hr />
-<h3 id="q5-what-is-the-quorum-condition-r--w--n-and-what-happens-if-r--w-le-n">Q5: &quot;What is the Quorum condition $R + W &gt; N$, and what happens if $R + W \le N$?&quot;</h3>
+<h3 id="q5-what-is-the-quorum-condition-span-classmath-inliner--w--nspan-and-what-happens-if-span-classmath-inliner--w--nspan">Q5: &quot;What is the Quorum condition <span class="math-inline">R + W &gt; N</span>, and what happens if <span class="math-inline">R + W ≤ N</span>?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Checking distributed math and consistency tuning skills.</p>
 <p><strong>Model Answer</strong>:
-&quot;In a cluster with $N$ replicas:</p>
+&quot;In a cluster with <span class="math-inline">N</span> replicas:</p>
 <ul>
-<li>$W$ is the number of replicas that must acknowledge a write before it succeeds.</li>
-<li>$R$ is the number of replicas that must be queried during a read.</li>
+<li><span class="math-inline">W</span> is the number of replicas that must acknowledge a write before it succeeds.</li>
+<li><span class="math-inline">R</span> is the number of replicas that must be queried during a read.</li>
 </ul>
-<p>If <strong>$R + W &gt; N$</strong>, the set of nodes written to and the set of nodes read from are guaranteed to overlap in at least one node by the Pigeonhole Principle. That overlap node will hold the latest version of the record, guaranteeing strong consistency (linearizability), provided version timestamps or vector clocks are compared.</p>
-<p>If <strong>$R + W \le N$</strong> (for example, $N=3, W=1, R=1$):</p>
+<p>If <strong><span class="math-inline">R + W &gt; N</span></strong>, the set of nodes written to and the set of nodes read from are guaranteed to overlap in at least one node by the Pigeonhole Principle. That overlap node will hold the latest version of the record, guaranteeing strong consistency (linearizability), provided version timestamps or vector clocks are compared.</p>
+<p>If <strong><span class="math-inline">R + W ≤ N</span></strong> (for example, <span class="math-inline">N=3, W=1, R=1</span>):</p>
 <ul>
 <li>A write may succeed on Node 1.</li>
 <li>A read may query Node 2.</li>
@@ -417,15 +416,28 @@ Because physical server clocks synchronized with NTP drift by tens of millisecon
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Leader-follower and multi-leader replication trade-offs.</li>
-<li><a href="../14-consistency-models/index.html">14 - Consistency Models</a>: Linearizable, sequential, causal, and eventual consistency explained.</li>
-<li><a href="../15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a>: How Paxos and Raft implement CP consensus.</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Partitioning data across distributed nodes dynamically.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 - Database Replication</a>: Leader-follower and multi-leader replication trade-offs.</li>
+<li><a href="../../chapters/14-consistency-models/index.html">14 - Consistency Models</a>: Linearizable, sequential, causal, and eventual consistency explained.</li>
+<li><a href="../../chapters/15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a>: How Paxos and Raft implement CP consensus.</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Partitioning data across distributed nodes dynamically.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

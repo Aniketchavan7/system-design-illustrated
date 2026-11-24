@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-40-system-design--digital-wallet--payment-system">Module 40: System Design — Digital Wallet &amp; Payment System</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-40-system-design--digital-wallet--payment-system">Module 40: System Design — Digital Wallet &amp; Payment System</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of an Enterprise Payment and Digital Wallet System (Stripe, PayPal, Adyen), covering Double-Entry Bookkeeping, the Payment State Machine, Idempotency, and End-of-Day Reconciliation.</p>
 </blockquote>
@@ -30,14 +30,14 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling payment systems, review these core modules:</p>
 <ul>
-<li><a href="../19-distributed-transactions/index.html">19 - Distributed Transactions</a> (2PC, Saga pattern, and compensating transactions)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Retries, dead letter queues, and exponential backoff)</li>
-<li><a href="../29-database-transactions-and-isolation/index.html">29 - Database Transactions &amp; Isolation</a> (ACID guarantees, Serializable isolation, and lost updates)</li>
-<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotency keys preventing double-charges)</li>
+<li><a href="../../chapters/19-distributed-transactions/index.html">19 - Distributed Transactions</a> (2PC, Saga pattern, and compensating transactions)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Retries, dead letter queues, and exponential backoff)</li>
+<li><a href="../../chapters/29-database-transactions-and-isolation/index.html">29 - Database Transactions &amp; Isolation</a> (ACID guarantees, Serializable isolation, and lost updates)</li>
+<li><a href="../../chapters/32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotency keys preventing double-charges)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
-<p>Imagine a bank where money is kept in magical locked boxes. If Alice wants to send $50 to Bob, the bank never just erases $50 from Alice's account and writes +$50 in Bob's account. Why? Because if the power cuts out mid-way, Alice loses $50 and Bob receives nothing!</p>
+<p>Imagine a bank where money is kept in magical locked boxes. If Alice wants to send &lt;span class=&quot;math-inline&quot;&gt;50 to Bob, the bank never just erases &lt;/span&gt;50 from Alice's account and writes +&lt;span class=&quot;math-inline&quot;&gt;50 in Bob's account. Why? Because if the power cuts out mid-way, Alice loses &lt;/span&gt;50 and Bob receives nothing!</p>
 <p>Instead, banks use <strong>Double-Entry Bookkeeping</strong>, an accounting law invented in the 1400s: every single transaction must have at least two entries where <strong>Total Debits = Total Credits</strong>. Money can never appear or vanish out of thin air.</p>
 <p>Even if network cables are cut, external payment gateways (Visa, MasterCard) crash, or servers reboot, a <strong>Payment System</strong> uses strict mathematical ledgers, unique idempotency keys, and automated reconciliation accountants to ensure not a single penny is ever lost or duplicated!</p>
 <hr />
@@ -65,7 +65,7 @@
 <tr>
 <td style="text-align:left"><strong>Scale Must Balance to Zero</strong></td>
 <td style="text-align:left">Double-Entry Bookkeeping Invariant</td>
-<td style="text-align:left">$\sum \text{Debits} - \sum \text{Credits} = 0$. Absolute invariant across the ledger.</td>
+<td style="text-align:left"><span class="math-inline">Σ Debits - Σ Credits = 0</span>. Absolute invariant across the ledger.</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Embossed Serial Number on Gold Bar</strong></td>
@@ -89,7 +89,10 @@
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">sequenceDiagram
+<p align="center">
+  <img src="./assets/double_entry_ledger.svg" alt="Payment Execution, Reconciliation & Double-Entry Ledger" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor User as Buyer
     participant Client as Web / Mobile App
@@ -118,8 +121,7 @@
     Note over Recon,PSP: Nightly Settlement (02:00 AM)
     Recon-&gt;&gt;PSP: Download Bank Settlement CSV / MT940 File
     Recon-&gt;&gt;Ledger: Verify Internal Ledger Rows == Bank Records
-    Recon--&gt;&gt;Recon: Flag Discrepancies for Automated Dispute/Refund
-</code></pre>
+    Recon--&gt;&gt;Recon: Flag Discrepancies for Automated Dispute/Refund</pre></figure>
 <hr />
 <h2 id="real-numbers--financial-throughput">Real Numbers &amp; Financial Throughput</h2>
 <p>Consider an e-commerce platform processing <strong>$10 Billion Annually</strong>:</p>
@@ -127,17 +129,17 @@
 <li><strong>Transaction Volume</strong>:
 <ul>
 <li>Average order value: $50.</li>
-<li>Total transactions/year: $10\text{B} / 50 = 200\text{ million transactions/year}$.</li>
-<li>Daily transactions: $200\text{M} / 365 \approx 550,000\text{ transactions/day}$.</li>
-<li>Average QPS: $\approx 6.5\text{ transactions/second}$.</li>
-<li>Peak holiday QPS (Black Friday $50\times$): $\approx 325\text{ transactions/second}$.</li>
+<li>Total transactions/year: <span class="math-inline">10B / 50 = 200 million transactions/year</span>.</li>
+<li>Daily transactions: <span class="math-inline">200M / 365 ≈ 550,000 transactions/day</span>.</li>
+<li>Average QPS: <span class="math-inline">≈ 6.5 transactions/second</span>.</li>
+<li>Peak holiday QPS (Black Friday <span class="math-inline">50×</span>): <span class="math-inline">≈ 325 transactions/second</span>.</li>
 </ul>
 </li>
 <li><strong>Data Sizing &amp; High Durability</strong>:
 <ul>
 <li>Payment systems are write-heavy and append-only (no row is ever deleted or mutated in-place).</li>
-<li>Average ledger journal entry: $\approx 1\text{ KB}$ (audit timestamps, foreign keys, amount in cents, currency).</li>
-<li>Annual ledger growth: $200\text{M} \times 1\text{ KB} \approx 200\text{ GB/year}$.</li>
+<li>Average ledger journal entry: <span class="math-inline">≈ 1 KB</span> (audit timestamps, foreign keys, amount in cents, currency).</li>
+<li>Annual ledger growth: <span class="math-inline">200M × 1 KB ≈ 200 GB/year</span>.</li>
 <li>Stored across globally replicated relational databases (Google Cloud Spanner / CockroachDB / PostgreSQL with synchronous multi-AZ replication).</li>
 </ul>
 </li>
@@ -152,13 +154,13 @@ Instead:</p>
 <li>Every transaction contains at least one <strong>Debit</strong> and at least one <strong>Credit</strong>.</li>
 <li>Core Invariant:</li>
 </ul>
-<p>$$\sum \text{Debits} - \sum \text{Credits} = 0$$</p>
+<div class="math-block">Σ Debits - Σ Credits = 0</div>
 <ul>
 <li>An account balance is simply the historical sum of all its journal entries: <code>SELECT SUM(amount) FROM ledger_entries WHERE account_id = 'user_alice'</code>.</li>
 </ul>
 <h3 id="2-the-payment-state-machine">2. The Payment State Machine</h3>
 <p>Payment records transition through a strict finite state machine:
-<code>INITIALIZED</code> $\rightarrow$ <code>PENDING</code> $\rightarrow$ <code>AUTHORIZED</code> $\rightarrow$ <code>CAPTURED</code> (or <code>FAILED</code> / <code>REFUNDED</code>).</p>
+<code>INITIALIZED</code> <span class="math-inline">→</span> <code>PENDING</code> <span class="math-inline">→</span> <code>AUTHORIZED</code> <span class="math-inline">→</span> <code>CAPTURED</code> (or <code>FAILED</code> / <code>REFUNDED</code>).</p>
 <ul>
 <li>If an external PSP times out, the payment enters <code>UNKNOWN_PENDING</code>.</li>
 <li>An asynchronous worker polls the PSP's status API or waits for incoming PSP webhooks to resolve the terminal state (<code>SUCCESS</code> or <code>FAILED</code>).</li>
@@ -212,7 +214,7 @@ At 02:00 AM every night:</p>
 <hr />
 <h2 id="common-pitfalls--anti-patterns">Common Pitfalls &amp; Anti-Patterns</h2>
 <ol>
-<li><strong>Floating-Point Currency Calculations</strong>: Using standard IEEE 754 floats (<code>float</code> or <code>double</code> in Java/Python/JS) causes precision errors (<code>0.1 + 0.2 = 0.30000000000000004</code>). <em>Always store currency as integers in the lowest fractional unit (cents: $1000 = $10.00$) or arbitrary-precision SQL types (<code>NUMERIC(18, 4)</code>).</em></li>
+<li><strong>Floating-Point Currency Calculations</strong>: Using standard IEEE 754 floats (<code>float</code> or <code>double</code> in Java/Python/JS) causes precision errors (<code>0.1 + 0.2 = 0.30000000000000004</code>). <em>Always store currency as integers in the lowest fractional unit (cents: <span class="math-inline">1000 = &lt;/span&gt;10.00$) or arbitrary-precision SQL types (<code>NUMERIC(18, 4)</code>).</em></li>
 <li><strong>Mutating Balances In-Place</strong>: Executing <code>UPDATE accounts SET balance = balance - 10</code> destroys audit history. Ledgers must be append-only.</li>
 <li><strong>Trusting Webhooks Blindly Without Signature Verification</strong>: Attackers can spoof PSP webhook calls (<code>POST /stripe/webhook</code> with <code>payment_succeeded</code>). Always verify the cryptographic HMAC signature (<code>Stripe-Signature</code> header) using the secret key before processing.</li>
 </ol>
@@ -233,14 +235,14 @@ At 02:00 AM every night:</p>
 <h2 id="top-5-interview-questions-with-model-answers">Top 5 Interview Questions with Model Answers</h2>
 <h3 id="q1-why-is-double-entry-bookkeeping-mandatory-in-payment-systems-instead-of-updating-account-balances-directly">Q1: Why is Double-Entry Bookkeeping mandatory in payment systems instead of updating account balances directly?</h3>
 <p><strong>Model Answer</strong>: Directly updating balances (<code>UPDATE accounts SET balance = balance - 50</code>) creates a single point of failure with zero auditability. If an update fails mid-way, money appears or vanishes without trace.
-<strong>Double-Entry Bookkeeping</strong> enforces that every movement of money is recorded as an immutable journal entry with matching Debits and Credits ($\sum 	ext{Debits} = \sum 	ext{Credits}$).</p>
+<strong>Double-Entry Bookkeeping</strong> enforces that every movement of money is recorded as an immutable journal entry with matching Debits and Credits (<span class="math-inline">Σ Debits = Σ Credits</span>).</p>
 <ol>
 <li>It guarantees that money cannot be created or destroyed out of thin air.</li>
 <li>It provides an unalterable audit trail for financial regulators (SOX, GAAP).</li>
 <li>Any balance discrepancy can be diagnosed by checking the mathematical sum of historical entries.</li>
 </ol>
 <h3 id="q2-why-should-monetary-values-never-be-stored-or-manipulated-using-floating-point-data-types">Q2: Why should monetary values never be stored or manipulated using floating-point data types?</h3>
-<p><strong>Model Answer</strong>: IEEE 754 floating-point representations (such as <code>float</code> or <code>double</code>) cannot represent fractional base-10 decimals precisely. For example, adding $0.1 + 0.2$ in floating-point arithmetic results in $0.30000000000000004$. In financial systems handling millions of transactions, rounding errors accumulate into significant financial discrepancies.
+<p><strong>Model Answer</strong>: IEEE 754 floating-point representations (such as <code>float</code> or <code>double</code>) cannot represent fractional base-10 decimals precisely. For example, adding <span class="math-inline">0.1 + 0.2</span> in floating-point arithmetic results in <span class="math-inline">0.30000000000000004</span>. In financial systems handling millions of transactions, rounding errors accumulate into significant financial discrepancies.
 Instead:</p>
 <ul>
 <li>Store monetary values as <strong>Integers in the smallest currency unit</strong> (e.g., store $10.50 as <code>1050</code> cents).</li>
@@ -314,7 +316,20 @@ D) To wipe out transaction history.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

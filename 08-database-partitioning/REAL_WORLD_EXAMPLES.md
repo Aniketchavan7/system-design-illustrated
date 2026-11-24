@@ -89,7 +89,7 @@ would all cluster onto the same tablet server, creating a massive write hotspot.
 #### A. Fixed Virtual Shards (4,096 Shards)
 - Uber established **4,096 virtual shards** partitioned across dozens of physical MySQL server pairs.
 - Each trip is assigned a globally unique UUID. The routing proxy determines the shard:
-  $$	ext{Shard ID} = 	ext{MurmurHash3}(	ext{trip\_uuid}) \pmod{4096}$$
+  $$\text{Shard ID} = \text{MurmurHash3}(\text{trip\_uuid}) \pmod{4096}$$
 - **Zero Resharding Required**: As data grew, Uber moved virtual shards across physical database servers without changing the hashing formula.
 
 #### B. Append-Only Cell Model

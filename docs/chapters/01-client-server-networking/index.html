@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="01--clientserver-networking">01 · Client–Server Networking</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/simulator.html">Traffic &amp; cache outage simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="01--clientserver-networking">01 · Client–Server Networking</h1>
 <blockquote>
 <p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: None (Foundational)</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../01-client-server-networking/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/01-client-server-networking/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>Every digital product is a conversation between two computers: a <strong>client</strong> (your phone or browser) asking for something, and a <strong>server</strong> (a computer in a datacenter) answering. Before they can speak English or JSON, they must agree on a set of rules called <strong>protocols</strong>.</p>
@@ -39,13 +39,12 @@
 </ul>
 <h2 id="first-pass">First pass</h2>
 <p><strong>Trail Notes</strong> is a fictional website where people read hiking guides. Imagine opening <code>https://trailnotes.example/guide</code> and follow one request. For this lesson, assume the browser already knows the server's address.</p>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     participant B as Browser
     participant S as Trail Notes server
     B-&gt;&gt;S: Establish a secure connection if needed
     B-&gt;&gt;S: GET /guide
-    S--&gt;&gt;B: 200 OK and the guide HTML
-</code></pre>
+    S--&gt;&gt;B: 200 OK and the guide HTML</pre></figure>
 <ol>
 <li>The browser is the <strong>client</strong>. It sends the request over a secure connection.</li>
 <li>The <strong>server</strong> reads the path <code>/guide</code> and sends a response. Status <code>200 OK</code> indicates success, and the response body contains the HTML.</li>
@@ -57,7 +56,7 @@
 <p>About <strong>70 ms</strong> in this model. The outbound request and inbound response use one network round trip, and server work adds another 20 ms. This estimate omits payload transfer time and browser rendering. A new HTTPS connection can add connection and encryption setup. How much it adds depends on the protocol and whether an earlier session can be resumed.</p>
 </details>
 <p>Use the existing <a href="#run-the-demo">Python simulator</a> to compare connection setup and request patterns. In the <a href="https://aniketchavan7.github.io/system-design-illustrated/flashcards.html">flashcards</a>, search for <strong>Client–Server Networking</strong> and explain how you estimated 70 ms.</p>
-<p><strong>Next lesson</strong> · <a href="../02-domain-name-system/index.html#first-pass">Find the website's address with DNS</a></p>
+<p><strong>Next lesson</strong> · <a href="../../chapters/02-domain-name-system/index.html#first-pass">Find the website's address with DNS</a></p>
 <hr />
 <h2 id="technical-reference">Technical reference</h2>
 <p>Explore TCP and UDP, HTTP versions, loss and multiplexing, streaming protocols, and interview questions.</p>
@@ -86,7 +85,7 @@
 </tr>
 <tr>
 <td style="text-align:left"><strong>Handshake / &quot;Hello, can you hear me?&quot;</strong></td>
-<td style="text-align:left"><strong>TCP 3-Way Handshake</strong> (<code>SYN</code> $\to$ <code>SYN-ACK</code> $\to$ <code>ACK</code>)</td>
+<td style="text-align:left"><strong>TCP 3-Way Handshake</strong> (<code>SYN</code> <span class="math-inline">→</span> <code>SYN-ACK</code> <span class="math-inline">→</span> <code>ACK</code>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Speaking in English or Spanish</strong></td>
@@ -106,9 +105,9 @@
 <h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
 <p>When you click a link on your phone in New York to fetch data from a server in London:</p>
 <ol>
-<li>Physical light in glass fiber travels at $\approx 200,000\text{ km/s}$.</li>
-<li>The physical distance round-trip is $\approx 11,000\text{ km}$.</li>
-<li>That means <strong>one network Round-Trip Time (RTT)</strong> takes roughly <strong>$70\text{ ms}$</strong> just for the physics of light transit, plus router queue delays.</li>
+<li>Physical light in glass fiber travels at <span class="math-inline">≈ 200,000 km/s</span>.</li>
+<li>The physical distance round-trip is <span class="math-inline">≈ 11,000 km</span>.</li>
+<li>That means <strong>one network Round-Trip Time (RTT)</strong> takes roughly <strong><span class="math-inline">70 ms</span></strong> just for the physics of light transit, plus router queue delays.</li>
 </ol>
 <p>If every API request had to open a brand-new connection, perform a 3-way handshake (1 RTT), negotiate TLS encryption keys (1 to 2 RTTs), and wait for sequential responses, a single web page needing 80 assets (images, fonts, scripts) would take <strong>over 10 seconds to load</strong>.</p>
 <p>Modern networking protocols solve this by <strong>reusing connections</strong>, <strong>multiplexing hundreds of streams over a single pipe</strong>, and <strong>eliminating round-trips</strong>.</p>
@@ -117,7 +116,7 @@
 <p align="center">
   <img src="./assets/tcp_handshake.gif" alt="TCP Handshake Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor Client as 📱 Client (Browser/Mobile)
     participant Server as 🖥️ Server (Nginx / API Gateway)
@@ -133,8 +132,7 @@
 
     Note over Client,Server: Phase 3: Application Data Transfer (HTTP/2 Multiplexing)
     Client-&gt;&gt;Server: 6. GET /api/v1/feed (Stream 1) + GET /avatar.png (Stream 3)
-    Server--&gt;&gt;Client: 7. Interleaved Binary Frames (Stream 1 data &amp; Stream 3 data)
-</code></pre>
+    Server--&gt;&gt;Client: 7. Interleaved Binary Frames (Stream 1 data &amp; Stream 3 data)</pre></figure>
 <ol>
 <li><strong>Step 1 (SYN):</strong> Client chooses an Initial Sequence Number (<code>seq=1000</code>) and asks to connect.</li>
 <li><strong>Step 2 (SYN-ACK):</strong> Server reserves buffer memory, acknowledges the client (<code>ack=1001</code>), and sends its own sequence number (<code>seq=5000</code>).</li>
@@ -151,7 +149,7 @@
 <li><code>theme.css</code> (5 KB)</li>
 <li><code>analytics.js</code> (50 KB)</li>
 </ul>
-<p>This is a simplified comparison of request patterns. The TCP rows omit TLS setup and payload transfer time. The HTTP/3 row assumes a previously established session can resume with accepted early data. Assume network <strong>$\text{RTT} = 50\text{ ms}$</strong>, and server computation takes <strong>$20\text{ ms}$</strong> per asset.</p>
+<p>This is a simplified comparison of request patterns. The TCP rows omit TLS setup and payload transfer time. The HTTP/3 row assumes a previously established session can resume with accepted early data. Assume network <strong><span class="math-inline">RTT = 50 ms</span></strong>, and server computation takes <strong><span class="math-inline">20 ms</span></strong> per asset.</p>
 <table>
 <thead>
 <tr>
@@ -167,46 +165,45 @@
 <td style="text-align:left"><strong>HTTP/1.0</strong> (Naive)</td>
 <td style="text-align:center">4 separate</td>
 <td style="text-align:left">1 after another, new TCP handshake each time</td>
-<td style="text-align:center"><strong>$560\text{ ms}$</strong></td>
-<td style="text-align:left">4 handshakes ($4 \times 50\text{ms}$) + 4 fetches ($4 \times 70\text{ms}$)</td>
+<td style="text-align:center"><strong><span class="math-inline">560 ms</span></strong></td>
+<td style="text-align:left">4 handshakes (<span class="math-inline">4 × 50ms</span>) + 4 fetches (<span class="math-inline">4 × 70ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>HTTP/1.1</strong> (Keep-Alive)</td>
 <td style="text-align:center">1 persistent</td>
 <td style="text-align:left">Serial queue on one socket (Head-of-Line blocking)</td>
-<td style="text-align:center"><strong>$330\text{ ms}$</strong></td>
-<td style="text-align:left">1 handshake ($50\text{ms}$) + 4 serial requests in sequence ($4 \times 70\text{ms}$)</td>
+<td style="text-align:center"><strong><span class="math-inline">330 ms</span></strong></td>
+<td style="text-align:left">1 handshake (<span class="math-inline">50ms</span>) + 4 serial requests in sequence (<span class="math-inline">4 × 70ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>HTTP/2</strong> (Multiplexed)</td>
 <td style="text-align:center">1 persistent</td>
 <td style="text-align:left">All 4 sent concurrently as binary streams</td>
-<td style="text-align:center"><strong>$120\text{ ms}$</strong></td>
-<td style="text-align:left">1 handshake ($50\text{ms}$) + parallel transfer bounded by slowest asset ($70\text{ms}$)</td>
+<td style="text-align:center"><strong><span class="math-inline">120 ms</span></strong></td>
+<td style="text-align:left">1 handshake (<span class="math-inline">50ms</span>) + parallel transfer bounded by slowest asset (<span class="math-inline">70ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>HTTP/3</strong> (QUIC 0-RTT)</td>
 <td style="text-align:center">1 UDP session</td>
 <td style="text-align:left">Instant resumption + independent stream frames</td>
-<td style="text-align:center"><strong>$70\text{ ms}$</strong></td>
+<td style="text-align:center"><strong><span class="math-inline">70 ms</span></strong></td>
 <td style="text-align:left">Zero connection handshake penalty + parallel stream delivery</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p>💡 <strong>Takeaway:</strong> Moving from HTTP/1.1 to HTTP/2 cut latency by <strong>$64%$</strong> without changing a single line of backend database code!</p>
+<p>💡 <strong>Takeaway:</strong> Moving from HTTP/1.1 to HTTP/2 cut latency by <strong><span class="math-inline">64%</span></strong> without changing a single line of backend database code!</p>
 </blockquote>
 <hr />
 <h2 id="how-it-works-the-core-protocols">⚙️ How it works: The Core Protocols</h2>
 <h3 id="1-tcp-vs-udp-the-transport-layer">1. TCP vs UDP (The Transport Layer)</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     App[&quot;Application Layer (HTTP, WebSocket, DNS, gRPC)&quot;] --&gt; Choice{&quot;Reliability vs Speed?&quot;}
     Choice --&gt;|Must not lose a single byte| TCP[&quot;🔒 TCP (Transmission Control Protocol)&quot;]
     Choice --&gt;|Speed &amp; real-time latency matter most| UDP[&quot;⚡ UDP (User Datagram Protocol)&quot;]
 
     TCP --&gt; TCP_Uses[&quot;Web APIs (REST/JSON)&lt;br/&gt;Bank Transactions&lt;br/&gt;File Downloads (SFTP)&lt;br/&gt;Email (SMTP)&quot;]
-    UDP --&gt; UDP_Uses[&quot;Live Video Streaming&lt;br/&gt;Online Multiplayer Gaming&lt;br/&gt;Voice over IP (VoIP)&lt;br/&gt;DNS Lookups&quot;]
-</code></pre>
+    UDP --&gt; UDP_Uses[&quot;Live Video Streaming&lt;br/&gt;Online Multiplayer Gaming&lt;br/&gt;Voice over IP (VoIP)&lt;br/&gt;DNS Lookups&quot;]</pre></figure>
 <ul>
 <li><strong>TCP guarantees:</strong>
 <ul>
@@ -259,21 +256,21 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Short Polling</strong></td>
-<td style="text-align:center">Client $\to$ Server</td>
+<td style="text-align:center">Client <span class="math-inline">→</span> Server</td>
 <td style="text-align:center">Ephemeral HTTP</td>
 <td style="text-align:center">HTTP</td>
 <td style="text-align:left">Obsolete; wastes massive bandwidth</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Long Polling</strong></td>
-<td style="text-align:center">Client $\to$ Server</td>
+<td style="text-align:center">Client <span class="math-inline">→</span> Server</td>
 <td style="text-align:center">Stalls HTTP response</td>
 <td style="text-align:center">HTTP</td>
 <td style="text-align:left">Legacy fallbacks when WebSockets are blocked</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Server-Sent Events (SSE)</strong></td>
-<td style="text-align:center">Server $\to$ Client (One-Way)</td>
+<td style="text-align:center">Server <span class="math-inline">→</span> Client (One-Way)</td>
 <td style="text-align:center">Persistent streaming</td>
 <td style="text-align:center">HTTP</td>
 <td style="text-align:left">Live stock tickers, AI text streaming (ChatGPT)</td>
@@ -293,7 +290,7 @@
 <ul>
 <li><strong>Protocol Buffers (Protobuf):</strong> Serializes typed data into compact binary bytes instead of verbose text strings (<code>{&quot;user_id&quot;: 10293}</code> is 22 bytes in JSON, but only 4 bytes in Protobuf).</li>
 <li>Runs on top of <strong>HTTP/2</strong>: Reuses single TCP connections between services, supports bidirectional streaming, and generates typed client code in Go, Java, Python, and Rust.</li>
-<li><strong>Result:</strong> $5\times$ to $10\times$ faster throughput and significantly lower CPU utilization across microservice fleets.</li>
+<li><strong>Result:</strong> <span class="math-inline">5×</span> to <span class="math-inline">10×</span> faster throughput and significantly lower CPU utilization across microservice fleets.</li>
 </ul>
 <hr />
 <h2 id="trade-offs--decision-matrix">⚖️ Trade-offs &amp; Decision Matrix</h2>
@@ -393,10 +390,10 @@ python demo.py
 <h3 id="q1-walk-me-through-step-by-step-what-happens-when-you-type-httpsexamplecom-into-your-browser-and-press-enter">Q1: &quot;Walk me through step-by-step what happens when you type <code>https://example.com</code> into your browser and press Enter.&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
-<p>A comprehensive answer spans <strong>DNS $\to$ TCP $\to$ TLS $\to$ HTTP $\to$ Rendering</strong>:</p>
+<p>A comprehensive answer spans <strong>DNS <span class="math-inline">→</span> TCP <span class="math-inline">→</span> TLS <span class="math-inline">→</span> HTTP <span class="math-inline">→</span> Rendering</strong>:</p>
 <ol>
 <li><strong>URL Parsing &amp; HSTS:</strong> The browser parses the protocol (<code>https</code>) and domain (<code>example.com</code>). It checks its preloaded HSTS list to enforce HTTPS.</li>
-<li><strong>DNS Resolution:</strong> Checks browser cache $\to$ OS cache $\to$ <code>/etc/hosts</code> $\to$ queries recursive DNS resolver (UDP port 53). The resolver walks Root $\to$ TLD (<code>.com</code>) $\to$ Authoritative DNS to return the server's IP (e.g. <code>93.184.216.34</code>).</li>
+<li><strong>DNS Resolution:</strong> Checks browser cache <span class="math-inline">→</span> OS cache <span class="math-inline">→</span> <code>/etc/hosts</code> <span class="math-inline">→</span> queries recursive DNS resolver (UDP port 53). The resolver walks Root <span class="math-inline">→</span> TLD (<code>.com</code>) <span class="math-inline">→</span> Authoritative DNS to return the server's IP (e.g. <code>93.184.216.34</code>).</li>
 <li><strong>TCP 3-Way Handshake:</strong> Browser initiates TCP connection on port 443 by sending <code>SYN</code>. Server replies with <code>SYN-ACK</code>. Browser returns <code>ACK</code>. (Cost: 1 RTT).</li>
 <li><strong>TLS 1.3 Handshake:</strong> Browser sends <code>ClientHello</code> with supported cipher suites and key share. Server returns <code>ServerHello</code>, certificate, and cryptographic verification. Shared symmetric session keys are established. (Cost: 1 RTT).</li>
 <li><strong>HTTP Request &amp; Multiplexing:</strong> Browser transmits an encrypted <code>GET / HTTP/2</code> request with headers.</li>
@@ -440,7 +437,7 @@ python demo.py
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <p>gRPC wins across three distinct technical dimensions:</p>
 <ol>
-<li><strong>Binary Serialization (Protobuf vs JSON):</strong> JSON is human-readable text that requires expensive CPU string parsing, delimiter scanning, and field name repetition. Protobuf compiles to fixed-offset binary tags with varint encoding, reducing payload sizes by $60\text{–}80%$ and CPU serialization time by up to $10\times$.</li>
+<li><strong>Binary Serialization (Protobuf vs JSON):</strong> JSON is human-readable text that requires expensive CPU string parsing, delimiter scanning, and field name repetition. Protobuf compiles to fixed-offset binary tags with varint encoding, reducing payload sizes by <span class="math-inline">60–80%</span> and CPU serialization time by up to <span class="math-inline">10×</span>.</li>
 <li><strong>Transport Multiplexing (HTTP/2):</strong> gRPC natively runs over HTTP/2, allowing dozens of concurrent RPC calls to interleave over a single long-lived TCP connection, eliminating connection handshake latency.</li>
 <li><strong>Strict Code Contracts:</strong> Protobuf <code>.proto</code> schemas generate typed client stubs at compile time, eliminating runtime type checking, schema drift, and boilerplate validation logic.</li>
 </ol>
@@ -463,9 +460,9 @@ Under QUIC (HTTP/3), connections are identified by a persistent 64-bit <strong>C
 <summary>View Answer</summary>
 <p>Because network links are two-way (full-duplex) and unreliable. Both sides must independently choose, transmit, and have their Initial Sequence Number (ISN) acknowledged:</p>
 <ul>
-<li>Step 1: Client sends its ISN ($x$).</li>
-<li>Step 2: Server acknowledges client's ISN ($x+1$) AND sends its own ISN ($y$).</li>
-<li>Step 3: Client acknowledges server's ISN ($y+1$).<br />
+<li>Step 1: Client sends its ISN (<span class="math-inline">x</span>).</li>
+<li>Step 2: Server acknowledges client's ISN (<span class="math-inline">x+1</span>) AND sends its own ISN (<span class="math-inline">y</span>).</li>
+<li>Step 3: Client acknowledges server's ISN (<span class="math-inline">y+1</span>).<br />
 If it were only 2 steps, the server would have no way of knowing if the client actually received its sequence number before the server started sending real data.</li>
 </ul>
 </details>
@@ -488,14 +485,27 @@ In HTTP/2 and HTTP/3, <strong>CSS sprites are an anti-pattern</strong>. HTTP/2 m
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How the browser turns the hostname into an IP address before the TCP handshake.</li>
-<li><a href="../03-load-balancing/index.html">03 · Load Balancing</a>: How Layer 4 and Layer 7 load balancers route incoming TCP connections.</li>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 · API Gateways &amp; Proxies</a>: Terminating TLS at the network perimeter.</li>
+<li><a href="../../chapters/02-domain-name-system/index.html">02 · Domain Name System (DNS)</a>: How the browser turns the hostname into an IP address before the TCP handshake.</li>
+<li><a href="../../chapters/03-load-balancing/index.html">03 · Load Balancing</a>: How Layer 4 and Layer 7 load balancers route incoming TCP connections.</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 · API Gateways &amp; Proxies</a>: Terminating TLS at the network perimeter.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

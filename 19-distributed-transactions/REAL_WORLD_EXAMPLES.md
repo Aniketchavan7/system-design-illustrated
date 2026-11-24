@@ -65,7 +65,7 @@ What happens if the client crashes halfway through?
 ### 2. The Core Problem: Why Two-Phase Commit (2PC) Fails in Microservices
 - Two-Phase Commit requires all participating databases to hold row locks until the coordinator confirms commit:
   - If Service C experiences network latency, Services A and B hold database locks for seconds.
-  - Across hundreds of independent microservices owned by different teams, 2PC creates **tight temporal coupling**, distributed deadlocks, and collapses system availability to the product of all service availabilities ($A_{	ext{system}} = A_1 	imes A_2 	imes A_3$).
+  - Across hundreds of independent microservices owned by different teams, 2PC creates **tight temporal coupling**, distributed deadlocks, and collapses system availability to the product of all service availabilities ($A_{\text{system}} = A_1 \times A_2 \times A_3$).
 
 ### 3. Uber's Architecture: Orchestrated Saga Pattern with Temporal
 

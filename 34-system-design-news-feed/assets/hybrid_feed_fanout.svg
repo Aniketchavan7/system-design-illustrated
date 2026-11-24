@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" role="img" aria-label="Hybrid Social News Feed Fan-Out Architecture">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#18181b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .title { font: 700 20px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .sub { font: 400 13px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .box-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .box-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .mono { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #1d4ed8; }
+      .lbl { font: 600 11px system-ui, -apple-system, sans-serif; fill: #52525b; }
+      .white-t { font: 700 13.5px system-ui, -apple-system, sans-serif; fill: #ffffff; }
+      .white-s { font: 400 11.5px system-ui, -apple-system, sans-serif; fill: #dbeafe; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="398" rx="12" fill="#faf9f5" stroke="#d4d4d8" stroke-width="1.5"/>
+  <text x="32" y="38" class="title">Hybrid Social News Feed Fan-Out Architecture</text>
+  <text x="32" y="58" class="sub">Combining fast O(1) push timelines for regular users with on-read merge for celebrities</text>
+  <line x1="32" y1="72" x2="868" y2="72" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="32" y="150" width="150" height="80" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="107.0" y="186.0" text-anchor="middle" class="box-t">Author Publishes</text>
+  <text x="107.0" y="204.0" text-anchor="middle" class="box-s">Post saved to DB</text>
+  <line x1="182" y1="175" x2="275" y2="128" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="230" y="132" text-anchor="middle" class="lbl">&lt;10k followers</text>
+  <line x1="182" y1="205" x2="275" y2="258" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <text x="230" y="250" text-anchor="middle" class="lbl">&gt;1M celebrity</text>
+  <rect x="275" y="90" width="270" height="74" rx="6" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="410.0" y="123.0" text-anchor="middle" class="white-t">Fan-Out on Write (Push)</text>
+  <text x="410.0" y="141.0" text-anchor="middle" class="white-s">Kafka workers insert post_id into Redis lists</text>
+  <rect x="275" y="222" width="270" height="74" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <text x="410.0" y="255.0" text-anchor="middle" class="box-t">Fan-Out on Read (Pull)</text>
+  <text x="410.0" y="273.0" text-anchor="middle" class="box-s">Skip fan-out to avoid thundering queues</text>
+  <line x1="545" y1="127" x2="635" y2="175" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <line x1="545" y1="259" x2="635" y2="205" stroke="#18181b" stroke-width="1.75" marker-end="url(#arrow)"/>
+  <rect x="635" y="145" width="233" height="92" rx="6" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="751.5" y="187.0" text-anchor="middle" class="box-t">Feed Aggregator (&lt;50ms)</text>
+  <text x="751.5" y="205.0" text-anchor="middle" class="box-s">Merges Redis timeline + celebrity pulls + ML ranking</text>
+  <rect x="32" y="320" width="836" height="52" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+  <text x="450.0" y="351.0" text-anchor="middle" class="box-t">Key Safeguard: Hydrate post text &amp; author avatars from EVCache/Memcached after ranking post IDs</text>
+</svg>

@@ -119,4 +119,4 @@
    - Recommend **Pub/Sub or SQS/RabbitMQ** for task queues, background worker jobs, and situations where each message must be acknowledged and retried individually without ordering constraints.
 2. **Explain Zero-Copy and Sequential I/O**: When asked why Kafka is exceptionally fast, explain that Kafka achieves its throughput by using **sequential append-only disk logging** and the OS **zero-copy `sendfile`** system call, eliminating memory buffer copies.
 3. **Partition Sizing Invariant**: In Kafka system designs, emphasize that you must calculate partition counts upfront based on required throughput:
-   $$	ext{Partitions} = \max\left(\frac{	ext{Target Production Throughput}}{	ext{Single Producer Throughput}}, \frac{	ext{Target Consumption Throughput}}{	ext{Single Consumer Throughput}}\right)$$
+   $$\text{Partitions} = \max\left(\frac{\text{Target Production Throughput}}{\text{Single Producer Throughput}}, \frac{\text{Target Consumption Throughput}}{\text{Single Consumer Throughput}}\right)$$

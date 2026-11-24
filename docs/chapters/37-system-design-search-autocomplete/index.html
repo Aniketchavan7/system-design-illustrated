@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-37-system-design--search-autocomplete-system">Module 37: System Design — Search Autocomplete System</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-37-system-design--search-autocomplete-system">Module 37: System Design — Search Autocomplete System</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a real-time Typeahead / Search Autocomplete Service (Google Instant style), covering Trie data structures, prefix node caching, offline frequency aggregation, and distributed Trie sharding.</p>
 </blockquote>
@@ -30,9 +30,9 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling search autocomplete, review these core modules:</p>
 <ul>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a> (Read-through, prefix caching)</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Sharding Trie nodes across Redis/memory servers)</li>
-<li><a href="../27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Sizing typeahead QPS and RAM footprints)</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a> (Read-through, prefix caching)</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a> (Sharding Trie nodes across Redis/memory servers)</li>
+<li><a href="../../chapters/27-back-of-the-envelope-estimation/index.html">27 - Back-of-the-Envelope Estimation</a> (Sizing typeahead QPS and RAM footprints)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -82,15 +82,18 @@
 <h2 id="the-problem-it-solves">The Problem It Solves</h2>
 <p>A real-time search autocomplete system operates under extreme performance constraints:</p>
 <ol>
-<li><strong>Ultra-Low Latency SLA</strong>: Humans perceive latency $&gt; 100\text{ ms}$ as lag. The typeahead dropdown must return within <strong>$30 - 50\text{ ms}$</strong> end-to-end (including network transit time).</li>
-<li><strong>Keystroke Amplification</strong>: For every 1 search submitted, a user types an average of 5 to 6 keystrokes, triggering 5 to 6 distinct backend API calls ($5\times$ write/read amplification).</li>
+<li><strong>Ultra-Low Latency SLA</strong>: Humans perceive latency <span class="math-inline">&gt; 100 ms</span> as lag. The typeahead dropdown must return within <strong><span class="math-inline">30 - 50 ms</span></strong> end-to-end (including network transit time).</li>
+<li><strong>Keystroke Amplification</strong>: For every 1 search submitted, a user types an average of 5 to 6 keystrokes, triggering 5 to 6 distinct backend API calls (<span class="math-inline">5×</span> write/read amplification).</li>
 <li><strong>Massive Query Distribution</strong>: A search engine like Google handles billions of searches per day across hundreds of millions of unique query terms.</li>
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/typeahead_trie.svg" alt="Sub-50ms Search Autocomplete & Trie Top-K Pipeline" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph ClientPath[&quot;1. Real-Time Query Path (Sub-20ms)&quot;]
-        User[&quot;User Typing ('d-o-g')&quot;] --&gt;|&quot;GET /v1/complete?q=dog&quot;| CDN[&quot;Edge CDN / Cloudflare&quot;]
+        User[&quot;User Typing (&#x27;d-o-g&#x27;)&quot;] --&gt;|&quot;GET /v1/complete?q=dog&quot;| CDN[&quot;Edge CDN / Cloudflare&quot;]
         CDN --&gt;|&quot;Cache Miss&quot;| Gateway[&quot;API Gateway&quot;]
         Gateway --&gt; AutoSvc[&quot;Autocomplete Service&quot;]
         AutoSvc --&gt; TrieCache[(&quot;Trie In-Memory Cluster / Redis&quot;)]
@@ -105,20 +108,19 @@
         FreqTable --&gt; TrieBuilder[&quot;Trie Builder Worker&quot;]
         TrieBuilder --&gt; Snapshot[(&quot;Trie Memory Snapshot (Protobuf)&quot;)]
         Snapshot --&gt;|&quot;Deploy New Version&quot;| TrieCache
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
 <p>Consider building autocomplete for a major platform with <strong>100 Million Daily Active Users (DAU)</strong>:</p>
 <ul>
 <li><strong>Query Volume</strong>:
 <ul>
-<li>100M users $\times$ 10 searches/day = $1\text{ billion searches/day}$.</li>
-<li>Average query length = 4 words $\approx 20$ characters.</li>
-<li>Assume client debounces typing (sending 1 request every 3 characters) $\rightarrow 6\text{ autocomplete requests/search}$.</li>
-<li>Total typeahead requests: $1\text{B} \times 6 = 6\text{ billion requests/day}$.</li>
-<li>Average QPS: $6\text{B} / 86,400 \approx 70,000\text{ QPS}$.</li>
-<li>Peak QPS ($2\times$): $\approx 140,000\text{ QPS}$.</li>
+<li>100M users <span class="math-inline">×</span> 10 searches/day = <span class="math-inline">1 billion searches/day</span>.</li>
+<li>Average query length = 4 words <span class="math-inline">≈ 20</span> characters.</li>
+<li>Assume client debounces typing (sending 1 request every 3 characters) <span class="math-inline">→ 6 autocomplete requests/search</span>.</li>
+<li>Total typeahead requests: <span class="math-inline">1B × 6 = 6 billion requests/day</span>.</li>
+<li>Average QPS: <span class="math-inline">6B / 86,400 ≈ 70,000 QPS</span>.</li>
+<li>Peak QPS (<span class="math-inline">2×</span>): <span class="math-inline">≈ 140,000 QPS</span>.</li>
 </ul>
 </li>
 <li><strong>Trie Memory Footprint</strong>:
@@ -126,9 +128,9 @@
 <li>Assume 20 million unique English search queries.</li>
 <li>Average query length: 30 bytes.</li>
 <li>To achieve sub-10ms latency, every Trie node caches the top 5 queries.</li>
-<li>Top 5 queries $\times 30\text{ bytes} = 150\text{ bytes}$ per prefix node.</li>
-<li>For a pruned 26-ary alphabet Trie with $\approx 30\text{ million nodes}$:</li>
-<li>Storage required: $30\text{M} \times (150\text{ bytes} + 64\text{ bytes pointer overhead}) \approx 6.4\text{ Gigabytes}$!</li>
+<li>Top 5 queries <span class="math-inline">× 30 bytes = 150 bytes</span> per prefix node.</li>
+<li>For a pruned 26-ary alphabet Trie with <span class="math-inline">≈ 30 million nodes</span>:</li>
+<li>Storage required: <span class="math-inline">30M × (150 bytes + 64 bytes pointer overhead) ≈ 6.4 Gigabytes</span>!</li>
 <li>6.4 GB easily fits inside a single server's RAM. To handle 140,000 QPS, replicate the Trie across a 10-node read replica cluster.</li>
 </ul>
 </li>
@@ -138,16 +140,16 @@
 <h3 id="1-the-trie-data-structure--optimization">1. The Trie Data Structure &amp; Optimization</h3>
 <p>A standard Trie without caching requires:</p>
 <ol>
-<li>Traversing down to the prefix node $P$ ($O(L)$ where $L$ is prefix length).</li>
-<li>Searching all descendant leaf nodes to find completions ($O(N)$).</li>
-<li>Sorting descendants by frequency to pick the top 5 ($O(N \log K)$).</li>
+<li>Traversing down to the prefix node <span class="math-inline">P</span> (<span class="math-inline">O(L)</span> where <span class="math-inline">L</span> is prefix length).</li>
+<li>Searching all descendant leaf nodes to find completions (<span class="math-inline">O(N)</span>).</li>
+<li>Sorting descendants by frequency to pick the top 5 (<span class="math-inline">O(N \log K)</span>).</li>
 </ol>
 <p>This naive traversal is too slow for real-time typeahead.
 <strong>Optimization: Node-Level Top-K Caching</strong>:</p>
 <ul>
 <li>At every node along the prefix path, store an array of the top 5 highest-frequency queries:
 <code>Node(&quot;d&quot;) -&gt; [(&quot;discord&quot;, 95M), (&quot;disney&quot;, 80M), (&quot;doordash&quot;, 65M)]</code></li>
-<li>Lookups become strictly $O(L)$, where $L$ is the number of typed characters (typically $\le 10$). Finding suggestions is an instantaneous $O(1)$ memory read once the node is reached!</li>
+<li>Lookups become strictly <span class="math-inline">O(L)</span>, where <span class="math-inline">L</span> is the number of typed characters (typically <span class="math-inline">≤ 10</span>). Finding suggestions is an instantaneous <span class="math-inline">O(1)</span> memory read once the node is reached!</li>
 </ul>
 <h3 id="2-client-side-debouncing">2. Client-Side Debouncing</h3>
 <p>Mobile and web search inputs must implement client-side <strong>Debouncing</strong>:</p>
@@ -177,9 +179,9 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Lookup Latency</strong></td>
-<td style="text-align:left">Slow ($50 - 200\text{ ms}$)</td>
-<td style="text-align:left">Fast ($20 - 40\text{ ms}$)</td>
-<td style="text-align:left">Ultra-fast ($&lt; 5\text{ ms}$)</td>
+<td style="text-align:left">Slow (<span class="math-inline">50 - 200 ms</span>)</td>
+<td style="text-align:left">Fast (<span class="math-inline">20 - 40 ms</span>)</td>
+<td style="text-align:left">Ultra-fast (<span class="math-inline">&lt; 5 ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Memory Footprint</strong></td>
@@ -226,9 +228,9 @@
 <h3 id="q1-how-do-you-reduce-the-search-autocomplete-lookup-latency-to-under-30ms">Q1: How do you reduce the search autocomplete lookup latency to under 30ms?</h3>
 <p><strong>Model Answer</strong>:</p>
 <ol>
-<li><strong>Pre-computed Top-K Caching at Every Trie Node</strong>: Avoid traversing subtree descendants at query time. Store the top 5 highest-frequency query strings directly at each prefix node ($O(L)$ traversal).</li>
+<li><strong>Pre-computed Top-K Caching at Every Trie Node</strong>: Avoid traversing subtree descendants at query time. Store the top 5 highest-frequency query strings directly at each prefix node (<span class="math-inline">O(L)</span> traversal).</li>
 <li><strong>Edge CDN Caching</strong>: Cache common short prefixes (e.g., &quot;g&quot;, &quot;go&quot;, &quot;a&quot;, &quot;am&quot;) at Cloudflare/Akamai Edge PoPs with a 1-hour TTL, serving over 20% of requests without touching origin datacenters.</li>
-<li><strong>Browser Local Caching</strong>: The client browser caches responses in-memory so typing and backspacing (&quot;d&quot; $\rightarrow$ &quot;do&quot; $\rightarrow$ &quot;d&quot;) hits local browser memory instantly ($&lt; 1\text{ ms}$).</li>
+<li><strong>Browser Local Caching</strong>: The client browser caches responses in-memory so typing and backspacing (&quot;d&quot; <span class="math-inline">→</span> &quot;do&quot; <span class="math-inline">→</span> &quot;d&quot;) hits local browser memory instantly (<span class="math-inline">&lt; 1 ms</span>).</li>
 </ol>
 <h3 id="q2-how-do-you-handle-trie-scaling-when-the-dataset-exceeds-the-ram-of-a-single-server">Q2: How do you handle Trie scaling when the dataset exceeds the RAM of a single server?</h3>
 <p><strong>Model Answer</strong>: We partition (shard) the Trie using <strong>Prefix-Based Sharding</strong> or <strong>Consistent Hashing</strong>:</p>
@@ -249,7 +251,7 @@
 <ol>
 <li><strong>Levenshtein / Edit Distance</strong>: Search neighbor branches in the Trie that differ by an edit distance of 1 (insert, delete, transpose).</li>
 <li><strong>BK-Tree (Burkhard-Keller Tree)</strong>: A specialized metric tree indexing words based on edit distance, allowing sub-linear lookup of typo candidates.</li>
-<li><strong>Fuzzy N-gram Inverted Index</strong>: Index words by 3-character n-grams (e.g., &quot;iphone&quot; $\rightarrow$ <code>iph</code>, <code>pho</code>, <code>hon</code>, <code>one</code>). Searching <code>iph</code> intersects with the correct candidate.</li>
+<li><strong>Fuzzy N-gram Inverted Index</strong>: Index words by 3-character n-grams (e.g., &quot;iphone&quot; <span class="math-inline">→</span> <code>iph</code>, <code>pho</code>, <code>hon</code>, <code>one</code>). Searching <code>iph</code> intersects with the correct candidate.</li>
 </ol>
 <h3 id="q5-how-do-you-filter-hate-speech-offensive-suggestions-or-personal-private-data-from-autocomplete">Q5: How do you filter hate speech, offensive suggestions, or personal private data from autocomplete?</h3>
 <p><strong>Model Answer</strong>:</p>
@@ -302,7 +304,20 @@ D) Because consistent hashing is illegal.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

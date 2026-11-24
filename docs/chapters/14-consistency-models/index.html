@@ -22,20 +22,20 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="14---consistency-models-from-linearizable-to-eventual">14 - Consistency Models: From Linearizable to Eventual</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/quorum-lab.html">Quorum overlap &amp; stale read lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="14---consistency-models-from-linearizable-to-eventual">14 - Consistency Models: From Linearizable to Eventual</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In a distributed database, &quot;consistency&quot; does not mean a binary toggle between &quot;right&quot; and &quot;wrong.&quot; Instead, it is a formal contract between the storage engine and client applications governing the order, recency, and visibility of concurrent writes across replicas. While <strong>Linearizability</strong> guarantees the illusion of a single global register at the cost of high cross-region latency, weaker models like <strong>Causal Consistency</strong>, <strong>Read-Your-Own-Writes</strong>, and <strong>Eventual Consistency</strong> unlock massive throughput and fault tolerance by permitting controlled, predictable read anomalies.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../14-consistency-models/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/14-consistency-models/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network latency, propagation delays, and packet reordering.</li>
-<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Asynchronous replication lag, leader-follower topology, and replication streams.</li>
-<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Why network partitions force a choice between availability and linearizability.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: Network latency, propagation delays, and packet reordering.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 - Database Replication</a>: Asynchronous replication lag, leader-follower topology, and replication streams.</li>
+<li><a href="../../chapters/13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Why network partitions force a choice between availability and linearizability.</li>
 <li><strong>Data Structures</strong>: Directed Acyclic Graphs (DAGs), logical clocks, and vector clocks.</li>
 </ul>
 <hr />
@@ -96,7 +96,7 @@
 <p>To make a distributed system linearizable across multiple data centers (e.g., Virginia, Ireland, Tokyo):</p>
 <ul>
 <li>Every single read and write must coordinate across the globe (via Paxos, Raft, or two-phase locking).</li>
-<li>Speed-of-light fiber latency imposes a mandatory penalty of $150\text{–}250\text{ ms}$ on every operation.</li>
+<li>Speed-of-light fiber latency imposes a mandatory penalty of <span class="math-inline">150–250 ms</span> on every operation.</li>
 <li>If an undersea fiber cable snaps (network partition), the system must reject requests to prevent split-brain.</li>
 </ul>
 <h3 id="the-chaos-of-pure-eventual-consistency">The Chaos of Pure Eventual Consistency</h3>
@@ -114,7 +114,7 @@
 <p><img src="./assets/consistency_models.gif" alt="Consistency Models Spectrum" /></p>
 <hr />
 <h3 id="consistency-hierarchy--anomaly-containment">Consistency Hierarchy &amp; Anomaly Containment</h3>
-<pre><code class="language-mermaid">graph TD
+<figure class="chapter-diagram"><pre class="mermaid">graph TD
     subgraph Strong[&quot;Strong Models (High Latency, Zero Stale Reads)&quot;]
         L[&quot;🔒 Linearizable&lt;br/&gt;(Real-Time Global Clock Order)&quot;]
         S[&quot;📜 Sequential&lt;br/&gt;(Global Order, Not Tied to Real Time)&quot;]
@@ -147,8 +147,7 @@
     style RYOW fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style MR fill:#161b22,stroke:#58a6ff,stroke-width:2px;
     style MW fill:#161b22,stroke:#58a6ff,stroke-width:2px;
-    style E fill:#161b22,stroke:#3fb950,stroke-width:2px;
-</code></pre>
+    style E fill:#161b22,stroke:#3fb950,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's quantify the trade-offs in throughput, latency, and operational cost between Linearizable and Eventual architectures:</p>
@@ -156,8 +155,8 @@
 <ul>
 <li>Minimum physical WAN round-trip time (RTT):
 <ul>
-<li>US-East $\leftrightarrow$ EU-West: $75\text{ ms}$</li>
-<li>US-East $\leftrightarrow$ AP-South: $190\text{ ms}$</li>
+<li>US-East <span class="math-inline">↔</span> EU-West: <span class="math-inline">75 ms</span></li>
+<li>US-East <span class="math-inline">↔</span> AP-South: <span class="math-inline">190 ms</span></li>
 </ul>
 </li>
 </ul>
@@ -192,7 +191,7 @@
 <h4 id="2-sequential-consistency-leslie-lamport-1979">2. Sequential Consistency (Leslie Lamport, 1979)</h4>
 <ul>
 <li><strong>Definition</strong>: All operations appear to take effect in some single, global sequential order that is visible and agreed upon by all nodes, and operations from each individual process appear in that process's program order.</li>
-<li><strong>Difference from Linearizability</strong>: Sequential consistency does not tie ordering to physical wall-clock time. If write $W_1$ happens at 12:00:00 and write $W_2$ happens at 12:00:05, sequential consistency allows the cluster to agree that $W_2$ occurred before $W_1$, provided <strong>all</strong> nodes see $W_2$ before $W_1$.</li>
+<li><strong>Difference from Linearizability</strong>: Sequential consistency does not tie ordering to physical wall-clock time. If write <span class="math-inline">W<sub>1</sub></span> happens at 12:00:00 and write <span class="math-inline">W<sub>2</sub></span> happens at 12:00:05, sequential consistency allows the cluster to agree that <span class="math-inline">W<sub>2</sub></span> occurred before <span class="math-inline">W<sub>1</sub></span>, provided <strong>all</strong> nodes see <span class="math-inline">W<sub>2</sub></span> before <span class="math-inline">W<sub>1</sub></span>.</li>
 </ul>
 <h4 id="3-causal-consistency">3. Causal Consistency</h4>
 <ul>
@@ -211,7 +210,7 @@
 </li>
 <li><strong>Monotonic Reads</strong>:
 <ul>
-<li>If a client reads version $V$, they will never subsequently read any version $V' &lt; V$ (<strong>no backwards time travel</strong>).</li>
+<li>If a client reads version <span class="math-inline">V</span>, they will never subsequently read any version <span class="math-inline">V' &lt; V</span> (<strong>no backwards time travel</strong>).</li>
 <li><em>Implementation</em>: Sticky sessions pin a client to a specific replica, or the client tracks <code>last_seen_timestamp</code> in a cookie.</li>
 </ul>
 </li>
@@ -327,7 +326,7 @@
 &quot;These two terms address completely different dimensions of systems engineering:</p>
 <ul>
 <li><strong>Serializability</strong> is a <strong>transaction isolation property</strong> (multi-operation, multi-key). It guarantees that executing concurrent transactions produces the same outcome as if they ran in some serial, one-by-one order. However, it places <strong>no constraints on real-time wall-clock ordering</strong>. A serializable system can legally process a transaction according to a valid order from 2 hours ago.</li>
-<li><strong>Linearizability</strong> is a <strong>recency guarantee on a single register/key</strong> (single operation). It guarantees that operations take effect instantaneously at a discrete point in real-world time between their invocation and response. If write $W$ completes at 12:00:00, any read starting after 12:00:00 must observe $W$.</li>
+<li><strong>Linearizability</strong> is a <strong>recency guarantee on a single register/key</strong> (single operation). It guarantees that operations take effect instantaneously at a discrete point in real-world time between their invocation and response. If write <span class="math-inline">W</span> completes at 12:00:00, any read starting after 12:00:00 must observe <span class="math-inline">W</span>.</li>
 <li>When both properties are combined, the system achieves <strong>Strict Serializability</strong> (or External Consistency), which is the holy grail of distributed databases (e.g., Google Spanner).&quot;</li>
 </ul>
 <hr />
@@ -340,7 +339,7 @@
 <li><strong>Read-Your-Own-Writes Session Tracking</strong>: When the user posts, the backend returns the transaction commit timestamp or Log Sequence Number (LSN) in the response header (e.g., <code>Set-Cookie: user_last_write_lsn=948201</code>).</li>
 <li><strong>Replication Guard on Read</strong>: When the user fetches their feed, the API gateway inspects the cookie:
 <ul>
-<li>If the assigned read replica's current LSN is $\ge 948201$, serve from the replica.</li>
+<li>If the assigned read replica's current LSN is <span class="math-inline">≥ 948201</span>, serve from the replica.</li>
 <li>If the replica is lagging, wait up to a small timeout (e.g., 50 ms) for replication to catch up, or route that specific user's read directly to the Primary database.</li>
 </ul>
 </li>
@@ -357,7 +356,7 @@ Unlike Linearizability, which requires consensus across partitioned nodes (causi
 <h3 id="q4-what-is-monotonic-reads-and-how-can-an-architecture-violate-it-even-with-a-single-master-database">Q4: &quot;What is Monotonic Reads, and how can an architecture violate it even with a single master database?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Assessing edge cases in read-replica pooling.</p>
 <p><strong>Model Answer</strong>:
-&quot;<strong>Monotonic Reads</strong> guarantees that if a client reads a state $V_1$, they will never subsequently observe an earlier state $V_0$.</p>
+&quot;<strong>Monotonic Reads</strong> guarantees that if a client reads a state <span class="math-inline">V<sub>1</sub></span>, they will never subsequently observe an earlier state <span class="math-inline">V<sub>0</sub></span>.</p>
 <p>Even with a single master database, an architecture easily violates monotonic reads if it uses <strong>multiple read replicas</strong>:</p>
 <ol>
 <li>User reads their notifications: request hits Replica A, which has replication lag of 2 ms (shows 5 notifications).</li>
@@ -369,13 +368,13 @@ To enforce monotonic reads, we use <strong>sticky replica routing</strong> (hash
 <h3 id="q5-how-do-vector-clocks-work-to-detect-concurrent-conflicting-writes">Q5: &quot;How do Vector Clocks work to detect concurrent conflicting writes?&quot;</h3>
 <p><strong>Interviewer Goal</strong>: Checking algorithmic mechanics behind distributed versioning.</p>
 <p><strong>Model Answer</strong>:
-&quot;A Vector Clock is an array of logical clock counters, one for each node in the cluster: $V = [N_1: c_1, N_2: c_2, \dots, N_k: c_k]$.</p>
+&quot;A Vector Clock is an array of logical clock counters, one for each node in the cluster: <span class="math-inline">V = [N<sub>1</sub>: c<sub>1</sub>, N<sub>2</sub>: c<sub>2</sub>, …, N<sub>k</sub>: c<sub>k</sub>]</span>.</p>
 <ul>
-<li>When node $i$ processes a write, it increments its own counter: $V[i] = V[i] + 1$.</li>
+<li>When node <span class="math-inline">i</span> processes a write, it increments its own counter: <span class="math-inline">V[i] = V[i] + 1</span>.</li>
 <li>When nodes synchronize, they compare vector clocks:
 <ul>
-<li>Event $A$ causally <strong>preceded</strong> Event $B$ ($A &lt; B$) if every element in $V_A \le V_B$ and at least one element is strictly smaller.</li>
-<li>If neither $V_A \le V_B$ nor $V_B \le V_A$ holds, the events are <strong>concurrent</strong>.
+<li>Event <span class="math-inline">A</span> causally <strong>preceded</strong> Event <span class="math-inline">B</span> (<span class="math-inline">A &lt; B</span>) if every element in <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> and at least one element is strictly smaller.</li>
+<li>If neither <span class="math-inline">V<sub>A</sub> ≤ V<sub>B</sub></span> nor <span class="math-inline">V<sub>B</sub> ≤ V<sub>A</sub></span> holds, the events are <strong>concurrent</strong>.
 When concurrency is detected, the database knows that two independent writes occurred without knowledge of each other (e.g. during a network split). It preserves both versions as 'siblings' and delegates conflict resolution to the application (or uses CRDTs) rather than silently overwriting data.&quot;</li>
 </ul>
 </li>
@@ -408,14 +407,27 @@ Because Causal Consistency does not require nodes to agree on a single global wa
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../07-database-replication/index.html">07 - Database Replication</a>: Replication lag and multi-leader topologies.</li>
-<li><a href="../13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Partition trade-offs in distributed clusters.</li>
-<li><a href="../15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a>: How Raft and Paxos enforce linearizability.</li>
+<li><a href="../../chapters/07-database-replication/index.html">07 - Database Replication</a>: Replication lag and multi-leader topologies.</li>
+<li><a href="../../chapters/13-cap-and-pacelc-theorems/index.html">13 - CAP &amp; PACELC Theorems</a>: Partition trade-offs in distributed clusters.</li>
+<li><a href="../../chapters/15-consensus-and-leader-election/index.html">15 - Consensus &amp; Leader Election</a>: How Raft and Paxos enforce linearizability.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-35-system-design--notification-system">Module 35: System Design — Notification System</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-35-system-design--notification-system">Module 35: System Design — Notification System</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a global multi-channel Notification System (supporting iOS APNs, Android FCM, SMS, and Email), covering priority queues, rate limiting, deduplication windows, and third-party provider failovers.</p>
 </blockquote>
@@ -30,10 +30,10 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling the notification system, review these core modules:</p>
 <ul>
-<li><a href="../05-rate-limiting/index.html">05 - Rate Limiting</a> (Token bucket and user notification frequency caps)</li>
-<li><a href="../17-message-queues/index.html">17 - Message Queues</a> (Priority queues, dead letter queues, and consumer groups)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Exponential backoff, jitter, and fallback providers)</li>
-<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotency keys preventing duplicate alerts)</li>
+<li><a href="../../chapters/05-rate-limiting/index.html">05 - Rate Limiting</a> (Token bucket and user notification frequency caps)</li>
+<li><a href="../../chapters/17-message-queues/index.html">17 - Message Queues</a> (Priority queues, dead letter queues, and consumer groups)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Exponential backoff, jitter, and fallback providers)</li>
+<li><a href="../../chapters/32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Idempotency keys preventing duplicate alerts)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -94,7 +94,10 @@
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">flowchart TD
+<p align="center">
+  <img src="./assets/notification_pipeline.svg" alt="High-Throughput Multi-Channel Notification Platform" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Ingestion[&quot;1. Ingestion Layer&quot;]
         ServiceA[&quot;Billing Service&quot;] --&gt;|&quot;POST /v1/notifications&quot;| Gateway[&quot;Notification API Gateway&quot;]
         ServiceB[&quot;Auth Service (2FA)&quot;] --&gt;|&quot;POST /v1/notifications&quot;| Gateway
@@ -127,8 +130,7 @@
 
     subgraph DeadLetter[&quot;5. Failure Handling&quot;]
         WorkerHigh -.-&gt;|&quot;Failure after 3 Retries&quot;| DLQ[(&quot;Dead Letter Queue (DLQ)&quot;)]
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--system-sizing">Real Numbers &amp; System Sizing</h2>
 <p>Consider a system sending notifications for an application with <strong>100 Million Active Users</strong>:</p>
@@ -136,22 +138,22 @@
 <li><strong>Notification Volume</strong>:
 <ul>
 <li>Average notifications per user per day: 10 (across push, SMS, email).</li>
-<li>Total volume: $100\text{M} \times 10 = 1\text{ billion notifications/day}$.</li>
-<li>Average dispatch rate: $1\text{B} / 86,400 \approx 11,570\text{ notifications/second}$.</li>
-<li>Peak dispatch rate (Black Friday / breaking news): $3\times \approx 35,000\text{ notifications/second}$.</li>
+<li>Total volume: <span class="math-inline">100M × 10 = 1 billion notifications/day</span>.</li>
+<li>Average dispatch rate: <span class="math-inline">1B / 86,400 ≈ 11,570 notifications/second</span>.</li>
+<li>Peak dispatch rate (Black Friday / breaking news): <span class="math-inline">3× ≈ 35,000 notifications/second</span>.</li>
 </ul>
 </li>
 <li><strong>Payload Sizing</strong>:
 <ul>
-<li>Notification event metadata: $\approx 500\text{ bytes}$ (User ID, template ID, variables, channels).</li>
-<li>Storage bandwidth: $35,000\text{ req/s} \times 500\text{ bytes} \approx 17.5\text{ MB/s}$ network throughput.</li>
+<li>Notification event metadata: <span class="math-inline">≈ 500 bytes</span> (User ID, template ID, variables, channels).</li>
+<li>Storage bandwidth: <span class="math-inline">35,000 req/s × 500 bytes ≈ 17.5 MB/s</span> network throughput.</li>
 </ul>
 </li>
 <li><strong>Deduplication Cache Sizing (Redis)</strong>:
 <ul>
 <li>Cache key: <code>sha256(user_id + channel + template_id)</code> = 32 bytes.</li>
-<li>Active keys retained for a 10-minute sliding window: $35,000 \times 600 = 21\text{ million keys}$.</li>
-<li>Total RAM: $21\text{M} \times 64\text{ bytes} \approx 1.34\text{ GB}$ of Redis memory (very lightweight!).</li>
+<li>Active keys retained for a 10-minute sliding window: <span class="math-inline">35,000 × 600 = 21 million keys</span>.</li>
+<li>Total RAM: <span class="math-inline">21M × 64 bytes ≈ 1.34 GB</span> of Redis memory (very lightweight!).</li>
 </ul>
 </li>
 </ul>
@@ -161,7 +163,7 @@
 <ul>
 <li><strong>iOS Mobile Push</strong>: Apple Push Notification service (<strong>APNs</strong>). Uses persistent HTTP/2 connections authenticated with provider tokens (<code>.p8</code> JWT).</li>
 <li><strong>Android Mobile Push</strong>: Firebase Cloud Messaging (<strong>FCM</strong>). Highly scalable HTTP v1 REST/JSON protocol.</li>
-<li><strong>SMS</strong>: Twilio, AWS SNS, Sinch. High cost per message ($0.01 - $0.05); requires fallback routing between multiple telecom carriers.</li>
+<li><strong>SMS</strong>: Twilio, AWS SNS, Sinch. High cost per message (&lt;span class=&quot;math-inline&quot;&gt;0.01 - &lt;/span&gt;0.05); requires fallback routing between multiple telecom carriers.</li>
 <li><strong>Email</strong>: SendGrid, Amazon Simple Email Service (SES), Mailgun. Requires strict DKIM, SPF, and DMARC DNS records to avoid spam filters.</li>
 </ul>
 <h3 id="2-deduplication-algorithm">2. Deduplication Algorithm</h3>
@@ -190,9 +192,9 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Latency for 2FA</strong></td>
-<td style="text-align:left">Lowest ($&lt; 50\text{ ms}$)</td>
-<td style="text-align:left">Low ($100 - 300\text{ ms}$)</td>
-<td style="text-align:left">Ultra-low for High-Q ($&lt; 100\text{ ms}$)</td>
+<td style="text-align:left">Lowest (<span class="math-inline">&lt; 50 ms</span>)</td>
+<td style="text-align:left">Low (<span class="math-inline">100 - 300 ms</span>)</td>
+<td style="text-align:left">Ultra-low for High-Q (<span class="math-inline">&lt; 100 ms</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>System Resilience</strong></td>
@@ -317,7 +319,20 @@ D) Twilio<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

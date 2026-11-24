@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-distributed-unique-id-generator">Real-World Production Deep Dives: Distributed Unique ID Generator</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-distributed-unique-id-generator">Real-World Production Deep Dives: Distributed Unique ID Generator</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Twitter</strong>, and <strong>Discord</strong> generate billions of unique IDs per day, structure 64-bit bitmasks, and avoid database index fragmentation.</p>
 </blockquote>
@@ -33,9 +33,9 @@
 <h3 id="2-googles-solution-hardware-synchronized-truetime-monotonic-ids">2. Google's Solution: Hardware-Synchronized TrueTime Monotonic IDs</h3>
 <p>Rather than relying on local machine clocks (which drift by hundreds of milliseconds), Google installed atomic clocks and GPS receivers in every datacenter to build <strong>TrueTime</strong>:</p>
 <ul>
-<li>Every Spanner transaction receives an immutable commit timestamp $t$.</li>
-<li>TrueTime exposes an API: <code>TT.now()</code> returning an interval $[t_{earliest}, t_{latest}]$ with bounded uncertainty $\epsilon \le 7\text{ ms}$.</li>
-<li>If Transaction $T_2$ is initiated after Transaction $T_1$ commits, Spanner guarantees $t(T_2) &gt; t(T_1)$ by waiting out the uncertainty window $\epsilon$ (&quot;commit wait&quot;).</li>
+<li>Every Spanner transaction receives an immutable commit timestamp <span class="math-inline">t</span>.</li>
+<li>TrueTime exposes an API: <code>TT.now()</code> returning an interval <span class="math-inline">[t<sub>earliest</sub>, t<sub>latest</sub>]</span> with bounded uncertainty <span class="math-inline">ε ≤ 7 ms</span>.</li>
+<li>If Transaction <span class="math-inline">T<sub>2</sub></span> is initiated after Transaction <span class="math-inline">T<sub>1</sub></span> commits, Spanner guarantees <span class="math-inline">t(T<sub>2</sub>) &gt; t(T<sub>1</sub>)</span> by waiting out the uncertainty window <span class="math-inline">ε</span> (&quot;commit wait&quot;).</li>
 <li><strong>ID Formation</strong>: Spanner transaction and entity IDs pack TrueTime nanoseconds directly into the most significant bits of 64-bit and 128-bit integers, ensuring sequential B-Tree storage and causal ordering across the entire globe without coordination.</li>
 </ul>
 <hr />
@@ -80,7 +80,7 @@
 <li><strong>Design Decision</strong>: Every primary key in Discord's entire architecture is an explicit Snowflake ID (users, messages, channels, servers).</li>
 <li><strong>Client Timestamp Extraction</strong>: Because the first 41 bits represent milliseconds since Discord's epoch (January 1, 2015: <code>1420070400000</code>), Discord clients extract the exact creation timestamp of any message directly from the ID in JavaScript without querying backend databases:</li>
 </ul>
-<p>$$\text{Timestamp (ms)} = (\text{Discord_ID} \gg 22) + 1420070400000$$</p>
+<div class="math-block">Timestamp (ms) = (Discord_ID ≫ 22) + 1420070400000</div>
 <hr />
 <h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
 <table>
@@ -134,7 +134,11 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

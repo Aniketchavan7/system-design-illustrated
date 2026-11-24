@@ -22,9 +22,9 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="05--rate-limiting">05 · Rate limiting</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="05--rate-limiting">05 · Rate limiting</h1>
 <blockquote>
-<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../04-api-gateways-and-proxies/index.html">04 · API gateways</a></p>
+<p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../../chapters/04-api-gateways-and-proxies/index.html">04 · API gateways</a></p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>A rate limiter is a rule like <strong>&quot;each user may send at most 100 requests per minute.&quot;</strong> When someone goes over the limit, the server politely says <em>&quot;slow down, try again later&quot;</em> (HTTP status <strong>429 Too Many Requests</strong>) instead of doing the work. This keeps one noisy user, buggy script or attacker from slowing the app down for everyone else.</p>
@@ -37,7 +37,7 @@
 <p>| In the shop | In the system |
 | :---</p>
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../05-rate-limiting/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/05-rate-limiting/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <p>| :--- |
 | Customer | A client (user, API key or IP address) |
@@ -58,7 +58,7 @@
 <p align="center">
   <img src="./assets/token_bucket.gif" alt="Token Bucket Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">sequenceDiagram
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     participant C as 👤 Client
     participant RL as 🚦 Rate limiter
@@ -70,8 +70,7 @@
         API--&gt;&gt;C: 200 OK + X-RateLimit-Remaining: 42
     else over the limit
         RL--&gt;&gt;C: 429 Too Many Requests + Retry-After: 30
-    end
-</code></pre>
+    end</pre></figure>
 <ol>
 <li>The client sends a request as normal.</li>
 <li>The rate limiter, which usually lives in the <strong>API gateway</strong> (see module 04), works out <em>who</em> is asking (user ID, API key or IP address) and checks that client's counter.</li>
@@ -266,10 +265,10 @@
 </ul>
 <h2 id="common-mistakes">🚫 Common mistakes</h2>
 <ul>
-<li><strong>Counting in each server's memory when you run 10 servers.</strong> Each server allows 100/min, so the real limit is 1,000/min. → Keep counters in a shared store like Redis. That's <a href="../25-system-design-rate-limiter/index.html">module 25</a>.</li>
+<li><strong>Counting in each server's memory when you run 10 servers.</strong> Each server allows 100/min, so the real limit is 1,000/min. → Keep counters in a shared store like Redis. That's <a href="../../chapters/25-system-design-rate-limiter/index.html">module 25</a>.</li>
 <li><strong>&quot;Read count, then write count+1&quot; as two steps.</strong> Two servers both read <code>99</code>, both allow, and you're at 101. → Use an <strong>atomic</strong> operation (Redis <code>INCR</code>, or a Lua script that checks and increments in one step).</li>
 <li><strong>Returning 500 or just dropping the connection.</strong> → Return <strong>429</strong> with <code>Retry-After</code>, so clients know it's on purpose and when to come back.</li>
-<li><strong>Clients retrying immediately after a 429.</strong> That makes the storm worse. → Retry with <strong>exponential backoff + jitter</strong> (<a href="../20-fault-tolerance-and-resilience/index.html">module 20</a>).</li>
+<li><strong>Clients retrying immediately after a 429.</strong> That makes the storm worse. → Retry with <strong>exponential backoff + jitter</strong> (<a href="../../chapters/20-fault-tolerance-and-resilience/index.html">module 20</a>).</li>
 <li><strong>Taking the whole API down when the rate limiter's Redis is down.</strong> → Decide up front: <em>fail open</em> (allow traffic and log a warning) or <em>fail closed</em> (reject everything). Failing open keeps the product working; failing closed is safer for things like login protection.</li>
 </ul>
 <h2 id="try-it-yourself">💻 Try it yourself</h2>
@@ -319,11 +318,13 @@ python demo.py
 </li>
 <li><strong>The Sliding Window Counter Solution:</strong>
 <ul>
-<li>Instead of resetting cleanly at the boundary, it calculates an estimated count based on the overlap with the previous window:
-$$\text{Count} = \text{Current Window Count} + \text{Previous Window Count} \times (1 - \text{Time Elapsed in Current Window})$$</li>
-<li>At 12:01:15 ($25%$ into the new minute), the weight of the previous minute is $75%$. If the user sent 100 requests at 12:00:59, their estimated count is $0 + 100 \times 0.75 = 75$, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory ($O(1)$).</li>
+<li>Instead of resetting cleanly at the boundary, it calculates an estimated count based on the overlap with the previous window:</li>
 </ul>
 </li>
+</ul>
+<div class="math-block">Count = Current Window Count + Previous Window Count × (1 - Time Elapsed in Current Window)</div>
+<ul>
+<li>At 12:01:15 (<span class="math-inline">25%</span> into the new minute), the weight of the previous minute is <span class="math-inline">75%</span>. If the user sent 100 requests at 12:00:59, their estimated count is <span class="math-inline">0 + 100 × 0.75 = 75</span>, allowing only 25 more requests. The boundary burst is mathematically eliminated with minimal memory (<span class="math-inline">O(1)</span>).</li>
 </ul>
 </details>
 <hr />
@@ -402,14 +403,27 @@ $$\text{Count} = \text{Current Window Count} + \text{Previous Window Count} \tim
 </ul>
 <h2 id="related">🔗 Related</h2>
 <ul>
-<li><a href="../04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: where rate limiters usually live.</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 · Fault tolerance &amp; resilience</a>: what <em>clients</em> should do when they get a 429.</li>
-<li><a href="../25-system-design-rate-limiter/index.html">25 · Distributed rate limiter</a>: running these algorithms across many servers with Redis.</li>
+<li><a href="../../chapters/04-api-gateways-and-proxies/index.html">04 · API gateways &amp; proxies</a>: where rate limiters usually live.</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 · Fault tolerance &amp; resilience</a>: what <em>clients</em> should do when they get a 429.</li>
+<li><a href="../../chapters/25-system-design-rate-limiter/index.html">25 · Distributed rate limiter</a>: running these algorithms across many servers with Redis.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

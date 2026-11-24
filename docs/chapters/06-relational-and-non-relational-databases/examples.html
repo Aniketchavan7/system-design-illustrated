@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-deep-dives-relational-vs-nosql-databases">Real-World Production Deep Dives: Relational vs NoSQL Databases</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-relational-vs-nosql-databases">Real-World Production Deep Dives: Relational vs NoSQL Databases</h1>
 <blockquote>
 <p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix</strong> navigate the relational vs NoSQL trade-off at multi-petabyte scale, contrasting Google Spanner/Bigtable with Netflix Cassandra/Aurora polyglot persistence.</p>
 </blockquote>
@@ -63,14 +63,16 @@
 <h4 id="a-google-cloud-spanner-globally-distributed-relational-acid">A. Google Cloud Spanner: Globally Distributed Relational ACID</h4>
 <p>Spanner was the world's first globally distributed database to achieve both horizontal scale and strict serializability:</p>
 <ul>
-<li><strong>TrueTime API</strong>: Every Google data center contains dedicated <strong>GPS receivers and Atomic Rubidium Clocks</strong>. TrueTime exposes an API returning an uncertainty window: $[	ext{earliest}, 	ext{latest}]$, guaranteeing time uncertainty $\epsilon &lt; 7	ext{ms}$.</li>
+<li><strong>TrueTime API</strong>: Every Google data center contains dedicated <strong>GPS receivers and Atomic Rubidium Clocks</strong>. TrueTime exposes an API returning an uncertainty window: <span class="math-inline">[earliest, latest]</span>, guaranteeing time uncertainty <span class="math-inline">ε &lt; 7ms</span>.</li>
 <li><strong>Lock-Free Read Transactions</strong>: Spanner uses TrueTime to assign globally monotonic commit timestamps. Readers read data at a past timestamp without acquiring <em>any</em> locks, completely eliminating lock contention between readers and writers.</li>
 <li><strong>Two-Phase Commit over Paxos</strong>: Distributed writes use Paxos groups to replicate state safely across continents, followed by 2PC across Paxos leaders for multi-table transactions.</li>
 </ul>
 <h4 id="b-google-bigtable-high-throughput-wide-column-nosql">B. Google Bigtable: High-Throughput Wide-Column NoSQL</h4>
 <ul>
-<li>Bigtable organizes data into a sparse, distributed, persistent multi-dimensional sorted map:
-$$	ext{(row:string, column:string, time:int64)} 	o 	ext{string}$$</li>
+<li>Bigtable organizes data into a sparse, distributed, persistent multi-dimensional sorted map:</li>
+</ul>
+<div class="math-block">(row:string, column:string, time:int64) → string</div>
+<ul>
 <li><strong>Data Model</strong>: Rows are maintained in lexicographical order.</li>
 <li><strong>High-Write Ingestion</strong>: High-velocity analytics (e.g., crawler pages, time-series telemetry) write directly to append-only logs and memory tables (MemTables) without coordination locks, achieving millions of writes per second per cluster.</li>
 </ul>
@@ -187,7 +189,11 @@ LIMIT 20;
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+
 </body>
 </html>

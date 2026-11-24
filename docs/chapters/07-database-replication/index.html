@@ -22,17 +22,17 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="07--database-replication--high-availability">07 · Database Replication &amp; High Availability</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/quorum-lab.html">Quorum replication (N, W, R) lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="07--database-replication--high-availability">07 · Database Replication &amp; High Availability</h1>
 <blockquote>
-<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
+<p><strong>Part 2 · Storing data</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a></p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../07-database-replication/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/07-database-replication/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>If you store all your company's data on a single database server and that server's hard drive dies, your business is gone.</p>
-<p><strong>Database replication</strong> means keeping exact, live copies of your data on multiple separate servers across the network. If the main server (the <strong>Leader</strong>) catches fire, one of the backup copies (the <strong>Followers</strong>) automatically takes over. Furthermore, because $95%$ of internet traffic is reading data rather than writing it, you can distribute millions of read queries across your followers so the main server never slows down.</p>
+<p><strong>Database replication</strong> means keeping exact, live copies of your data on multiple separate servers across the network. If the main server (the <strong>Leader</strong>) catches fire, one of the backup copies (the <strong>Followers</strong>) automatically takes over. Furthermore, because <span class="math-inline">95%</span> of internet traffic is reading data rather than writing it, you can distribute millions of read queries across your followers so the main server never slows down.</p>
 <hr />
 <h2 id="everyday-analogy-the-head-chef--line-cooks">🍕 Everyday analogy: The Head Chef &amp; Line Cooks</h2>
 <p>Imagine the kitchen of a Michelin-starred restaurant:</p>
@@ -67,7 +67,7 @@
 <td style="text-align:left"><strong>Replication Lag</strong> (milliseconds to seconds)</td>
 </tr>
 <tr>
-<td style="text-align:left"><strong>Head chef fainting $\to$ Sous chef takes over</strong></td>
+<td style="text-align:left"><strong>Head chef fainting <span class="math-inline">→</span> Sous chef takes over</strong></td>
 <td style="text-align:left"><strong>Automated Leader Failover</strong></td>
 </tr>
 </tbody>
@@ -76,15 +76,15 @@
 <h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
 <ol>
 <li><strong>Hardware Mortality:</strong> Disk drives, power supplies, and RAM sticks fail every single day in cloud datacenters. Replication guarantees that when hardware fails, zero data is lost.</li>
-<li><strong>Read Traffic Overload:</strong> Most web applications have a $10:1$ to $100:1$ read-to-write ratio (Twitter, Reddit, YouTube). A single PostgreSQL instance might choke at $2,000\text{ reads/sec}$. By spinning up 5 read replicas, you can effortlessly serve $10,000+\text{ reads/sec}$.</li>
-<li><strong>Geographical Data Locality:</strong> Placing read replicas in Frankfurt, Singapore, and Virginia allows European, Asian, and American users to read records from a local datacenter in $&lt; 5\text{ ms}$ instead of sending packets across oceans.</li>
+<li><strong>Read Traffic Overload:</strong> Most web applications have a <span class="math-inline">10:1</span> to <span class="math-inline">100:1</span> read-to-write ratio (Twitter, Reddit, YouTube). A single PostgreSQL instance might choke at <span class="math-inline">2,000 reads/sec</span>. By spinning up 5 read replicas, you can effortlessly serve <span class="math-inline">10,000+ reads/sec</span>.</li>
+<li><strong>Geographical Data Locality:</strong> Placing read replicas in Frankfurt, Singapore, and Virginia allows European, Asian, and American users to read records from a local datacenter in <span class="math-inline">&lt; 5 ms</span> instead of sending packets across oceans.</li>
 </ol>
 <hr />
 <h2 id="picture-it">🖼️ Picture it</h2>
 <p align="center">
   <img src="./assets/db_replication.gif" alt="Database Replication Architecture Animation" width="100%" />
 </p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     App[&quot;📱 Application Services&quot;]
 
     subgraph Cluster[&quot;Replication Topology (Single-Leader)&quot;]
@@ -98,8 +98,7 @@
     Leader --&gt;|2. Asynchronous WAL / Binlog Stream| F2
 
     App --&gt;|&quot;3. Reads (SELECT) - 95% of traffic&quot;| F1
-    App --&gt;|&quot;3. Reads (SELECT) - 95% of traffic&quot;| F2
-</code></pre>
+    App --&gt;|&quot;3. Reads (SELECT) - 95% of traffic&quot;| F2</pre></figure>
 <ol>
 <li>All write transactions (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>) are processed exclusively by the Primary Leader.</li>
 <li>The Primary writes mutations to its local <strong>Write-Ahead Log (WAL)</strong> on disk and streams those log events across the network to all Followers.</li>
@@ -111,7 +110,7 @@
 <h3 id="synchronous-vs-asynchronous-replication-latency-math">Synchronous vs Asynchronous Replication Latency Math</h3>
 <p>Suppose your Primary database is in <strong>Virginia (US-East)</strong> and you configure a Read Replica in <strong>Frankfurt (EU-Central)</strong>:</p>
 <ul>
-<li>Physical fiber Round-Trip Time (RTT): <strong>$75\text{ ms}$</strong>.</li>
+<li>Physical fiber Round-Trip Time (RTT): <strong><span class="math-inline">75 ms</span></strong>.</li>
 </ul>
 <table>
 <thead>
@@ -125,20 +124,20 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Synchronous</strong></td>
-<td style="text-align:left">Primary writes locally $\to$ sends to Frankfurt $\to$ waits for confirmation $\to$ returns OK to user</td>
-<td style="text-align:center"><strong>$75\text{ ms} + \text{disk I/O} \approx 80\text{ ms}$</strong> (Slow!)</td>
-<td style="text-align:left"><strong>$0\text{ data loss}$</strong> (Replica guaranteed up to date)</td>
+<td style="text-align:left">Primary writes locally <span class="math-inline">→</span> sends to Frankfurt <span class="math-inline">→</span> waits for confirmation <span class="math-inline">→</span> returns OK to user</td>
+<td style="text-align:center"><strong><span class="math-inline">75 ms + disk I/O ≈ 80 ms</span></strong> (Slow!)</td>
+<td style="text-align:left"><strong><span class="math-inline">0 data loss</span></strong> (Replica guaranteed up to date)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Asynchronous</strong></td>
-<td style="text-align:left">Primary writes locally $\to$ returns OK to user immediately ($1\text{ms}$) $\to$ streams to Frankfurt in background</td>
-<td style="text-align:center"><strong>$1.5\text{ ms}$</strong> (Lightning fast!)</td>
+<td style="text-align:left">Primary writes locally <span class="math-inline">→</span> returns OK to user immediately (<span class="math-inline">1ms</span>) <span class="math-inline">→</span> streams to Frankfurt in background</td>
+<td style="text-align:center"><strong><span class="math-inline">1.5 ms</span></strong> (Lightning fast!)</td>
 <td style="text-align:left"><strong>Data loss risk:</strong> If Primary dies before log reaches Frankfurt, last 100ms of writes are lost</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Semi-Synchronous</strong></td>
-<td style="text-align:left">Primary waits for <strong>at least 1</strong> local replica in same datacenter ($0.5\text{ms}$ RTT) before returning OK</td>
-<td style="text-align:center"><strong>$2\text{ ms}$</strong> (Fast &amp; Safe)</td>
+<td style="text-align:left">Primary waits for <strong>at least 1</strong> local replica in same datacenter (<span class="math-inline">0.5ms</span> RTT) before returning OK</td>
+<td style="text-align:center"><strong><span class="math-inline">2 ms</span></strong> (Fast &amp; Safe)</td>
 <td style="text-align:left"><strong>Zero data loss</strong> within primary region</td>
 </tr>
 </tbody>
@@ -146,7 +145,7 @@
 <hr />
 <h2 id="how-it-works-replication-topologies--consistency-guarantees">⚙️ How it works: Replication Topologies &amp; Consistency Guarantees</h2>
 <h3 id="1-single-leader-vs-multi-leader-vs-leaderless">1. Single-Leader vs Multi-Leader vs Leaderless</h3>
-<pre><code class="language-mermaid">flowchart LR
+<figure class="chapter-diagram"><pre class="mermaid">flowchart LR
     subgraph SL[&quot;1. Single-Leader (Most Common)&quot;]
         L1[(&quot;👑 Primary&quot;)] --&gt; R1[(&quot;📖 Follower&quot;)]
         L1 --&gt; R2[(&quot;📖 Follower&quot;)]
@@ -160,8 +159,7 @@
         C[&quot;Client&quot;] --&gt; N1[(&quot;Node 1&quot;)]
         C --&gt; N2[(&quot;Node 2&quot;)]
         C --&gt; N3[(&quot;Node 3&quot;)]
-    end
-</code></pre>
+    end</pre></figure>
 <ol>
 <li><strong>Single-Leader (Postgres, MySQL, MongoDB):</strong>
 <ul>
@@ -182,20 +180,20 @@
 </li>
 </ol>
 <hr />
-<h3 id="2-quorum-math-in-leaderless-systems-w--r--n">2. Quorum Math in Leaderless Systems ($W + R &gt; N$)</h3>
-<p>In a cluster of $N$ replicas:</p>
+<h3 id="2-quorum-math-in-leaderless-systems-span-classmath-inlinew--r--nspan">2. Quorum Math in Leaderless Systems (<span class="math-inline">W + R &gt; N</span>)</h3>
+<p>In a cluster of <span class="math-inline">N</span> replicas:</p>
 <ul>
-<li>$W$ = Number of replicas that must acknowledge a <strong>write</strong> before it is considered successful.</li>
-<li>$R$ = Number of replicas that must respond to a <strong>read</strong> query.</li>
+<li><span class="math-inline">W</span> = Number of replicas that must acknowledge a <strong>write</strong> before it is considered successful.</li>
+<li><span class="math-inline">R</span> = Number of replicas that must respond to a <strong>read</strong> query.</li>
 </ul>
-<p>$$\text{Strict Consistency Condition: } W + R &gt; N$$</p>
+<div class="math-block">Strict Consistency Condition: W + R > N</div>
 <p><strong>Why this formula guarantees fresh reads:</strong></p>
 <ul>
-<li>Suppose cluster size $N = 3$.</li>
-<li>You configure $W = 2$ and $R = 2$ ($2 + 2 = 4 &gt; 3$).</li>
-<li>When you write, at least 2 nodes receive the newest version ($V_2$).</li>
+<li>Suppose cluster size <span class="math-inline">N = 3</span>.</li>
+<li>You configure <span class="math-inline">W = 2</span> and <span class="math-inline">R = 2</span> (<span class="math-inline">2 + 2 = 4 &gt; 3</span>).</li>
+<li>When you write, at least 2 nodes receive the newest version (<span class="math-inline">V<sub>2</sub></span>).</li>
 <li>When you read, you query 2 nodes. By the Pigeonhole Principle, <strong>at least one node in your read set is guaranteed to have participated in the write set!</strong></li>
-<li>The client inspects the version timestamps, sees $V_2 &gt; V_1$, returns $V_2$ to the user, and triggers a background <strong>Read Repair</strong> to update the stale replica!</li>
+<li>The client inspects the version timestamps, sees <span class="math-inline">V<sub>2</sub> &gt; V<sub>1</sub></span>, returns <span class="math-inline">V<sub>2</sub></span> to the user, and triggers a background <strong>Read Repair</strong> to update the stale replica!</li>
 </ul>
 <hr />
 <h3 id="3-the-3-classic-replication-lag-anomalies">3. The 3 Classic Replication Lag Anomalies</h3>
@@ -230,8 +228,8 @@
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Write Latency</strong></td>
-<td style="text-align:left">Low ($1\text{–}2\text{ ms}$) — does not wait for network transit</td>
-<td style="text-align:left">High ($10\text{–}100\text{ ms}$) — bounded by slowest replica RTT</td>
+<td style="text-align:left">Low (<span class="math-inline">1–2 ms</span>) — does not wait for network transit</td>
+<td style="text-align:left">High (<span class="math-inline">10–100 ms</span>) — bounded by slowest replica RTT</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Primary Write Availability</strong></td>
@@ -262,7 +260,7 @@
 <p><strong>The &quot;Split-Brain&quot; Catastrophe:</strong></p>
 <ul>
 <li><em>What happens:</em> A temporary network partition occurs between Primary and Replica. The Replica mistakenly assumes the Primary died and promotes itself to Leader. Now you have <strong>two Leaders</strong> accepting writes independently! When the network heals, their datasets have diverged irrecoverably.</li>
-<li><em>The Fix:</em> Require an <strong>odd-numbered consensus quorum</strong> (e.g. 3 or 5 nodes using Raft / Paxos). A node can only become Leader if it wins votes from a strict majority ($\lfloor N/2 \rfloor + 1$).</li>
+<li><em>The Fix:</em> Require an <strong>odd-numbered consensus quorum</strong> (e.g. 3 or 5 nodes using Raft / Paxos). A node can only become Leader if it wins votes from a strict majority (<span class="math-inline">⌊ N/2 ⌋ + 1</span>).</li>
 </ul>
 </li>
 <li>
@@ -289,7 +287,7 @@ python demo.py
 <hr />
 <h2 id="where-youll-see-it-in-production">🌍 Where you'll see it in production</h2>
 <ul>
-<li><strong>AWS Aurora:</strong> Decouples compute from storage, replicating log records across 6 storage nodes in 3 Availability Zones using a $4/6$ write quorum.</li>
+<li><strong>AWS Aurora:</strong> Decouples compute from storage, replicating log records across 6 storage nodes in 3 Availability Zones using a <span class="math-inline">4/6</span> write quorum.</li>
 <li><strong>GitHub:</strong> Uses MySQL with Orchestrator for automated leader detection and sub-second failover.</li>
 <li><strong>PostgreSQL Streaming Replication:</strong> Replicates binary WAL records at the block level with sub-millisecond lag.</li>
 </ul>
@@ -301,7 +299,7 @@ python demo.py
 <p>In an asynchronous replication cluster, read replicas lag behind the primary by milliseconds to seconds. If a user modifies their profile and immediately refreshes, routing the read to a lagged replica results in a jarring stale read.</p>
 <p><strong>Production Solution Techniques:</strong></p>
 <ol>
-<li><strong>Time-Based Heuristic Routing:</strong> When a user executes a mutation (<code>POST /profile</code>), the API gateway or application records a timestamp cookie: <code>last_write_timestamp = now()</code>. For the next $T$ seconds (e.g., 5 seconds, exceeding maximum replication lag), all read requests from that user are routed directly to the <strong>Primary Leader</strong>. Reads from other users continue routing to replicas.</li>
+<li><strong>Time-Based Heuristic Routing:</strong> When a user executes a mutation (<code>POST /profile</code>), the API gateway or application records a timestamp cookie: <code>last_write_timestamp = now()</code>. For the next <span class="math-inline">T</span> seconds (e.g., 5 seconds, exceeding maximum replication lag), all read requests from that user are routed directly to the <strong>Primary Leader</strong>. Reads from other users continue routing to replicas.</li>
 <li><strong>Replication Log Sequence Number (LSN) Tracking:</strong> The Primary returns the transaction's commit LSN (e.g. <code>LSN = 10492</code>). When the client subsequently reads, it sends <code>LSN: 10492</code> in the request header. If the replica has only caught up to <code>LSN = 10480</code>, the application either waits until the replica catches up or redirects the read to the Primary.</li>
 </ol>
 </details>
@@ -321,24 +319,26 @@ python demo.py
 <li><strong>Prevention via Quorum Consensus:</strong>
 <ul>
 <li>Clusters must use an <strong>odd number of nodes</strong> (3, 5, or 7) managed by consensus algorithms like Raft, Paxos, or ZooKeeper/etcd.</li>
-<li>A node is only allowed to become Primary if it wins votes from a <strong>strict majority</strong>:
-$$\text{Quorum} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$</li>
-<li>In a 3-node cluster, a majority is 2. If the network splits into a 1-node partition and a 2-node partition, only the 2-node partition can reach quorum and elect a leader. The isolated 1-node side cannot reach quorum and automatically transitions to read-only or steps down, mathematically preventing Split-Brain.</li>
+<li>A node is only allowed to become Primary if it wins votes from a <strong>strict majority</strong>:</li>
 </ul>
 </li>
 </ul>
+<div class="math-block">Quorum = ⌊ (N) / (2) ⌋ + 1</div>
+<ul>
+<li>In a 3-node cluster, a majority is 2. If the network splits into a 1-node partition and a 2-node partition, only the 2-node partition can reach quorum and elect a leader. The isolated 1-node side cannot reach quorum and automatically transitions to read-only or steps down, mathematically preventing Split-Brain.</li>
+</ul>
 </details>
 <hr />
-<h3 id="q3-in-leaderless-systems-cassandra--dynamodb-how-does-quorum-math-w--r--n-ensure-strong-consistency">Q3: &quot;In leaderless systems (Cassandra / DynamoDB), how does Quorum Math ($W + R &gt; N$) ensure strong consistency?&quot;</h3>
+<h3 id="q3-in-leaderless-systems-cassandra--dynamodb-how-does-quorum-math-span-classmath-inlinew--r--nspan-ensure-strong-consistency">Q3: &quot;In leaderless systems (Cassandra / DynamoDB), how does Quorum Math (<span class="math-inline">W + R &gt; N</span>) ensure strong consistency?&quot;</h3>
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 <p>In leaderless systems, there is no master node. Replicas are symmetric.</p>
 <ul>
-<li>If $N$ is the replication factor, $W$ is the number of nodes that must ACK a write, and $R$ is the number of nodes queried on read:</li>
-<li>When $W + R &gt; N$, the read quorum and write quorum <strong>must overlap by at least one node</strong> (Pigeonhole Principle).</li>
+<li>If <span class="math-inline">N</span> is the replication factor, <span class="math-inline">W</span> is the number of nodes that must ACK a write, and <span class="math-inline">R</span> is the number of nodes queried on read:</li>
+<li>When <span class="math-inline">W + R &gt; N</span>, the read quorum and write quorum <strong>must overlap by at least one node</strong> (Pigeonhole Principle).</li>
 <li><strong>Step-by-Step Flow:</strong>
 <ol>
-<li>Suppose $N = 3, W = 2, R = 2$.</li>
+<li>Suppose <span class="math-inline">N = 3, W = 2, R = 2</span>.</li>
 <li>Write transaction writes version 5 to Node 1 and Node 2. (Node 3 misses it).</li>
 <li>Subsequent read queries Node 2 and Node 3.</li>
 <li>Node 2 returns version 5; Node 3 returns version 4.</li>
@@ -379,11 +379,11 @@ $$\text{Quorum} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$</li>
 </details>
 <hr />
 <ol start="2">
-<li><strong>In a 5-node Cassandra cluster with replication factor $N=5$, you configure $W=1$ and $R=1$. What happens during network partitions?</strong></li>
+<li><strong>In a 5-node Cassandra cluster with replication factor <span class="math-inline">N=5</span>, you configure <span class="math-inline">W=1</span> and <span class="math-inline">R=1</span>. What happens during network partitions?</strong></li>
 </ol>
 <details>
 <summary>View Answer</summary>
-<p>$W + R = 1 + 1 = 2 \le 5$. Because $W + R \le N$, you have <strong>Eventual Consistency</strong> (AP system). Writes and reads will be ultra-fast and the system will remain available during partitions, but clients are not guaranteed to read the latest writes and will frequently encounter stale data.</p>
+<p><span class="math-inline">W + R = 1 + 1 = 2 ≤ 5</span>. Because <span class="math-inline">W + R ≤ N</span>, you have <strong>Eventual Consistency</strong> (AP system). Writes and reads will be ultra-fast and the system will remain available during partitions, but clients are not guaranteed to read the latest writes and will frequently encounter stale data.</p>
 </details>
 <hr />
 <ol start="3">
@@ -391,7 +391,7 @@ $$\text{Quorum} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$</li>
 </ol>
 <details>
 <summary>View Answer</summary>
-<p>When a client queries a quorum of replicas (e.g. $R=2$) and notices that Node A returned an older version than Node B, the client returns the newer version to the caller, and immediately fires an asynchronous background write to Node A with the newer version to &quot;repair&quot; the stale replica.</p>
+<p>When a client queries a quorum of replicas (e.g. <span class="math-inline">R=2</span>) and notices that Node A returned an older version than Node B, the client returns the newer version to the caller, and immediately fires an asynchronous background write to Node A with the newer version to &quot;repair&quot; the stale replica.</p>
 </details>
 <hr />
 <h2 id="go-deeper">📚 Go deeper</h2>
@@ -402,14 +402,27 @@ $$\text{Quorum} = \left\lfloor \frac{N}{2} \right\rfloor + 1$$</li>
 <hr />
 <h2 id="related-modules">🔗 Related modules</h2>
 <ul>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: The underlying database engines being replicated.</li>
-<li><a href="../08-database-partitioning/index.html">08 · Database partitioning</a>: How replication pairs with sharding to scale both reads and writes.</li>
-<li><a href="../15-consensus-and-leader-election/index.html">15 · Consensus &amp; leader election</a>: The consensus algorithms (Raft) that make database failovers safe.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 · SQL vs NoSQL</a>: The underlying database engines being replicated.</li>
+<li><a href="../../chapters/08-database-partitioning/index.html">08 · Database partitioning</a>: How replication pairs with sharding to scale both reads and writes.</li>
+<li><a href="../../chapters/15-consensus-and-leader-election/index.html">15 · Consensus &amp; leader election</a>: The consensus algorithms (Raft) that make database failovers safe.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

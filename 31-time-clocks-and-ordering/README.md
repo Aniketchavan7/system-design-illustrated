@@ -33,7 +33,7 @@ Imagine two detectives in different cities investigating a crime:
 - Detective 2 writes: *"Suspect arrested at 2:00 PM"*.
 - Looking at the wall times, it appears the suspect was arrested *before* the witness was interviewed! In reality, Detective 2's watch was just running slow.
 - **The Solution (Logical Ordering)**: The detectives exchange numbered police dispatch messages:
-  `Dispatch #101` $	o$ `Dispatch #102` $	o$ `Dispatch #103`.
+  `Dispatch #101` $\to$ `Dispatch #102` $\to$ `Dispatch #103`.
   Regardless of what their broken wristwatches say, Dispatch #103 is guaranteed to have happened *after* Dispatch #102.
 
 ---
@@ -49,6 +49,10 @@ Relying on physical time-of-day clocks (`System.currentTimeMillis()`) in distrib
 ---
 
 ## 🖼️ Picture It: Lamport Timestamps vs Vector Clocks
+
+<p align="center">
+  <img src="./assets/truetime_ordering.svg" alt="Physical Clocks, Uncertainty & TrueTime Commit Wait" width="100%" />
+</p>
 
 ```mermaid
 sequenceDiagram
@@ -77,16 +81,16 @@ sequenceDiagram
 Every node maintains a single integer counter `L`:
 1. Before executing an event, increment counter: $L = L + 1$.
 2. When sending a message, attach $L$ to the payload.
-3. When receiving a message with timestamp $L_{	ext{msg}}$:
-   $$L_{	ext{local}} = \max(L_{	ext{local}}, L_{	ext{msg}}) + 1$$
+3. When receiving a message with timestamp $L_{\text{msg}}$:
+   $$L_{\text{local}} = \max(L_{\text{local}}, L_{\text{msg}}) + 1$$
 - **Limitation**: If $L(A) < L(B)$, you cannot tell whether $A$ caused $B$ or if they occurred concurrently without knowledge of each other.
 
 ### 3. Vector Clocks (Detecting Concurrency)
 For a cluster of $N$ nodes, each node maintains a vector of size $N$:
 $$V = [v_1, v_2, \dots, v_n]$$
 - When Node $i$ performs an event: $V[i] = V[i] + 1$.
-- When Node $i$ receives vector $V_{	ext{msg}}$ from Node $j$:
-  $$V[k] = \max(V[k], V_{	ext{msg}}[k]) \quad 	ext{for all } k$$
+- When Node $i$ receives vector $V_{\text{msg}}$ from Node $j$:
+  $$V[k] = \max(V[k], V_{\text{msg}}[k]) \quad \text{for all } k$$
 - **Causality Invariant**:
   - Event $A$ happened before Event $B$ if every element in $V_A \le V_B$ and at least one element is strictly $<$.
   - If neither $V_A \le V_B$ nor $V_B \le V_A$, the events are **concurrent conflicts** that require application-level reconciliation (e.g. merging shopping carts).
@@ -134,7 +138,7 @@ python demo.py
 
 ## 🌍 Where You'll See It in Production
 
-- **Google Cloud Spanner**: Solved clock uncertainty using the **TrueTime API**, installing physical atomic clocks and GPS receivers in every datacenter to bound uncertainty $\epsilon < 7	ext{ms}$.
+- **Google Cloud Spanner**: Solved clock uncertainty using the **TrueTime API**, installing physical atomic clocks and GPS receivers in every datacenter to bound uncertainty $\epsilon < 7\text{ms}$.
 - **Amazon Dynamo (Original)**: Used **Vector Clocks** to allow shoppers to add items to carts during datacenter partitions without dropping items.
 - **Git**: Commit hashes form a directed acyclic graph (DAG) of logical causal history, independent of the developer's computer clock!
 
@@ -168,7 +172,7 @@ Physical clocks synchronize over the internet using NTP, which is subject to net
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
 Given two vector timestamps $V_A$ and $V_B$:
-- $V_A \le V_B$ if every element $V_A[k] \le V_B[k]$ for all nodes $k$. If $V_A \le V_B$ and at least one element is strictly smaller, $A$ causally preceded $B$ ($A 	o B$).
+- $V_A \le V_B$ if every element $V_A[k] \le V_B[k]$ for all nodes $k$. If $V_A \le V_B$ and at least one element is strictly smaller, $A$ causally preceded $B$ ($A \to B$).
 - If neither $V_A \le V_B$ nor $V_B \le V_A$ (for example, $V_A = [2, 1]$ and $V_B = [1, 2]$), the events occurred **concurrently without causal knowledge of each other**, signaling a write conflict that must be resolved.
 
 </details>
@@ -179,7 +183,7 @@ Given two vector timestamps $V_A$ and $V_B$:
 <details>
 <summary>💡 Click to reveal the ideal senior engineering answer</summary>
 
-Google deployed dedicated **GPS receivers and Rubidium atomic clocks** in every datacenter and created the **TrueTime API**. TrueTime bounds physical clock uncertainty to a guaranteed interval $[t - \epsilon, t + \epsilon]$ where $\epsilon < 7	ext{ms}$. When committing a transaction, the leader waits out the uncertainty window ($2\epsilon$) before releasing locks (**Commit Wait**). This guarantees that any subsequent transaction anywhere in the world receives a strictly larger timestamp, achieving linearizability without Vector Clocks.
+Google deployed dedicated **GPS receivers and Rubidium atomic clocks** in every datacenter and created the **TrueTime API**. TrueTime bounds physical clock uncertainty to a guaranteed interval $[t - \epsilon, t + \epsilon]$ where $\epsilon < 7\text{ms}$. When committing a transaction, the leader waits out the uncertainty window ($2\epsilon$) before releasing locks (**Commit Wait**). This guarantees that any subsequent transaction anywhere in the world receives a strictly larger timestamp, achieving linearizability without Vector Clocks.
 
 </details>
 

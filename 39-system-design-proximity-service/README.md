@@ -44,6 +44,10 @@ Building a proximity service for apps like Yelp, Uber, or Google Maps poses uniq
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/spatial_indexing.svg" alt="Geospatial Proximity Search (GeoHash / QuadTree / Uber H3)" width="100%" />
+</p>
+
 ```mermaid
 flowchart TD
     subgraph Client["Mobile Client"]

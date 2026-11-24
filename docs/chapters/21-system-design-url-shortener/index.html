@@ -22,21 +22,21 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="21---system-design-scalable-url-shortener-tinyurl--bitly">21 - System Design: Scalable URL Shortener (TinyURL / Bitly)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="21---system-design-scalable-url-shortener-tinyurl--bitly">21 - System Design: Scalable URL Shortener (TinyURL / Bitly)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Designing a global URL shortener (like TinyURL or Bitly) is the quintessential system design interview question because it covers the end-to-end gamut: back-of-the-envelope capacity planning, mathematical encoding (Base62 vs. MD5), distributed unique key generation (KGS), 100:1 read-heavy caching, HTTP redirect status code trade-offs (301 vs. 302), and asynchronous analytics pipelines.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../21-system-design-url-shortener/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/21-system-design-url-shortener/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP status codes (<code>301 Moved Permanently</code> vs <code>302 Found</code>).</li>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value stores vs relational schemas for $O(1)$ lookups.</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy workloads.</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Sharding database partitions by short hash.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP status codes (<code>301 Moved Permanently</code> vs <code>302 Found</code>).</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value stores vs relational schemas for <span class="math-inline">O(1)</span> lookups.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy workloads.</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Sharding database partitions by short hash.</li>
 </ul>
 <hr />
 <h2 id="the-30-second-version-eli5">🧒 The 30-Second Version (ELI5)</h2>
@@ -99,7 +99,7 @@ However, at <strong>production internet scale</strong>:</p>
 <li><strong>Capacity &amp; Collision Free</strong>: The service must support billions of URLs without running out of combinations and without two servers generating the same short code.</li>
 <li><strong>Extreme Read Asymmetry</strong>: 100:1 read-to-write ratio (11,600 reads/sec vs 116 writes/sec). Database disks cannot handle direct read traffic without collapsing.</li>
 <li><strong>Sub-Millisecond Redirection</strong>: Users clicking links expect instantaneous redirects (&lt;10 ms total network turnaround).</li>
-<li><strong>Security &amp; Anti-Scraping</strong>: Auto-incrementing integers (<code>tiny.url/1</code>, <code>tiny.url/2</code>) allow competitors to scrape the entire database simply by iterating $id+1$.</li>
+<li><strong>Security &amp; Anti-Scraping</strong>: Auto-incrementing integers (<code>tiny.url/1</code>, <code>tiny.url/2</code>) allow competitors to scrape the entire database simply by iterating <span class="math-inline">id+1</span>.</li>
 </ol>
 <hr />
 <h2 id="picture-it-architecture--flow">🖼️ Picture It: Architecture &amp; Flow</h2>
@@ -108,7 +108,7 @@ However, at <strong>production internet scale</strong>:</p>
 <p><img src="./assets/url_shortener.gif" alt="URL Shortener Architecture" /></p>
 <hr />
 <h3 id="high-level-architecture-diagram">High-Level Architecture Diagram</h3>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     subgraph Clients[&quot;Clients &amp; Edge Tier&quot;]
         User[&quot;👤 Mobile / Web User&quot;]
         Edge[&quot;🌐 Cloudflare CDN Edge&quot;]
@@ -140,7 +140,7 @@ However, at <strong>production internet scale</strong>:</p>
     end
 
     subgraph AnalyticsTier[&quot;Asynchronous Analytics&quot;]
-        Kafka[&quot;📜 Kafka Topic: 'url-clicks'&quot;]
+        Kafka[&quot;📜 Kafka Topic: &#x27;url-clicks&#x27;&quot;]
         S1 -.-&gt;|Async Fire &amp; Forget| Kafka
         AnalyticsWorker[&quot;📊 Analytics Consumer -&gt; ClickHouse DB&quot;]
         Kafka --&gt; AnalyticsWorker
@@ -150,52 +150,53 @@ However, at <strong>production internet scale</strong>:</p>
     style Redis fill:#161b22,stroke:#3fb950,stroke-width:2px;
     style DB fill:#161b22,stroke:#d29922,stroke-width:2px;
     style KGS fill:#161b22,stroke:#a371f7,stroke-width:2px;
-    style Kafka fill:#161b22,stroke:#f85149,stroke-width:2px;
-</code></pre>
+    style Kafka fill:#161b22,stroke:#f85149,stroke-width:2px;</pre></figure>
 <hr />
 <h2 id="walk-through-with-real-numbers">🔢 Walk-Through with Real Numbers</h2>
 <p>Let's execute a formal back-of-the-envelope estimation for a global system:</p>
 <h3 id="1-traffic-estimations">1. Traffic Estimations</h3>
 <ul>
-<li><strong>New Shortened URLs Created (Writes)</strong>: $100\text{ Million / month}$</li>
-<li><strong>URL Redirections (Reads)</strong>: $100:1\text{ ratio} \implies 10\text{ Billion / month}$</li>
-<li><strong>Writes per second (WPS)</strong>:
-$$\text{WPS} = \frac{100,000,000}{30 \times 24 \times 3600} \approx \frac{100,000,000}{2,592,000} \approx \mathbf{38.5\text{ writes/sec}}$$
-$$\text{Peak WPS (2x)} \approx \mathbf{80\text{ writes/sec}}$$</li>
-<li><strong>Reads per second (RPS)</strong>:
-$$\text{RPS} = \frac{10,000,000,000}{2,592,000} \approx \mathbf{3,858\text{ reads/sec}}$$
-$$\text{Peak RPS (2x)} \approx \mathbf{8,000\text{ reads/sec}}$$</li>
+<li><strong>New Shortened URLs Created (Writes)</strong>: <span class="math-inline">100 Million / month</span></li>
+<li><strong>URL Redirections (Reads)</strong>: <span class="math-inline">100:1 ratio ⇒ 10 Billion / month</span></li>
+<li><strong>Writes per second (WPS)</strong>:</li>
 </ul>
+<div class="math-block">WPS = (100,000,000) / (30 × 24 × 3600) ≈ (100,000,000) / (2,592,000) ≈ 38.5 writes/sec</div>
+<div class="math-block">Peak WPS (2x) ≈ 80 writes/sec</div>
+<ul>
+<li><strong>Reads per second (RPS)</strong>:</li>
+</ul>
+<div class="math-block">RPS = (10,000,000,000) / (2,592,000) ≈ 3,858 reads/sec</div>
+<div class="math-block">Peak RPS (2x) ≈ 8,000 reads/sec</div>
 <h3 id="2-storage-estimations-10-year-horizon">2. Storage Estimations (10-Year Horizon)</h3>
 <ul>
-<li>Assume average URL record size = $500\text{ bytes}$ (<code>short_code: 7B</code>, <code>long_url: 400B</code>, <code>created_at: 8B</code>, <code>user_id: 16B</code>, <code>metadata: 69B</code>).</li>
-<li>Total records in 10 years: $100\text{M/month} \times 12\text{ months} \times 10\text{ years} = 12\text{ Billion records}$.
-$$\text{Total Storage} = 12,000,000,000 \times 500\text{ bytes} = 6,000,000,000,000\text{ bytes} \approx \mathbf{6\text{ Terabytes}}$$
-6 TB of data over 10 years easily fits in a partitioned NoSQL database.</li>
+<li>Assume average URL record size = <span class="math-inline">500 bytes</span> (<code>short_code: 7B</code>, <code>long_url: 400B</code>, <code>created_at: 8B</code>, <code>user_id: 16B</code>, <code>metadata: 69B</code>).</li>
+<li>Total records in 10 years: <span class="math-inline">100M/month × 12 months × 10 years = 12 Billion records</span>.</li>
 </ul>
+<div class="math-block">Total Storage = 12,000,000,000 × 500 bytes = 6,000,000,000,000 bytes ≈ 6 Terabytes</div>
+<p>6 TB of data over 10 years easily fits in a partitioned NoSQL database.</p>
 <h3 id="3-memory--caching-estimations-pareto-8020-rule">3. Memory &amp; Caching Estimations (Pareto 80/20 Rule)</h3>
 <ul>
 <li>20% of the URLs generate 80% of daily traffic.</li>
-<li>Daily read requests: $10\text{ Billion} / 30 \approx 330\text{ Million requests/day}$.</li>
-<li>Total data requested daily: $330\text{M} \times 500\text{ bytes} \approx 165\text{ GB/day}$.</li>
-<li>To cache 20% of daily requests:
-$$\text{Cache RAM} = 165\text{ GB} \times 0.20 \approx \mathbf{33\text{ GB of RAM}}$$
-A small 3-node Redis cluster with 32 GB RAM each easily holds the entire hot working set in memory!</li>
+<li>Daily read requests: <span class="math-inline">10 Billion / 30 ≈ 330 Million requests/day</span>.</li>
+<li>Total data requested daily: <span class="math-inline">330M × 500 bytes ≈ 165 GB/day</span>.</li>
+<li>To cache 20% of daily requests:</li>
 </ul>
+<div class="math-block">Cache RAM = 165 GB × 0.20 ≈ 33 GB of RAM</div>
+<p>A small 3-node Redis cluster with 32 GB RAM each easily holds the entire hot working set in memory!</p>
 <h3 id="4-base62-capacity-math">4. Base62 Capacity Math</h3>
 <p>Using alphanumeric characters <code>[0-9a-zA-Z]</code> (62 unique characters):</p>
 <ul>
-<li>With a 6-character short URL: $62^6 \approx 56.8\text{ Billion unique URLs}$.</li>
-<li>With a 7-character short URL:
-$$62^7 = \mathbf{3,521,614,606,208\text{ unique URLs (3.52 Trillion!)}}$$
-At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong></li>
+<li>With a 6-character short URL: <span class="math-inline">62<sup>6</sup> ≈ 56.8 Billion unique URLs</span>.</li>
+<li>With a 7-character short URL:</li>
 </ul>
+<div class="math-block">62<sup>7</sup> = 3,521,614,606,208 unique URLs (3.52 Trillion!)</div>
+<p>At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong></p>
 <hr />
 <h2 id="how-it-works-under-the-hood">⚙️ How It Works Under the Hood</h2>
 <h3 id="1-token-generation-base62-vs-md5-hash-collisions">1. Token Generation: Base62 vs. MD5 Hash Collisions</h3>
 <h4 id="approach-1-md5--sha-256-hashing-flawed">Approach 1: MD5 / SHA-256 Hashing (Flawed)</h4>
 <ul>
-<li>Hash long URL: $\text{MD5}(\text{url}) \implies 128\text{-bit hex string}$.</li>
+<li>Hash long URL: <span class="math-inline">MD5(url) ⇒ 128-bit hex string</span>.</li>
 <li>Take first 7 characters: <code>d41d8cd</code>.</li>
 <li><em>Fatal Flaw</em>: Hash collisions! Two completely different URLs can produce the same first 7 characters. You must query the database to detect collisions and append salt (<code>url + salt</code>), triggering expensive database round-trips on every single write.</li>
 </ul>
@@ -204,8 +205,8 @@ At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong><
 <li>Maintain a 64-bit unique integer ID generator.</li>
 <li>Convert the integer directly to Base62:
 <ul>
-<li>$\text{ID } 100,000,000 \implies \text{&quot;006LAze&quot;}$</li>
-<li>$\text{ID } 100,000,001 \implies \text{&quot;006LAzf&quot;}$</li>
+<li><span class="math-inline">ID 100,000,000 ⇒ &quot;006LAze&quot;</span></li>
+<li><span class="math-inline">ID 100,000,001 ⇒ &quot;006LAzf&quot;</span></li>
 </ul>
 </li>
 <li><strong>Mathematical Guarantee</strong>: Because integers are unique, <strong>Base62 strings are 100% collision-free by definition!</strong> Zero database collision checks required.</li>
@@ -264,8 +265,8 @@ At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong><
 <tbody>
 <tr>
 <td style="text-align:left"><strong>Lookup Performance</strong></td>
-<td style="text-align:left">Fast with B-tree index on <code>short_code</code> ($O(\log N)$)</td>
-<td style="text-align:left">Ultra-Fast primary key point lookup ($O(1)$)</td>
+<td style="text-align:left">Fast with B-tree index on <code>short_code</code> (<span class="math-inline">O(\log N)</span>)</td>
+<td style="text-align:left">Ultra-Fast primary key point lookup (<span class="math-inline">O(1)</span>)</td>
 </tr>
 <tr>
 <td style="text-align:left"><strong>Horizontal Scalability</strong></td>
@@ -297,7 +298,7 @@ At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong><
 <li>
 <p><strong>Predictable Sequential IDs (Scraping Vulnerability)</strong>:</p>
 <ul>
-<li><em>Pitfall</em>: Incrementing token IDs strictly by $+1$ without shuffling: <code>0000001</code>, <code>0000002</code>.</li>
+<li><em>Pitfall</em>: Incrementing token IDs strictly by <span class="math-inline">+1</span> without shuffling: <code>0000001</code>, <code>0000002</code>.</li>
 <li><em>Result</em>: Competitors can easily write a bot that iterates from 1 to 1,000,000, scraping every secret internal document, unlisted Zoom link, and private Google Doc ever shortened by users.</li>
 <li><em>Fix</em>: Use a simple Feistel cipher or token shuffling bit-mask to pseudo-randomize integer output before Base62 encoding.</li>
 </ul>
@@ -338,7 +339,7 @@ At 100M writes/month, <strong>7 characters will last over 2,900 years!</strong><
 &quot;Base62 uses precisely the 62 alphanumeric characters: <code>[0-9]</code>, <code>[a-z]</code>, and <code>[A-Z]</code>:</p>
 <ol>
 <li><strong>URL Safety</strong>: Standard Base64 introduces <code>+</code> and <code>/</code> (and padding <code>=</code>), which are reserved characters in HTTP URLs. In standard URL queries, <code>+</code> is interpreted as a space, and <code>/</code> is interpreted as a path delimiter. While URL-safe Base64 exists (substituting <code>-</code> and <code>_</code>), Base62 consists strictly of pure alphanumeric characters that never require URL encoding or escaping in any browser, SMS, or QR code.</li>
-<li><strong>Compact Density</strong>: Compared to Base16 (Hexadecimal: <code>0–9, a–f</code>), Base62 packs vastly more entropy per character: $62^7 \approx 3.52\text{ Trillion}$ combinations vs. $16^7 \approx 268\text{ Million}$ combinations. Base62 keeps short URLs compact.&quot;</li>
+<li><strong>Compact Density</strong>: Compared to Base16 (Hexadecimal: <code>0–9, a–f</code>), Base62 packs vastly more entropy per character: <span class="math-inline">62<sup>7</sup> ≈ 3.52 Trillion</span> combinations vs. <span class="math-inline">16<sup>7</sup> ≈ 268 Million</span> combinations. Base62 keeps short URLs compact.&quot;</li>
 </ol>
 <hr />
 <h3 id="q2-how-do-you-handle-custom-alias-urls-eg-tinyurlmy-custom-vanity-name">Q2: &quot;How do you handle custom alias URLs (e.g., <code>tiny.url/my-custom-vanity-name</code>)?&quot;</h3>
@@ -389,7 +390,7 @@ The system gracefully degrades without dropping any requests or crashing.&quot;<
 <ul>
 <li>Continuously scanning billions of records with <code>DELETE WHERE expires_at &lt; NOW()</code> is too heavy for database performance.</li>
 <li>Instead, we leverage <strong>native database TTLs</strong>: DynamoDB and Cassandra support automatic background TTL eviction natively without consuming application CPU or IOPS.</li>
-<li>Alternatively, partition database tables by month (<code>urls_2026_01</code>, <code>urls_2026_02</code>), and drop old monthly tables entirely in a single $O(1)$ DDL drop operation.&quot;</li>
+<li>Alternatively, partition database tables by month (<code>urls_2026_01</code>, <code>urls_2026_02</code>), and drop old monthly tables entirely in a single <span class="math-inline">O(1)</span> DDL drop operation.&quot;</li>
 </ul>
 </li>
 </ol>
@@ -409,7 +410,7 @@ The system gracefully degrades without dropping any requests or crashing.&quot;<
 <details>
 <summary><b>1. Why does Base62 with 7 characters provide 3.52 Trillion combinations while Base16 with 7 characters only provides 268 Million?</b></summary>
 <br>
-Because the radix (base) is exponentially multiplied by the length: $62^7 \approx 3.52 \times 10^{12}$, whereas $16^7 \approx 2.68 \times 10^8$. Base62 has 62 available alphanumeric options per slot (`[0-9a-zA-Z]`), giving it over <b>13,000 times more combinations</b> than hexadecimal.
+Because the radix (base) is exponentially multiplied by the length: <span class="math-inline">62<sup>7</sup> ≈ 3.52 × 10<sup>12</sup></span>, whereas <span class="math-inline">16<sup>7</sup> ≈ 2.68 × 10<sup>8</sup></span>. Base62 has 62 available alphanumeric options per slot (`[0-9a-zA-Z]`), giving it over <b>13,000 times more combinations</b> than hexadecimal.
 </details>
 <details>
 <summary><b>2. Why should an analytics-focused URL shortener return HTTP 302 Found instead of HTTP 301 Moved Permanently?</b></summary>
@@ -432,15 +433,28 @@ By allocating <b>pre-reserved token blocks</b> (e.g., Server 1 gets 100,000 to 1
 <hr />
 <h2 id="related-modules">🔗 Related Modules</h2>
 <ul>
-<li><a href="../01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP 301 vs 302 redirect protocol mechanics.</li>
-<li><a href="../06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value storage models.</li>
-<li><a href="../10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy scale.</li>
-<li><a href="../16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Distributing URL partitions across database clusters.</li>
+<li><a href="../../chapters/01-client-server-networking/index.html">01 - Client-Server Networking</a>: HTTP 301 vs 302 redirect protocol mechanics.</li>
+<li><a href="../../chapters/06-relational-and-non-relational-databases/index.html">06 - Relational &amp; Non-Relational Databases</a>: Key-value storage models.</li>
+<li><a href="../../chapters/10-caching-patterns/index.html">10 - Caching Patterns</a>: Cache-Aside pattern for read-heavy scale.</li>
+<li><a href="../../chapters/16-consistent-hashing/index.html">16 - Consistent Hashing</a>: Distributing URL partitions across database clusters.</li>
 </ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

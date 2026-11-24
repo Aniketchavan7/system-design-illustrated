@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="module-41-system-design--hotel--ticket-reservation-system">Module 41: System Design — Hotel &amp; Ticket Reservation System</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="module-41-system-design--hotel--ticket-reservation-system">Module 41: System Design — Hotel &amp; Ticket Reservation System</h1>
 <blockquote>
 <p>Comprehensive architectural breakdown of a high-concurrency Hotel &amp; Concert Ticket Reservation System (Airbnb, Booking.com, Ticketmaster), covering double-booking prevention, 10-minute temporary inventory holds, optimistic vs pessimistic locking, and distributed TTL release.</p>
 </blockquote>
@@ -30,11 +30,11 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Before tackling hotel and ticket reservation systems, review these core modules:</p>
 <ul>
-<li><a href="../19-distributed-transactions/index.html">19 - Distributed Transactions</a> (Sagas and compensating transactions)</li>
-<li><a href="../20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Timeouts, retries, and deadlocks)</li>
-<li><a href="../29-database-transactions-and-isolation/index.html">29 - Database Transactions &amp; Isolation</a> (Pessimistic locking vs Optimistic Concurrency Control)</li>
-<li><a href="../32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Preventing duplicate booking submissions)</li>
-<li><a href="../40-system-design-payment-system/index.html">40 - Digital Wallet &amp; Payment System</a> (Payment state machine and authorization holds)</li>
+<li><a href="../../chapters/19-distributed-transactions/index.html">19 - Distributed Transactions</a> (Sagas and compensating transactions)</li>
+<li><a href="../../chapters/20-fault-tolerance-and-resilience/index.html">20 - Fault Tolerance &amp; Resilience</a> (Timeouts, retries, and deadlocks)</li>
+<li><a href="../../chapters/29-database-transactions-and-isolation/index.html">29 - Database Transactions &amp; Isolation</a> (Pessimistic locking vs Optimistic Concurrency Control)</li>
+<li><a href="../../chapters/32-rest-api-design-and-idempotency/index.html">32 - REST API Design &amp; Idempotency</a> (Preventing duplicate booking submissions)</li>
+<li><a href="../../chapters/40-system-design-payment-system/index.html">40 - Digital Wallet &amp; Payment System</a> (Payment state machine and authorization holds)</li>
 </ul>
 <hr />
 <h2 id="eli5-30-second-summary">ELI5 (30-Second Summary)</h2>
@@ -95,7 +95,10 @@
 </ol>
 <hr />
 <h2 id="visual-architecture">Visual Architecture</h2>
-<pre><code class="language-mermaid">sequenceDiagram
+<p align="center">
+  <img src="./assets/hotel_concurrency.svg" alt="Zero-Overbooking Reservation Concurrency Control" width="100%" />
+</p>
+<figure class="chapter-diagram"><pre class="mermaid">sequenceDiagram
     autonumber
     actor User as Buyer
     participant Client as Web / Mobile App
@@ -112,7 +115,7 @@
         API--&gt;&gt;Client: 409 Conflict (&quot;Room currently in checkout by another guest&quot;)
     else Room Successfully Held (Lock Acquired)
         RedisHold--&gt;&gt;API: OK (Hold Token Issued: hold_abc99)
-        API-&gt;&gt;DB: INSERT INTO reservations (status='PENDING', expires_at=NOW()+10m)
+        API-&gt;&gt;DB: INSERT INTO reservations (status=&#x27;PENDING&#x27;, expires_at=NOW()+10m)
         API--&gt;&gt;Client: 201 Created (Hold confirmed, 10:00 timer starts)
         
         Note over User,PaySvc: User enters payment details (Takes ~2 minutes)
@@ -121,39 +124,38 @@
         API-&gt;&gt;PaySvc: Charge Payment ($250.00)
         alt Payment Succeeded
             PaySvc--&gt;&gt;API: Charge Succeeded
-            API-&gt;&gt;DB: UPDATE reservations SET status='CONFIRMED' WHERE hold_token='hold_abc99'
+            API-&gt;&gt;DB: UPDATE reservations SET status=&#x27;CONFIRMED&#x27; WHERE hold_token=&#x27;hold_abc99&#x27;
             API-&gt;&gt;RedisHold: DEL hold:room_101
             API--&gt;&gt;Client: 200 OK (Booking Confirmed Receipt)
         else Payment Failed / 10-Minute Timeout Expires
             Note over RedisHold,DB: TTL fires or Payment Fails
             RedisHold--xAPI: Key Expired in Redis
-            API-&gt;&gt;DB: UPDATE reservations SET status='EXPIRED'
+            API-&gt;&gt;DB: UPDATE reservations SET status=&#x27;EXPIRED&#x27;
             API--&gt;&gt;Client: 410 Gone (&quot;Reservation expired, inventory released&quot;)
         end
-    end
-</code></pre>
+    end</pre></figure>
 <hr />
 <h2 id="real-numbers--concurrency-sizing">Real Numbers &amp; Concurrency Sizing</h2>
 <p>Consider a global hotel booking platform with <strong>5,000 Hotels</strong> and <strong>1 Million Total Rooms</strong>:</p>
 <ul>
 <li><strong>Inventory Sizing</strong>:
 <ul>
-<li>1 million rooms $\times$ 365 days = 365 million room-night inventory slots per year.</li>
+<li>1 million rooms <span class="math-inline">×</span> 365 days = 365 million room-night inventory slots per year.</li>
 <li>Average room-night record: 64 bytes.</li>
-<li>Annual inventory table size: $365\text{M} \times 64\text{ bytes} \approx 23.3\text{ GB}$ of storage (fits comfortably in PostgreSQL).</li>
+<li>Annual inventory table size: <span class="math-inline">365M × 64 bytes ≈ 23.3 GB</span> of storage (fits comfortably in PostgreSQL).</li>
 </ul>
 </li>
 <li><strong>Normal vs Peak Traffic</strong>:
 <ul>
-<li>Normal day: 200,000 reservations/day $\approx 2.3\text{ bookings/second}$.</li>
+<li>Normal day: 200,000 reservations/day <span class="math-inline">≈ 2.3 bookings/second</span>.</li>
 <li>Peak flash sale (e.g., Black Friday or concert release): <strong>10,000 bookings/second</strong> and <strong>150,000 search queries/second</strong>.</li>
 </ul>
 </li>
 <li><strong>Redis Hold Cluster Memory</strong>:
 <ul>
 <li>Max concurrent in-checkout holds: 50,000 simultaneous users.</li>
-<li>50,000 keys $\times$ 256 bytes per hold token $\approx 12.8\text{ MB}$ of RAM.</li>
-<li>Redis executes sub-millisecond atomic Lua reservation checks ($&lt; 0.8\text{ ms}$).</li>
+<li>50,000 keys <span class="math-inline">×</span> 256 bytes per hold token <span class="math-inline">≈ 12.8 MB</span> of RAM.</li>
+<li>Redis executes sub-millisecond atomic Lua reservation checks (<span class="math-inline">&lt; 0.8 ms</span>).</li>
 </ul>
 </li>
 </ul>
@@ -341,7 +343,20 @@ D) Checking dates with a while loop in JavaScript.<br/><br/>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

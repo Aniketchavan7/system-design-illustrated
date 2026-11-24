@@ -153,7 +153,7 @@ Looking for an idea to contribute? Here are some fantastic topics currently open
    - Build a mini simulation of **Bloom Filter false positive rates** with varying bit-array sizes.
 3. **Cheat Sheet Additions**:
    - Add cloud egress cost rules of thumb (AWS / GCP / Cloudflare bandwidth pricing comparison).
-   - Add database connection pool sizing formulas ($	ext{Connections} = 2 	imes 	ext{CPU cores} + 	ext{disk count}$).
+   - Add database connection pool sizing formulas ($\text{Connections} = 2 \times \text{CPU cores} + \text{disk count}$).
 
 ---
 

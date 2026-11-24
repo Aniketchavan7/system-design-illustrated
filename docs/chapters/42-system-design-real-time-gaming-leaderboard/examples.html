@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><a href="../../library.html">Back to topic library</a><article><h1 id="real-world-production-implementations-real-time-gaming-leaderboards">Real-World Production Implementations: Real-Time Gaming Leaderboards</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-implementations-real-time-gaming-leaderboards">Real-World Production Implementations: Real-Time Gaming Leaderboards</h1>
 <p>This document explores how <strong>Google</strong>, <strong>Netflix</strong>, <strong>Riot Games</strong>, and <strong>Epic Games</strong> architect and operate global real-time leaderboards for tens of millions of concurrent players.</p>
 <hr />
 <h2 id="1-google-google-play-games-leaderboard-services">1. Google: Google Play Games Leaderboard Services</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Google Play Games supports billions of player accounts and hundreds of thousands of Android game titles. Its leaderboard service handles tens of billions of daily score submissions with global consistency.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     AndroidClient[&quot;Android Mobile Game&quot;] --&gt; GFE[&quot;Google Front End (GFE)&quot;]
     GFE --&gt; PlayGamesSvc[&quot;Play Games Leaderboard Service (Borg)&quot;]
     
@@ -37,8 +37,7 @@
     ShardRouter --&gt; SpannerArchive[(&quot;Cloud Spanner (Historical Player Records)&quot;)]
     
     PlayGamesSvc --&gt; MemoryCache[(&quot;Regional In-Memory Skip List Caches&quot;)]
-    MemoryCache --&gt; AndroidClient
-</code></pre>
+    MemoryCache --&gt; AndroidClient</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Bigtable RowKey Design for Leaderboards</strong>:
@@ -64,7 +63,7 @@
 <h2 id="2-netflix-netflix-games-global-player-ranking--social-challenges">2. Netflix: Netflix Games Global Player Ranking &amp; Social Challenges</h2>
 <h3 id="the-architecture">The Architecture</h3>
 <p>Netflix has expanded into mobile and cloud gaming, offering titles like <em>Stranger Things: 1984</em>, <em>Oxenfree</em>, and competitive multiplayer arcade games to over 260 million subscribers.</p>
-<pre><code class="language-mermaid">flowchart TD
+<figure class="chapter-diagram"><pre class="mermaid">flowchart TD
     GameClient[&quot;Netflix Game App (iOS / Android)&quot;] --&gt; Zuul[&quot;Netflix Zuul 2 Gateway&quot;]
     Zuul --&gt; LeaderboardOrchestrator[&quot;Leaderboard Microservice&quot;]
     
@@ -72,8 +71,7 @@
     LeaderboardOrchestrator --&gt; Kafka[&quot;Kafka Score Event Stream&quot;]
     
     Kafka --&gt; Analytics[&quot;Netflix Keystone Streaming Analytics&quot;]
-    Kafka --&gt; AuroraDB[(&quot;Amazon Aurora MySQL (Cold Storage)&quot;)]
-</code></pre>
+    Kafka --&gt; AuroraDB[(&quot;Amazon Aurora MySQL (Cold Storage)&quot;)]</pre></figure>
 <h3 id="key-technical-mechanisms">Key Technical Mechanisms</h3>
 <ol>
 <li><strong>Redis Cluster ZSET Partitioning</strong>:
@@ -103,7 +101,20 @@
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
+    <a href="../../library.html">Topic library</a>
+    <a href="../../guides/cheatsheet.html">Cheat sheet</a>
+    <a href="../../guides/contributing.html">Contribute</a>
     <a href="https://github.com/Aniketchavan7/system-design-illustrated">Source on GitHub</a>
   </footer>
+  <script type="module">
+    if (document.querySelector('.mermaid')) {
+      import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+        .then((mod) => {
+          mod.default.initialize({ startOnLoad: false, theme: 'neutral' });
+          return mod.default.run({ querySelector: '.mermaid' });
+        })
+        .catch(() => {});
+    }
+  </script>
 </body>
 </html>

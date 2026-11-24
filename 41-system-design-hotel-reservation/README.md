@@ -47,6 +47,10 @@ Reservation platforms face extreme concurrency and correctness constraints:
 
 ## Visual Architecture
 
+<p align="center">
+  <img src="./assets/hotel_concurrency.svg" alt="Zero-Overbooking Reservation Concurrency Control" width="100%" />
+</p>
+
 ```mermaid
 sequenceDiagram
     autonumber
