@@ -152,7 +152,7 @@ def test_library(browser, base_url):
     page.close()
 
 
-def test_capstone(browser, base_url):
+def test_capstone(browser, base_url, backup):
     page = browser.new_page(viewport=MOBILE)
     open_page(page, base_url + "learn/regional-recovery.html")
     page.get_by_role("link", name="Take the capstone", exact=True).click()
@@ -172,13 +172,80 @@ def test_capstone(browser, base_url):
         "href", "load-balancing.html",
     )
 
+    expect(page.locator("[data-save-status]")).to_have_text("Capstone result saved on this browser.")
+    expect(page.locator("[data-capstone-scores]")).to_have_text("Latest: 5 of 6. Best: 5 of 6.")
+    expect(page.locator("[data-capstone-review]")).to_contain_text("Keep the site online")
+
     questions.nth(2).get_by_role("radio").first.check()
     expect(page.locator("[data-capstone-result]")).to_be_hidden()
     page.get_by_role("button", name="Check answers").click()
     expect(page.locator("[data-capstone-result]")).to_contain_text("6 of 6 correct")
+    expect(page.locator("[data-capstone-review]")).to_be_hidden()
     page.get_by_role("button", name="Try again").click()
     expect(page.locator("input:checked")).to_have_count(0)
     expect(page.locator("[data-capstone-result]")).to_be_hidden()
+
+    for index, answer in enumerate((0, 0, 0, 1, 2, 0)):
+        questions.nth(index).get_by_role("radio").nth(answer).check()
+    page.get_by_role("button", name="Check answers").click()
+    expected_scores = "Latest: 4 of 6. Best: 6 of 6."
+    expect(page.locator("[data-capstone-scores]")).to_have_text(expected_scores)
+    page.reload(wait_until="domcontentloaded")
+    expect(page.locator("[data-capstone-scores]")).to_have_text(expected_scores)
+    with page.expect_download() as download:
+        page.get_by_role("button", name="Export progress").click()
+    download.value.save_as(backup)
+    page.close()
+
+    fresh = browser.new_page(viewport=MOBILE)
+    open_page(fresh, base_url)
+    expect(fresh.locator("[data-capstone-history]")).to_be_hidden()
+    fresh.get_by_label("Import progress").set_input_files(backup)
+    expect(fresh.locator("[data-capstone-scores]")).to_have_text(expected_scores)
+    fresh.get_by_label("Import progress").set_input_files({
+        "name": "older.json",
+        "mimeType": "application/json",
+        "buffer": b'{"version":1,"completed":[],"lastLesson":null,'
+                  b'"capstone":{"best":5,"missed":["queues"],"attemptedAt":1}}',
+    })
+    expect(fresh.locator("[data-save-status]")).to_contain_text("Progress imported")
+    expect(fresh.locator("[data-capstone-scores]")).to_have_text(expected_scores)
+    links = fresh.locator("[data-capstone-review-list] a")
+    expect(links).to_have_text(["Ask for a page", "Find the website’s address"])
+    links.nth(1).click()
+    expect(fresh.get_by_role("heading", name="Find the website’s address")).to_be_visible()
+    fresh.close()
+
+
+def test_dns_lab(browser, base_url):
+    page = browser.new_page(viewport=MOBILE)
+    open_page(page, base_url + "learn/dns.html")
+    page.get_by_role("link", name="Try the DNS cache lab").click()
+    expect(page.get_by_role("heading", name="When does DNS catch up?")).to_be_visible()
+    time = page.locator("#dns-time")
+    first = page.locator('[data-dns-address="a"]')
+    second = page.locator('[data-dns-address="b"]')
+    expect(time).to_have_value("30")
+    expect(first).to_have_text("192.0.2.10")
+    expect(second).to_have_text("192.0.2.10")
+
+    page.get_by_role("button", name="Address changes").click()
+    expect(time).to_have_value("15")
+    expect(page.locator("[data-dns-authority]")).to_have_text("192.0.2.20")
+    page.get_by_role("button", name="Resolver A expires").click()
+    expect(time).to_have_value("60")
+    expect(first).to_have_text("192.0.2.20")
+    expect(second).to_have_text("192.0.2.10")
+    page.get_by_role("button", name="Resolver B expires").click()
+    expect(time).to_have_value("70")
+    expect(second).to_have_text("192.0.2.20")
+
+    page.locator("#dns-ttl").press("ArrowRight")
+    page.get_by_role("button", name="Resolver A expires").click()
+    expect(time).to_have_value("75")
+    expect(second).to_have_text("192.0.2.10")
+    time.press("Home")
+    expect(page.locator('[data-dns-detail="b"]')).to_have_text("First lookup has not happened")
     page.close()
 
 
@@ -207,8 +274,13 @@ def test_no_script(browser, base_url):
     open_page(page, base_url + "library.html")
     expect(page.locator("[data-topic-row]:visible")).to_have_count(45)
     open_page(page, base_url + "learn/capstone.html")
+    expect(page.get_by_role("button", name="Check answers")).to_be_hidden()
     page.get_by_text("Reveal explanation", exact=True).first.click()
     expect(page.get_by_text("75 ms.", exact=True)).to_be_visible()
+    open_page(page, base_url + "learn/dns-lab.html")
+    expect(page.locator("#dns-time")).to_be_disabled()
+    page.get_by_text("Reveal the worked example", exact=True).click()
+    expect(page.get_by_text("Resolver A’s old answer expired", exact=False)).to_be_visible()
     page.close()
 
 
@@ -224,7 +296,8 @@ def run(base_url, chrome):
             test_storage_denied(browser, base_url)
             test_no_script(browser, base_url)
             test_library(browser, base_url)
-            test_capstone(browser, base_url)
+            test_capstone(browser, base_url, Path(directory) / "capstone.json")
+            test_dns_lab(browser, base_url)
         finally:
             browser.close()
 
@@ -239,4 +312,4 @@ if __name__ == "__main__":
     else:
         with local_site() as base_url:
             run(base_url, args.chrome)
-    print("Verified six lessons, browser restart, progress transfer, blocked storage, simulator, flashcards, library, and capstone.")
+    print("Verified six lessons, browser restart, progress transfer, blocked storage, capacity and DNS labs, flashcards, library, and capstone review.")

@@ -18,6 +18,6 @@ python -m playwright install chromium
 python course/browser_smoke.py
 ~~~
 
-The smoke test serves the static site on a local project path and uses a temporary browser profile. It opens all six lessons, restarts the browser, transfers progress to a fresh profile, tests a failed storage write, checks that lessons still work without JavaScript, and exercises the simulator and flashcard entry point.
+The smoke test serves the static site on a local project path and uses a temporary browser profile. It opens all six lessons, restarts the browser, transfers progress to a fresh profile, tests a failed storage write, checks that lessons still work without JavaScript, and exercises the capacity simulator, DNS lab, library, capstone, and flashcard entry point.
 
-Course progress stays in local browser storage. The progress files contain lesson IDs and completion state. Import merges completions with progress on the current browser.
+Course progress stays in local browser storage. Progress files contain lesson completion and capstone results. Import merges completed lessons, keeps the best capstone score, and uses the latest attempt to suggest lessons to review. Earlier progress exports can still be imported.

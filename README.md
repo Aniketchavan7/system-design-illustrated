@@ -24,7 +24,7 @@
 
 ---
 
-**[Start the free Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)**. Follow six short lessons, save your progress in the browser, and test a backend outage in the simulator.
+**[Start the free Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)**. Follow six short lessons, experiment with DNS caching and backend outages, then take the capstone. Your lesson progress and capstone results save in your browser.
 
 ## 🧭 How to use this repo
 

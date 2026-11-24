@@ -23,7 +23,7 @@
   form.addEventListener("submit", event => {
     event.preventDefault();
     const answers = new FormData(form);
-    let correct = 0;
+    const missed = [];
     for (const question of questions) {
       const matches = answers.get(question.dataset.question) === question.dataset.correct;
       const feedback = question.querySelector("[data-feedback]");
@@ -31,8 +31,10 @@
       feedback.dataset.outcome = matches ? "correct" : "review";
       feedback.hidden = false;
       question.querySelector("details").open = true;
-      if (matches) correct += 1;
+      if (!matches) missed.push(question.dataset.question);
     }
+    const correct = questions.length - missed.length;
+    document.dispatchEvent(new CustomEvent("course:capstone-graded", { detail: missed }));
     result.textContent = `${correct} of ${questions.length} correct. Read the explanations above to review your choices.`;
     result.hidden = false;
     result.focus();

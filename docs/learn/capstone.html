@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Radio+Canada+Big:wght@700&family=Radio+Canada:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../course/course.css">
+  <script src="../course/progress.js" defer></script>
   <script src="../course/capstone.js" defer></script>
 </head>
 <body>
@@ -28,6 +29,14 @@
       <h1>Trail Notes capstone</h1>
       <p class="lead">Apply the six lessons to a new workload, then check your reasoning.</p>
     </header>
+<section class="capstone-history" data-capstone-history hidden>
+      <h2>Capstone results</h2>
+      <p data-capstone-scores></p>
+      <div data-capstone-review>
+        <p>Review these lessons</p>
+        <ul data-capstone-review-list></ul>
+      </div>
+    </section>
     <noscript><p>Choose your answers on paper, then open each explanation. Enable JavaScript for automatic scoring.</p></noscript>
     <form data-capstone>
       <div id="questions">
@@ -43,7 +52,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>75 ms.</strong> The request and response use one round trip. Add 60 ms of network time and 15 ms of server work.</p>
-          <p><a href="networking.html">Review the lesson</a></p>
+          <p><a href="networking.html" data-lesson-link="networking"
+            data-lesson-title="Ask for a page">Review the lesson</a></p>
         </details>
       </div>
 
@@ -58,7 +68,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>The old address, because 30 seconds remain on the cached answer.</strong> The old answer expires at 10:01:30. A successful fresh lookup after expiry can return the new address.</p>
-          <p><a href="dns.html">Review the lesson</a></p>
+          <p><a href="dns.html" data-lesson-link="dns"
+            data-lesson-title="Find the website’s address">Review the lesson</a></p>
         </details>
       </div>
 
@@ -73,7 +84,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>250 requests per second.</strong> Three healthy servers provide 2,100 requests per second. Subtract that capacity from 2,350 requests per second of demand.</p>
-          <p><a href="load-balancing.html">Review the lesson</a></p>
+          <p><a href="load-balancing.html" data-lesson-link="load-balancing"
+            data-lesson-title="Keep the site online">Review the lesson</a></p>
         </details>
       </div>
 
@@ -88,7 +100,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>800 requests per second.</strong> A 68% hit rate leaves a 32% miss rate. Multiply 2,500 by 0.32 to get 800 requests per second.</p>
-          <p><a href="caching.html">Review the lesson</a></p>
+          <p><a href="caching.html" data-lesson-link="caching"
+            data-lesson-title="Cache popular guides">Review the lesson</a></p>
         </details>
       </div>
 
@@ -103,7 +116,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>720 jobs, 36 seconds.</strong> The queue grows by 60 jobs per second during the burst, so 720 remain. Afterward it drains by 30 minus 10, or 20 jobs per second.</p>
-          <p><a href="queues.html">Review the lesson</a></p>
+          <p><a href="queues.html" data-lesson-link="queues"
+            data-lesson-title="Queue photo previews">Review the lesson</a></p>
         </details>
       </div>
 
@@ -118,7 +132,8 @@
         <details>
           <summary>Reveal explanation</summary>
           <p><strong>Read RTO only.</strong> Read recovery took eight minutes, within the 10-minute target. The recoverable data is 50 seconds behind the outage, beyond the 30-second target.</p>
-          <p><a href="regional-recovery.html">Review the lesson</a></p>
+          <p><a href="regional-recovery.html" data-lesson-link="regional-recovery"
+            data-lesson-title="Recover from a regional outage">Review the lesson</a></p>
         </details>
       </div>
       </div>
@@ -128,6 +143,16 @@
       </div>
       <p class="capstone-result" data-capstone-result role="status" tabindex="-1" hidden></p>
     </form>
+<div class="save-tools" data-requires-progress hidden>
+          <p role="status" data-save-status></p>
+          <div class="file-tools">
+            <button class="text-link" type="button" data-export>Export progress</button>
+            <label class="file-label">
+              <span>Import progress</span>
+              <input type="file" accept=".json,application/json" data-import>
+            </label>
+          </div>
+        </div>
   </main>
 
   <footer class="course-footer container">

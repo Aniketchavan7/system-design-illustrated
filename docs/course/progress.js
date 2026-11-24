@@ -11,9 +11,21 @@
   const status = document.querySelector("[data-save-status]");
   const importInput = document.querySelector("[data-import]");
   const exportButton = document.querySelector("[data-export]");
-  const emptyState = { version: 1, completed: [], lastLesson: null };
+  const emptyState = { version: 1, completed: [], lastLesson: null, capstone: null };
   let state = emptyState;
   let saved = false;
+
+  function readCapstone(result) {
+    if (result == null) return null;
+    const { best, missed, attemptedAt } = result;
+    if (!Array.isArray(missed) || new Set(missed).size !== missed.length ||
+        !missed.every(id => lessonById.has(id)) ||
+        !Number.isInteger(best) || best < lessons.length - missed.length || best > lessons.length ||
+        !Number.isSafeInteger(attemptedAt) || attemptedAt < 0) {
+      throw new Error("Invalid capstone progress.");
+    }
+    return { best, missed, attemptedAt };
+  }
 
   function readSnapshot(value) {
     const snapshot = JSON.parse(value);
@@ -28,6 +40,7 @@
       version: 1,
       completed: [...new Set(snapshot.completed)],
       lastLesson: snapshot.lastLesson,
+      capstone: readCapstone(snapshot.capstone),
     };
   }
 
@@ -41,11 +54,18 @@
     }
   }
 
+  function mergeCapstone(first, second) {
+    if (!first || !second) return first ?? second;
+    const latest = first.attemptedAt >= second.attemptedAt ? first : second;
+    return { ...latest, best: Math.max(first.best, second.best) };
+  }
+
   function merge(first, second, lastLesson = first.lastLesson ?? second.lastLesson) {
     return {
       version: 1,
       completed: [...new Set([...first.completed, ...second.completed])],
       lastLesson,
+      capstone: mergeCapstone(first.capstone, second.capstone),
     };
   }
 
@@ -55,9 +75,35 @@
       : lessons.find(link => !state.completed.includes(link.dataset.lessonLink));
   }
 
+  function renderCapstone() {
+    const panel = document.querySelector("[data-capstone-history]");
+    if (!panel) return;
+
+    const result = state.capstone;
+    panel.hidden = result === null;
+    if (!result) return;
+
+    const latestScore = lessons.length - result.missed.length;
+    panel.querySelector("[data-capstone-scores]").textContent =
+      `Latest: ${latestScore} of ${lessons.length}. Best: ${result.best} of ${lessons.length}.`;
+    const review = panel.querySelector("[data-capstone-review]");
+    review.hidden = result.missed.length === 0;
+    const links = result.missed.map(id => {
+      const item = document.createElement("li");
+      const lesson = document.createElement("a");
+      const source = lessonById.get(id);
+      lesson.href = source.href;
+      lesson.textContent = source.dataset.lessonTitle;
+      item.append(lesson);
+      return item;
+    });
+    panel.querySelector("[data-capstone-review-list]").replaceChildren(...links);
+  }
+
   function render(message) {
     const done = new Set(state.completed);
     const next = nextLesson();
+    renderCapstone();
 
     for (const link of lessons) {
       const badge = link.querySelector("[data-lesson-status]");
@@ -77,7 +123,8 @@
     if (resume && caption) {
       resume.href = next?.href ?? document.querySelector("[data-capstone-link]").href;
       const started = state.lastLesson !== null || done.size > 0;
-      resume.textContent = next ? (started ? "Continue learning" : "Start learning") : "Take the capstone";
+      const capstoneLabel = state.capstone ? "Review the capstone" : "Take the capstone";
+      resume.textContent = next ? (started ? "Continue learning" : "Start learning") : capstoneLabel;
       caption.textContent = next ? next.dataset.lessonTitle : "All lessons complete";
       caption.hidden = !started;
     }
@@ -158,6 +205,17 @@
     } finally {
       importInput.value = "";
     }
+  });
+
+  document.addEventListener("course:capstone-graded", event => {
+    const missed = event.detail;
+    const attempt = readCapstone({
+      best: lessons.length - missed.length,
+      missed,
+      attemptedAt: Date.now(),
+    });
+    persist(previous => ({ ...previous, capstone: mergeCapstone(attempt, previous.capstone) }),
+      "Capstone result saved on this browser.");
   });
 
   window.addEventListener("storage", event => {

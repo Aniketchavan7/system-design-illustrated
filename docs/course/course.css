@@ -493,7 +493,7 @@ a:hover { color: var(--color-accent); }
   cursor: pointer;
 }
 .capstone details p + p { margin-top: var(--space-xs); }
-.capstone-actions { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+.capstone-actions:not([hidden]) { display: flex; flex-wrap: wrap; gap: var(--space-md); }
 .capstone-result { margin-top: var(--space-md); padding: var(--space-md); background: var(--color-paper-2); font-weight: 700; }
 @media (max-width: 46rem) {
   .catalog-group { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); }
@@ -508,3 +508,22 @@ a:hover { color: var(--color-accent); }
   .catalog-kind { grid-column: 2; }
   .capstone-question { padding: var(--space-sm); }
 }
+
+.capstone-history {
+  max-width: var(--article-measure);
+  margin-block: var(--space-lg);
+  padding: var(--space-md);
+  border-inline-start: 2px solid var(--color-accent);
+  background: var(--color-paper-2);
+}
+.capstone-history h2, .capstone-history h3 { margin-bottom: var(--space-xs); font-size: var(--text-lg); }
+.capstone-history [data-capstone-review] { margin-top: var(--space-sm); }
+.capstone-history ul { margin: var(--space-xs) 0 0; padding-inline-start: var(--space-lg); }
+.capstone-history a { color: var(--color-accent); }
+.sim-controls > p { margin-top: var(--space-md); }
+.dns-addresses { margin: var(--space-lg) 0; }
+.dns-addresses div { padding-block: var(--space-sm); border-bottom: 1px solid var(--map-line); }
+.dns-addresses dt { font-size: .93rem; }
+.dns-addresses dd { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); align-items: baseline; margin: 0; }
+.dns-addresses code { font-size: clamp(1.05rem, 2.5vw, 1.5rem); font-variant-numeric: tabular-nums; }
+.dns-addresses dd span { font-size: .88rem; }
