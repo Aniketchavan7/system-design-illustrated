@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-world case studies**: how **Google** (Cloud Spanner Serializable Snapshot Isolation via TrueTime) and **Netflix** (handling financial billing isolation in relational databases) implement transaction safety, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google Spanner** (two-phase locking plus TrueTime), **PostgreSQL** (Serializable Snapshot Isolation) and **Stripe** (idempotency keys) keep data correct, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

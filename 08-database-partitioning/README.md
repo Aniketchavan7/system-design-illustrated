@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-world case studies**: how **Google** & **Netflix** approach this, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google Bigtable**, **Uber Schemaless** and **Discord** split their data, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## 🧒 The 30-second version
 

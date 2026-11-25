@@ -1,125 +1,48 @@
-# Real-World Production Deep Dives: Database Transactions & Isolation
+# Real-World Case Studies: Database Transactions and Isolation
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
-> Deep-dive architectural dissections of how **Google** (Cloud Spanner TrueTime Serializable Isolation) and **Netflix** (relational financial ledgers & membership billing) guarantee transaction safety at multi-billion dollar scale.
-
----
-
-## 🏢 Deep Dive 1: How Google Achieves Global Serializable Isolation (Cloud Spanner SSI & TrueTime)
-
-### 1. Production Context & Scale
-- **System**: Google Cloud Spanner.
-- **Mission**: Backs Google AdWords, Google Play Billing, and enterprise banking ledgers worldwide.
-- **Guarantee**: **Strict Serializability (External Consistency)** across multi-continent distributed datacenters without global locking bottlenecks.
-
-### 2. The Core Problem at Google Scale
-- Traditional databases achieve Serializable isolation through **Two-Phase Locking (2PL)**.
-- If a bank in Tokyo and a bank in London execute 2PL across transoceanic fiber, network round trips (150ms+) hold database locks open for seconds, dropping throughput to single digits.
-- Conversely, Snapshot Isolation (used by MySQL and Postgres) permits **Write Skew**, which could allow double-spending or account overdrafts.
-
-### 3. Google's Architecture: Serializable Snapshot Isolation via TrueTime
-
-```
-[ Transaction T1 Prepare ]
-             │
-             ▼
-[ Spanner Paxos Leader Node ]
-  ├── Assigns Commit Timestamp s using TrueTime.now()
-  │   └── Guarantees: s >= t_earliest
-  │
-  ├── TrueTime Commit-Wait Rule:
-  │   └── Waits until TrueTime.now().earliest > s (waits ~7ms)
-  │
-  ▼
-[ Commit T1 Permanently ]
-  └── Any transaction T2 starting anywhere on Earth is guaranteed:
-      CommitTimestamp(T2) > CommitTimestamp(T1)
-```
-
-#### A. Lock-Free Read Transactions
-- In Spanner, **read-only transactions never acquire any locks**.
-- The reader specifies a timestamp (or reads at the current TrueTime). Because Spanner maintains multiversion data across Paxos groups, reads execute entirely from local replica memory without network coordination or lock wait states!
-
-#### B. Two-Phase Commit over Paxos
-- For distributed multi-shard writes:
-  - Each shard is governed by a Paxos group.
-  - Spanner executes 2PC *across Paxos group leaders*, combining consensus fault tolerance with ACID transaction atomicity.
+> How Google Spanner serializes transactions across the world, how PostgreSQL implements Serializable without heavy locking, and how Stripe makes retries safe with idempotency keys.
 
 ---
 
-## 🎬 Deep Dive 2: How Netflix Manages Billing Isolation (AWS Aurora MySQL & Idempotency)
+## 🏢 Deep Dive 1: Google Spanner, Locks Plus Clocks
 
-### 1. Production Context & Scale
-- Over 260 million active paying subscriptions worldwide.
-- Billions of dollars in monthly recurring subscription charges, plan upgrades, and gift card redemptions.
+> **Source:** [Spanner: Google's Globally-Distributed Database](https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett) (Corbett et al., OSDI 2012). Everything in this section comes from the paper.
 
-### 2. The Core Problem at Netflix Scale
-- When a user clicks "Upgrade to 4K Premium Plan", multiple background workers execute concurrent operations:
-  - Prorate the current billing cycle.
-  - Authorize credit card charge via external payment gateways (Stripe / Adyen).
-  - Update user entitlement stream limits (from 2 screens to 4 screens).
-- If the network drops during the payment gateway call, the subscriber retries. A naive transaction execution would double-charge the credit card or grant double billing credits.
-
-### 3. Netflix's Architecture: Relational Transaction Boundaries & The Idempotency Layer
-
-```
-[ User Clicks "Upgrade Plan" ]
-              │
-              ▼
-    [ Zuul Edge Gateway ]
-              │ (Carries Idempotency-Key: "uuid_xyz")
-              ▼
-[ Subscription Billing Microservice ]
-              │
-              ▼ (Checks Idempotency Table in Aurora)
-┌─────────────────────────────────────────────────────────────┐
-│ AWS Aurora MySQL Transaction (REPEATABLE READ)              │
-│                                                             │
-│  BEGIN TRANSACTION;                                         │
-│    1. Check Idempotency Key: if already processed, return!   │
-│    2. Insert Pending Charge with State = 'IN_FLIGHT';       │
-│  COMMIT;                                                    │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-             Execute External Payment API Call
-                              │
-┌─────────────────────────────┴───────────────────────────────┐
-│ AWS Aurora MySQL Transaction (REPEATABLE READ)              │
-│                                                             │
-│  BEGIN TRANSACTION;                                         │
-│    3. Update Plan Tier: Standard -> Premium 4K              │
-│    4. Mark Payment State = 'SETTLED'                        │
-│  COMMIT;                                                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### A. Decoupled Transaction Boundaries
-- Notice that Netflix **never** executes the external credit card network call inside the database transaction!
-- Instead, it divides the operation into two distinct local transactions:
-  1. Transaction 1 records an in-flight intention with an **Idempotency Key**.
-  2. Transaction 2 confirms and settles the tier change once the payment provider returns HTTP 200.
-
-#### B. Repeatable Read with Gap Locks
-- Netflix utilizes MySQL Aurora InnoDB's **Repeatable Read** isolation level:
-  - Uses **Next-Key Locks (Gap Locks)** to prevent Phantom Reads on membership records.
-  - Eliminates Lost Updates on account balances while avoiding the severe lock-wait penalties of global serializability.
+- **Read-write transactions use locks.** "Transactional reads and writes use two-phase locking." Each Paxos leader keeps a lock table, and the paper lists read-write concurrency control as "pessimistic". Transactions that span Paxos groups use two-phase commit, which runs "over Paxos" to stay available.
+- **Read-only transactions don't.** A read-only transaction "has the performance benefits of snapshot isolation": it reads at a timestamp without locks, from any replica that is up to date enough.
+- **TrueTime.** `TT.now()` returns an interval guaranteed to contain the true time, using "GPS and atomic clocks". The uncertainty ε is "typically a sawtooth function of time, varying from about 1 to 7 ms", so "4 ms most of the time".
+- **Commit wait.** The coordinator "ensures that clients cannot see any data committed by Ti until TT.after(si) is true". Waiting out the uncertainty guarantees that if T1 commits before T2 starts, T1 gets the smaller timestamp. The paper calls this "external consistency (or equivalently, linearizability)".
 
 ---
 
-## ⚖️ Comparative Architecture Matrix
+## 🐘 Deep Dive 2: PostgreSQL, Serializable Snapshot Isolation
 
-| Architectural Dimension | Google Cloud Spanner | Netflix Billing (AWS Aurora) |
-|---|---|---|
-| **Isolation Level** | Strict Serializability (SSI) | Repeatable Read + Application Idempotency |
-| **Clock Synchronization** | Hardware TrueTime (Atomic Clocks + GPS) | AWS Time Sync Service (Microsecond NTP) |
-| **Read Mechanism** | Lock-free reads at past timestamps | MVCC snapshot reads (non-blocking) |
-| **Distributed Protocol** | Two-Phase Commit over Multi-Paxos | Local ACID transactions linked via Sagas |
-| **Recovery Strategy** | Automatic rollback & Paxos quorum recovery | Compensating saga transactions & refunds |
+> **Source:** PostgreSQL documentation, [Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html). Everything in this section comes from it.
+
+- **Repeatable Read is snapshot isolation.** It is "also known ... as Snapshot Isolation", and it can still produce a serialization anomaly. In the docs' example, two transactions each read a sum from one group of rows and insert it into the other. At Repeatable Read "both would be allowed to commit", even though no serial order gives that result.
+- **Serializable is SSI.** It is "implemented using a technique known in academic database literature as Serializable Snapshot Isolation". Instead of locking more, it watches for read/write dependencies that could cause an anomaly. When it finds one, it rolls a transaction back with SQLSTATE `40001`. The monitoring adds no blocking beyond Repeatable Read.
+- **So retry.** "Applications using this level must be prepared to retry transactions due to serialization failures."
+- **Read Uncommitted** "behaves like Read Committed" in PostgreSQL.
+
+---
+
+## 💳 Deep Dive 3: Stripe, Making Retries Safe
+
+> **Source:** Brandur Leach, ["Designing robust and predictable APIs with idempotency"](https://stripe.com/blog/idempotency) (Stripe, February 2017). Everything in this section comes from the post.
+
+- **The problem.** If a request to charge a card times out, the client can't tell whether the charge happened. A blind retry might charge twice.
+- **Idempotency keys.** Stripe lets clients "pass a unique value in with the special Idempotency-Key header". If the first attempt's outcome is unclear, "you can safely retry it with the same idempotency key, and the customer is charged only once."
+- **Retry politely.** The post recommends "something akin to an exponential backoff algorithm", with random "jitter" so many clients don't retry in lockstep.
+- **Transactions help.** If a failed operation "was successfully rolled back by way of an ACID database, it'll be safe to retry it wholesale."
+
+> ℹ️ An earlier version of this page said Spanner uses Serializable Snapshot Isolation (its read-write transactions use two-phase locking) and described how Netflix handles billing in Aurora MySQL. We couldn't find a source we could read for the Netflix story, so we replaced it with the PostgreSQL and Stripe sections.
 
 ---
 
 ## 🎯 System Design Interview Takeaways
-1. **Explain the 4 Standard Isolation Levels**: Be ready to list the 4 levels (Read Uncommitted, Read Committed, Repeatable Read, Serializable) and the exact anomalies each prevents.
-2. **Never Call External APIs Inside DB Transactions**: Always explain to interviewers that database connection pools will collapse if third-party network I/O is enclosed inside a SQL `BEGIN ... COMMIT` block.
-3. **Propose TrueTime for Distributed Serializability**: Citing Google Spanner's TrueTime commit-wait mechanism demonstrates world-class distributed systems depth.
+1. **Know the levels and their anomalies.** In PostgreSQL, Repeatable Read is snapshot isolation and still allows serialization anomalies. Serializable prevents them by aborting one of the transactions.
+2. **Serializable means retries.** Whether it's Spanner retrying internally or PostgreSQL returning `40001`, a correct design plans for transactions that must run again.
+3. **Make retried requests idempotent.** A client-supplied idempotency key, as Stripe uses, turns "did it happen?" into a safe retry.
+4. **Keep slow network calls out of open transactions.** Holding locks while waiting on a third party ties up the database. This is general practice, not a claim from the sources above.
