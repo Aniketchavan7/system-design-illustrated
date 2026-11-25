@@ -1,113 +1,54 @@
-# Real-World Production Deep Dives: Consistency Models
+# Real-World Case Studies: Consistency Models
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
-> Deep-dive architectural dissections of how **Google** and **Amazon/Netflix** navigate consistency models, contrasting strict Linearizability via TrueTime with Eventual & Session Consistency in distributed applications.
-
----
-
-## 🏢 Deep Dive 1: How Google Uses Linearizability (Spanner TrueTime & External Consistency)
-
-### 1. Production Context & Scale
-- **System**: Google Cloud Spanner.
-- **Guarantee**: **External Consistency (Strict Serializability / Linearizability)**.
-- **The Real-World Requirement**: In Google AdWords financial systems, if Customer A deposits money at 12:00:00.000 PM, and Customer B initiates a payment at 12:00:00.001 PM anywhere else in the world, Customer B *must* observe Customer A's deposit. Causal or eventual consistency is unacceptable.
-
-### 2. The Core Problem: Why Wall Clocks Break in Distributed Systems
-- Standard server clocks synchronize via NTP (Network Time Protocol).
-- **Clock Drift**: Due to CPU crystal thermal fluctuations and network jitter, standard NTP clocks drift by **100ms to 250ms** across data centers.
-- If Server 1's clock is 50ms fast and Server 2's clock is 50ms slow, assigning timestamps based on local clocks reverses the perceived order of cause and effect:
-  Transaction 2 can receive an earlier timestamp than Transaction 1, corrupting financial balances!
-
-### 3. Google's Solution: The TrueTime Hardware API
-
-```
-[ Google Data Center Node ]
-             │
-             ▼
-   [ TrueTime API Engine ]
-   ├── GPS Receivers (Antennas on Data Center Roofs)
-   └── Rubidium Atomic Clocks (Atomic drift is negligible)
-             │
-             ▼
-   TrueTime.now() returns time interval: [earliest, latest]
-             │
-   Uncertainty Window: ε = (latest - earliest) / 2  (ε < 7ms)
-```
-
-#### A. The TrueTime Invariant
-Instead of returning a single discrete time, `TrueTime.now()` returns an uncertainty interval:
-$$[t.\text{earliest}, t.\text{latest}] \quad \text{where} \quad t.\text{latest} - t.\text{earliest} = 2\epsilon$$
-- Because Google maintains atomic clocks in every data center, the maximum uncertainty $\epsilon$ is mathematically bounded to **less than 7 milliseconds**.
-
-#### B. The TrueTime Commit Wait Rule
-To guarantee strict linearizability without cross-datacenter locking between readers and writers:
-1. When a transaction $T_1$ prepares to commit, the coordinator requests `TrueTime.now()`.
-2. It picks an absolute commit timestamp $s \ge t_1.\text{latest}$.
-3. **The Commit Wait**: The coordinator delays responding to the client until it is physically certain that the absolute real-world time has passed $s$:
-   $$\text{Wait until } TrueTime.now().\text{earliest} > s$$
-4. **The Mathematical Guarantee**: Any subsequent transaction $T_2$ that begins anywhere on Earth will receive a timestamp $s_2 > s_1$. Causality is physically preserved worldwide!
+> The consistency spectrum as real products expose it: Spanner at the strong end, Azure Cosmos DB with five selectable levels, and DynamoDB's per-request choice between eventual and strong reads.
 
 ---
 
-## 📦 Deep Dive 2: How Netflix & Amazon Use Eventual & Session Consistency
+## 🏢 Deep Dive 1: Google Spanner, External Consistency
 
-### 1. Production Context & Scale
-- **Applications**: Netflix User Profiles / "My List", Amazon Customer Reviews.
-- **Workload**: Hundreds of millions of read requests per second globally.
-- **The Pragmatic Choice**: Sacrificing linearizability to achieve single-digit millisecond latency worldwide.
+> **Source:** [Spanner: Google's Globally-Distributed Database](https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett) (Corbett et al., OSDI 2012). Everything in this section comes from the paper.
 
-### 2. Consistency Spectrum in Practice
-
-```
-[ Linearizability ]  <-- Google Spanner (Strict order, high latency)
-        │
-        ▼
-[ Sequential Consistency ]
-        │
-        ▼
-[ Causal Consistency ]  <-- Comment threads / reply chains
-        │
-        ▼
-[ Read-Your-Writes / Session Consistency ] <-- Netflix Profiles, Shopping Carts
-        │
-        ▼
-[ Eventual Consistency ] <-- Global review counters, viewer statistics
-```
-
-#### A. Session Consistency (Read-Your-Writes)
-Under pure eventual consistency, a user might add a movie to "My List", refresh the page, and not see it because their read hit a read replica that has not caught up.
-- **Netflix's Solution**:
-  - When a user mutates their profile, Netflix sets an encrypted session cookie containing the transaction version or timestamp.
-  - Subsequent read requests carry this cookie. The edge proxy checks the replica's replication watermark:
-    - If the replica has processed past that watermark, it serves the read locally.
-    - If the replica is lagging, the proxy routes the read directly to the primary database or waits for the local replica to catch up, guaranteeing **Read-Your-Writes Consistency** for the authenticated user while all other users see eventual consistency.
-
-#### B. Monotonic Read Consistency
-- Prevents the "time travel" anomaly: a user reads from Replica A and sees comment #5. On their next click, their request hits Replica B which is lagging, and comment #5 disappears.
-- Implemented by pinning user sessions to specific database replicas using sticky routing hashes.
-
-#### C. Bounded Staleness in Viewing History
-- For video bookmarking, Netflix uses **Bounded Staleness**.
-- The viewing position on your TV might lag your tablet by at most **2 to 5 seconds**. A 2-second difference in video playback offset is completely acceptable to the human eye, but eliminates the need for expensive distributed locks.
+- **The guarantee.** Spanner's timestamps "reflect serialization order", and that order "satisfies external consistency (or equivalently, linearizability): if a transaction T1 commits before another transaction T2 starts, then T1's commit timestamp is smaller than T2's."
+- **How.** TrueTime gives each server an interval guaranteed to contain the real time. Its uncertainty is "typically a sawtooth function of time, varying from about 1 to 7 ms". Before making a commit visible, the coordinator waits until the commit timestamp is definitely in the past ("commit wait"), so no later transaction can get an earlier timestamp.
 
 ---
 
-## ⚖️ Comparative Architecture Matrix
+## 🌐 Deep Dive 2: Azure Cosmos DB, Five Levels You Can Choose
 
-| Consistency Model | Real-World System | Latency Cost | Disaster Behavior | Use Case |
-|---|---|---|---|---|
-| **Linearizability** | Google Spanner, etcd | High (30-100ms) | Halts on partition | Bank balances, master election |
-| **Causal Consistency** | MongoDB (Causal Sessions) | Medium (10-25ms) | Accepts local writes | Chat replies, forum threads |
-| **Read-Your-Writes** | Netflix Profile Service, Amazon | Low (2-5ms) | Local routing | User settings, shopping cart |
-| **Eventual Consistency** | DNS, Cassandra, DynamoDB | Minimal (<1ms) | Always available | View counts, analytics |
+> **Sources:** Microsoft Learn, [Consistency levels in Azure Cosmos DB](https://learn.microsoft.com/en-us/azure/cosmos-db/consistency-levels) and [Manage consistency levels](https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-manage-consistency). Everything in this section comes from those pages.
+
+"From strongest to weakest, the levels are: Strong, Bounded staleness, Session, Consistent prefix, Eventual."
+
+| Level | What the docs promise |
+| :--- | :--- |
+| **Strong** | "a linearizability guarantee": reads return "the most recent committed version of an item" |
+| **Bounded staleness** | the lag between regions "is always less than a specified amount": K versions or T time, "whichever is reached first" |
+| **Session** | within one client session, "read-your-writes, and write-follows-reads guarantees" |
+| **Consistent prefix** | writes in one multi-document transaction "are always visible together" |
+| **Eventual** | a read may hit a replica that is "lagging and could return stale or no data" |
+
+- **Session is the default.** It works with a session token. "After every write operation, the client receives an updated Session Token", and reads only use a replica that has caught up to that token. If an app runs on several servers and doesn't pass the token along, reads can be inconsistent "for a while".
+- **Bounded staleness has floors.** For multi-region accounts the minimum is "100,000 write operations or 300 seconds".
+- **Stronger costs more.** Strong and bounded staleness read from two replicas, so their "read throughput ... is half that of the other consistency levels", and each such read costs twice as much.
 
 ---
+
+## ⚡ Deep Dive 3: Amazon DynamoDB, Choose per Read
+
+> **Source:** AWS docs, [DynamoDB read consistency](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html). Everything in this section comes from it.
+
+- "Eventually consistent is the default read consistent model for all read operations." Such a read "might not reflect the results of a recently completed write operation".
+- Setting `ConsistentRead` to true returns "the most up-to-date data, reflecting the updates from all prior write operations that were successful."
+- "Eventually consistent reads are half the cost of strongly consistent reads."
+- Strong reads work on tables and local secondary indexes only: "All reads from GSIs and streams are eventually consistent."
+
+---
+
+> ℹ️ An earlier version of this page claimed NTP clocks drift "100ms to 250ms" across data centers, and described Netflix pinning sessions to replicas and letting bookmarks lag "2 to 5 seconds". We couldn't find sources for those claims, so we replaced them with the documented Cosmos DB and DynamoDB behaviour.
 
 ## 🎯 System Design Interview Takeaways
-1. **Explain the Anomaly Prevented**: Never just define consistency models in the abstract. Always explain the concrete user bug it prevents:
-   - *Linearizability* prevents two users buying the same concert seat simultaneously.
-   - *Read-Your-Writes* prevents a user updating their profile and seeing their old photo after refreshing.
-   - *Causal Consistency* prevents an answer appearing before its question in a chat app.
-2. **TrueTime Concept in Interviews**: If asked how to achieve globally distributed ACID transactions without slow two-phase locking, cite Google Spanner's **TrueTime commit-wait mechanism**.
-3. **Session Consistency via Sticky Routing**: Explain that you can achieve strong consistency perception for a single user using lightweight session tokens or sticky routing, without imposing global linearizability across the entire database cluster.
+1. **Name the anomaly each level prevents.** Session consistency in Cosmos DB, for example, guarantees you read your own writes. Eventual consistency doesn't.
+2. **Strong consistency costs real money.** Cosmos DB halves read throughput and DynamoDB doubles read cost for the stronger option.
+3. **Session guarantees need plumbing.** If requests from one user can hit different app servers, the session token (or equivalent) must travel with them.

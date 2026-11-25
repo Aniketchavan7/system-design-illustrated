@@ -1,118 +1,45 @@
-# Real-World Production Deep Dives: Time, Clocks & Ordering
+# Real-World Case Studies: Time, Clocks and Ordering
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
-> Deep-dive architectural dissections of how **Google** (TrueTime API in Cloud Spanner) and **Amazon** (Dynamo Vector Clocks for shopping carts) solve the problem of physical time uncertainty at global scale.
-
----
-
-## 🏢 Deep Dive 1: How Google Eliminated Clock Skew (The TrueTime API)
-
-### 1. Production Context & Scale
-- **System**: Google Cloud Spanner.
-- **Mission**: Global relational ACID database spanning worldwide data centers.
-- **The Breakthrough**: In 2012, Google published the Spanner paper, proving they achieved strict external consistency (linearizability) across the globe by engineering hardware clocks directly into datacenters.
-
-### 2. The Core Problem at Google Scale
-- Before TrueTime, no distributed database could guarantee global serializable transactions across multi-region datacenters without slow distributed two-phase locking.
-- Standard NTP network synchronization drifts by **100ms to 250ms** across continents, making physical timestamps completely useless for ordering transactions.
-
-### 3. Google's Architecture: TrueTime Atomic Hardware
-
-```
-┌────────────────────────────────────────────────────────┐
-│ Google Datacenter Rack Master                          │
-│                                                        │
-│  [ GPS Receiver ]         [ Rubidium Atomic Clock ]    │
-│  (Roof Antenna)           (Zero antenna failure risk) │
-│         │                             │                │
-│         └──────────────┬──────────────┘                │
-│                        ▼                               │
-│             [ TrueTime Daemon (time_master) ]          │
-└────────────────────────┼───────────────────────────────┘
-                         │
-             Local Private Subnet Sync
-                         │
-                         ▼
-        [ TrueTime.now() API on Spanner Node ]
-   Returns interval: [earliest, latest] where ε < 7ms
-```
-
-#### A. Redundant GPS and Rubidium Clocks
-- Why both GPS and Atomic clocks?
-  - GPS can fail due to antenna damage, solar flares, or satellite spoofing.
-  - Rubidium atomic clocks are independent of external radio signals, but drift slightly over months ($\approx 1\text{ }\mu\text{s/day}$).
-  - Combining both allows Google to cross-check time sources and mathematically bound maximum time drift to **$\epsilon < 7\text{ milliseconds}$**.
-
-#### B. The Commit Wait Rule
-1. When transaction $T_1$ commits, Spanner assigns it timestamp $s = t_{\text{latest}}$.
-2. The Spanner leader intentionally **pauses execution for $2\epsilon$ ($\approx 7\text{–}14\text{ms}$)** before releasing locks and acknowledging to the client.
-3. This guarantees that any subsequent transaction $T_2$ anywhere on Earth will receive a timestamp $s_2 > s_1$. Causality is physically locked to real-world time!
+> Three answers to "what happened first?": Lamport's logical clocks, Google's TrueTime with bounded uncertainty, and Amazon Dynamo's vector clocks.
 
 ---
 
-## 📦 Deep Dive 2: How Amazon Dynamo Used Vector Clocks (The Shopping Cart Invariant)
+## 🕰️ Deep Dive 1: Lamport Clocks, Ordering Without Real Time
 
-### 1. Production Context & Scale
-- **System**: Original Amazon Dynamo distributed key-value store (2007).
-- **Core Business Invariant**: An online shopper must **never lose an item added to their shopping cart**. If a customer clicks "Add to Cart", the write must succeed even during a complete network partition between datacenters.
+> **Source:** Leslie Lamport, ["Time, Clocks, and the Ordering of Events in a Distributed System"](https://lamport.azurewebsites.net/pubs/time-clocks.pdf) (Communications of the ACM, 1978). Everything in this section comes from the paper.
 
-### 2. The Core Problem
-- Amazon chose the **AP (Availability + Partition Tolerance)** path under the CAP theorem.
-- During a transatlantic fiber partition, a shopper in London adds a book, and their automated mobile app in California adds a laptop.
-- Both datacenters accept the write. How does Amazon reconcile the two carts without using broken wall clocks?
-
-### 3. Amazon's Architecture: Vector Clocks & Application Reconciliation
-
-```
-[ Customer Cart: [] ]
-          │
-          ▼
-   Write 1 on Node A: Cart=[Book], Vector=[(NodeA, 1)]
-          │
-      ┌───┴───────────────────────┐ (Network Partition!)
-      ▼                           ▼
-Write 2 on Node A:           Write 3 on Node B:
-Cart=[Book, Phone]           Cart=[Book, Laptop]
-Vector=[(NodeA, 2)]          Vector=[(NodeA, 1), (NodeB, 1)]
-      │                           │
-      └───────────┬───────────────┘
-                  │ (Network Heals!)
-                  ▼
-   [ Vector Conflict Detected! Neither dominates the other! ]
-                  │
-                  ▼
-   [ Application Level Cart Merge Logic ]
-   Merged Cart = [Book, Phone, Laptop]
-   Updated Vector = [(NodeA, 2), (NodeB, 2)]
-```
-
-#### A. Causal History Tracking
-- Every modification to a shopping cart increments the local node's counter in the cart's vector clock.
-- When the network heals, the read coordinator inspects both versions:
-  - If one vector dominates the other ($V_1 \ge V_2$), the older version is automatically superseded.
-  - If neither dominates, the coordinator returns **both conflicting versions (siblings)** to the shopping cart service.
-
-#### B. The Business Resolution
-- Instead of using Last-Write-Wins (which would delete either the Phone or the Laptop), Amazon's application logic executes a set union:
-  $$\text{Cart} = \text{Cart}_A \cup \text{Cart}_B = [\text{Book}, \text{Phone}, \text{Laptop}]$$
-- The customer sees all items in their cart. Zero sales revenue is lost!
+- **Partial order.** "The relation 'happened before' is therefore only a partial ordering of the events in the system." Two events on different machines with no message between them are concurrent: neither happened first.
+- **Logical clocks.** Lamport's clocks satisfy the **Clock Condition**: "For any events a, b: if a ---> b then C(a) < C(b)." The converse doesn't hold, so a smaller timestamp doesn't prove one event caused another.
 
 ---
 
-## ⚖️ Comparative Architecture Matrix
+## 🏢 Deep Dive 2: Google TrueTime, Real Time with Known Error
 
-| Architectural Dimension | Google TrueTime (Spanner) | Amazon Vector Clocks (Dynamo) |
-|---|---|---|
-| **Core Goal** | Linearizable serializable ordering | Causal conflict detection under partitions |
-| **Hardware Dependency** | GPS antennas + Rubidium atomic clocks in racks | Standard commodity off-the-shelf cloud hardware |
-| **Conflict Resolution** | Prevented upfront via Commit Wait | Resolved after-the-fact in application logic |
-| **CAP Classification** | CP (Consistency over Availability) | AP (Availability over Consistency) |
-| **Payload Overhead** | Zero (Standard 64-bit timestamps) | Scales with active node count in vector |
+> **Source:** [Spanner: Google's Globally-Distributed Database](https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett) (Corbett et al., OSDI 2012). Everything in this section comes from the paper.
+
+- **An interval, not a number.** `TT.now()` returns an interval `[earliest, latest]` "guaranteed to contain the absolute time during which TT.now() was invoked".
+- **Two kinds of reference.** "The underlying time references used by TrueTime are GPS and atomic clocks", used together "because they have different failure modes".
+- **Small uncertainty.** The uncertainty ε is "typically a sawtooth function of time, varying from about 1 to 7 ms over each poll interval", so "4 ms most of the time". Servers poll time masters every 30 seconds.
+- **Commit wait.** Spanner doesn't make a commit visible until its timestamp is definitely in the past. That turns bounded clock error into a guarantee about ordering (see module 14).
 
 ---
+
+## 🛒 Deep Dive 3: Amazon Dynamo, Vector Clocks and the Shopping Cart
+
+> **Source:** [Dynamo: Amazon's Highly Available Key-value Store](https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html) (DeCandia et al., SOSP 2007). Everything in this section comes from the paper.
+
+- **Capturing causality.** "Dynamo uses vector clocks in order to capture causality between different versions of the same object." If neither version descends from the other, they're concurrent, and both are kept.
+- **Reconciling in the application.** For the shopping cart, "an 'Add to Cart' operation can never be forgotten or rejected", so the cart's business logic "reconciles objects by merging different versions of a customer's shopping cart."
+- **The honest trade-off.** With that merge, "an 'add to cart' operation is never lost. However, deleted items can resurface."
+- **The simpler alternative.** Other applications use timestamp-based reconciliation, where the latest timestamp simply wins.
+
+---
+
+> ℹ️ An earlier version of this page claimed NTP drifts "100ms to 250ms" across continents and that before TrueTime "no distributed database" could offer global serializable transactions. We couldn't source either claim, so we removed them.
 
 ## 🎯 System Design Interview Takeaways
-1. **Explain Why Last-Write-Wins (LWW) is Dangerous**: Impress interviewers by explaining that using physical NTP timestamps to resolve conflicts in Cassandra or Dynamo silently drops legitimate writes when server clocks drift.
-2. **TrueTime Concept in Distributed Systems**: Citing TrueTime demonstrates elite understanding of how Google solved the CAP theorem in practice by bounding clock uncertainty to $<7\text{ms}$.
-3. **Application-Level Conflict Resolution**: When designing AP systems, explain that concurrent conflicting versions should be reconciled using domain-specific logic (like shopping cart union or CRDTs) rather than blind wall-clock overwrites.
+1. **Physical clocks can't order events reliably.** Use logical clocks for causality, or bound the error explicitly as TrueTime does.
+2. **Last-write-wins silently drops writes.** If two concurrent updates both matter, keep both (vector clocks) and merge them.
+3. **Merging has costs too.** Dynamo's cart never loses an add, but a deleted item can come back. Say which failure your design accepts.

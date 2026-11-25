@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-world case studies**: how **Google** & **Netflix** approach this, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Amazon Dynamo**, **Cassandra** and **Discord** use consistent hashing, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## ⏱️ Prerequisites: What You Need to Know First
 

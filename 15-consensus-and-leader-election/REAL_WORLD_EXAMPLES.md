@@ -1,130 +1,48 @@
-# Real-World Production Deep Dives: Consensus and Leader Election
+# Real-World Case Studies: Consensus and Leader Election
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
-> Deep-dive architectural dissections of how **Google** and **Netflix/Kubernetes** solve distributed consensus and leader election using Google Chubby (Paxos) and etcd/Raft.
-
----
-
-## 🏢 Deep Dive 1: How Google Uses Consensus (The Chubby Distributed Lock Service)
-
-### 1. Production Context & Scale
-- **System**: Google **Chubby**.
-- **Mission**: The foundation of Google's entire infrastructure. Provides coarse-grained distributed locking, master election, and configuration storage for:
-  - **GFS (Google File System)** & Colossus: Master election.
-  - **Bigtable**: Tablet Server coordination and root tablet location.
-  - **Borg**: Cluster manager master leader election.
-- **Availability Requirement**: Five-nines. If a Chubby cell fails, thousands of machines in that Google data center lose their master and freeze.
-
-### 2. The Core Problem at Google Scale
-- Implementing consensus (Paxos) directly inside every individual distributed service is notoriously difficult and bug-prone.
-- If 10,000 Bigtable nodes all participate in a consensus round for every write, network traffic grows quadratically ($O(N^2)$), causing immediate network collapse.
-
-### 3. Google's Architecture: The Chubby Paxos Cell
-
-```
-┌────────────────────────────────────────────────────────┐
-│ Google Chubby Cell (5 Replicas)                        │
-│                                                        │
-│  [ Replica 1 ]  [ Replica 2 ]  [ Replica 3 ]           │
-│         ▲              ▲              ▲                │
-│         └──────────────┼──────────────┘                │
-│             Runs Multi-Paxos Consensus                 │
-│                        │                               │
-│                        ▼                               │
-│           [ Elected Chubby Master ]                    │
-│             ├── Master Lease (~12 seconds)             │
-│             └── In-Memory B-Tree File System           │
-└────────────────────────┼───────────────────────────────┘
-                         │
-             Keep-Alive Heartbeat Protocol
-                         │
-       ┌─────────────────┴─────────────────┐
-       ▼                                   ▼
-[ Bigtable Master Node ]         [ GFS Master Node ]
-(Holds Primary Lock)             (Holds Primary Lock)
-```
-
-#### A. Coarse-Grained Locking vs Fine-Grained Locking
-- Chubby provides **Coarse-Grained Locking**:
-  - Locks are held for **hours or days**, not milliseconds.
-  - Example: A Bigtable Master acquires a Chubby lock when it boots. It holds that lock continuously for its entire operational lifetime.
-  - Client services do *not* run Paxos for every transaction. They rely on the elected master, which handles fine-grained data writes directly.
-
-#### B. Master Leases & Heartbeats
-- A Chubby cell consists of 5 nodes. The nodes run Paxos to elect one node as the **Master**.
-- The replicas grant the master a **Master Lease** (typically 12 seconds).
-- As long as the master receives periodic keep-alive pings from a majority of replicas, it extends its lease. While holding a valid lease, the master serves reads and writes locally from RAM **without running Paxos consensus on every operation**, achieving tens of thousands of QPS with sub-millisecond response times.
-
-#### C. Fencing Tokens (Preventing Split-Brain Disasters)
-What happens if Master A experiences a 30-second garbage collection pause?
-1. Replicas notice Master A's lease expired.
-2. Replicas run Paxos and elect Master B as the new leader.
-3. Master A wakes up from its GC pause, unaware that it has been deposed, and attempts to write to storage!
-- **Chubby's Fencing Tokens**:
-  - Whenever a lock is acquired, Chubby issues a monotonically increasing **Fencing Token** (e.g., Token 42).
-  - The storage layer (Colossus) only accepts writes carrying a token higher than the highest token it has seen. When Master A submits a write with Token 41, Colossus rejects it instantly, completely eliminating split-brain corruption!
+> Three generations of consensus in practice: Google's Chubby lock service (Paxos), the Raft algorithm designed to be understandable, and etcd, the Raft-based store behind every Kubernetes cluster.
 
 ---
 
-## ⚓ Deep Dive 2: How Netflix & Kubernetes Use Consensus (Raft & etcd)
+## 🏢 Deep Dive 1: Google Chubby, Consensus as a Lock Service
 
-### 1. Production Context & Scale
-- **System**: **etcd** (built on the **Raft** consensus algorithm).
-- **Adoption**: Powers **Kubernetes** control planes globally and acts as the state store for **Netflix Titus** (Netflix's container management platform running hundreds of thousands of microservice containers daily).
-- **Design Philosophy**: Understandability and operational simplicity over the academic complexity of Multi-Paxos.
+> **Source:** Mike Burrows, [The Chubby lock service for loosely-coupled distributed systems](https://research.google/pubs/the-chubby-lock-service-for-loosely-coupled-distributed-systems/) (OSDI 2006). Everything in this section comes from the paper.
 
-### 2. Raft Consensus Mechanics in Production
-
-```
-[ Inbound Write: Schedule Pod ]
-               │
-               ▼
-      [ Elected Raft Leader ]
-               │
-     ┌─────────┴─────────┐ (AppendEntries RPC)
-     ▼                   ▼
-[ Raft Follower 1 ] [ Raft Follower 2 ]
-     │                   │
-     └─────────┬─────────┘
-               ▼ (Quorum of Log Replications Received)
-[ Leader Commits Entry & Applies to State Machine ]
-               │
-               ▼
-[ Response Returned to Kubernetes API Server ]
-```
-
-#### A. Leader Election & Randomized Heartbeat Timers
-- Raft decomposes consensus into discrete sub-problems: **Leader Election**, **Log Replication**, and **Safety**.
-- Nodes begin in the **Follower** state. If a follower hears no heartbeat from a leader within a randomized election timeout (e.g., 150ms - 300ms), it transitions to **Candidate**, increments its `term`, and broadcasts `RequestVote` RPCs.
-- **Randomized Timers Prevent Split Votes**: Randomizing election timeouts ensures that usually only a single candidate times out first, wins the majority vote, and becomes leader without repeated ties.
-
-#### B. Strong Leader Invariant & Log Matching
-- In Raft, log entries only flow in **one direction: from the Leader to Followers**.
-- If a follower's log diverges from the leader due to a network glitch, the leader forces the follower's log to replicate its own entries, overwriting extraneous entries.
-- An entry is committed as soon as it is written to disk by a majority of nodes.
-
-#### C. Netflix Titus: Container State Machine
-- Netflix Titus orchestrates millions of container executions for video encoding, recommendation algorithms, and microservices.
-- Titus masters use Raft consensus to guarantee:
-  - Exact state of container placement (which EC2 instance runs which container).
-  - High availability: If the active Titus master instance crashes, the Raft follower with the most up-to-date log is elected leader within **under 2 seconds**, seamlessly resuming container scheduling without interrupting running workloads.
+- **Why a lock service.** Instead of every system implementing consensus, Chubby provides "coarse-grained locking as well as reliable (though low-volume) storage". Its main use is electing a leader: "the Google File System uses a Chubby lock to appoint a GFS master server", and Bigtable uses Chubby "to elect a master, to allow the master to discover the servers it controls, and to permit clients to find the master".
+- **A cell of replicas.** The paper's diagram shows a cell of five servers. They use Paxos to elect a master, which gets votes from a majority plus "promises that those replicas will not elect a different master for an interval of a few seconds known as the master lease".
+- **Reads and writes.** Writes are acknowledged once they reach "a majority of the replicas in the cell". Reads are served "by the master alone; this is safe provided the master lease has not expired".
+- **Client sessions.** Separately, each client session has a lease that the master keeps extending. "The default extension is 12s."
+- **Sequencers.** A lock holder can request "a sequencer, an opaque byte-string that describes the state of the lock immediately after acquisition", and pass it to servers. They can then reject requests from a holder whose lock has since been lost. This is the same idea as a fencing token.
 
 ---
 
-## ⚖️ Comparative Architecture Matrix: Paxos vs Raft
+## 🗳️ Deep Dive 2: Raft, Consensus Designed to Be Understood
 
-| Architectural Dimension | Google Chubby (Multi-Paxos) | Kubernetes / Titus (etcd / Raft) |
-|---|---|---|
-| **Consensus Algorithm** | Multi-Paxos with Master Leases | Raft with Strong Leader Invariants |
-| **Understandability** | Highly complex; requires custom invariants | Designed explicitly for modular comprehensibility |
-| **Log Flow** | Any replica can propose; leader is optimization | Unidirectional strictly from Leader to Followers |
-| **Locking Mechanism** | Distributed File System semantics (Chubby locks) | Key-Value Watch API with version leases |
-| **Split-Brain Defense** | Monotonic Fencing Tokens checked at storage | Term-based leader rejection (`term < current_term`) |
+> **Source:** Diego Ongaro and John Ousterhout, [In Search of an Understandable Consensus Algorithm (Extended Version)](https://raft.github.io/raft.pdf) (2014). Everything in this section comes from the paper.
+
+- **Goal.** "In order to enhance understandability, Raft separates the key elements of consensus, such as leader election, log replication, and safety."
+- **Elections without split votes.** "Raft uses randomized election timeouts to ensure that split votes are rare and that they are resolved quickly." Timeouts "are chosen randomly from a fixed interval (e.g., 150–300ms)", so usually a single server times out first, wins, and starts sending heartbeats before others time out.
 
 ---
+
+## ☸️ Deep Dive 3: etcd, the Raft Store Under Kubernetes
+
+> **Sources:** etcd docs: [FAQ](https://etcd.io/docs/v3.5/faq/) and [Tuning](https://etcd.io/docs/v3.5/tuning/); Kubernetes docs: [Cluster architecture](https://kubernetes.io/docs/concepts/architecture/) and [Operating etcd clusters for Kubernetes](https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/). Everything in this section comes from those pages.
+
+- **What it is.** "etcd is a consistent distributed key-value store." Kubernetes uses it as its "backing store for all cluster data", and "all Kubernetes objects are stored in etcd".
+- **Leader-based.** "Raft is leader-based; the leader handles all client requests which need cluster consensus." Followers forward those requests to the leader.
+- **Odd sizes.** "For a cluster with n members, quorum is (n/2)+1." A 3-member cluster tolerates 1 failure and a 5-member cluster tolerates 2, while 4 and 6 members tolerate no more than 3 and 5. Kubernetes recommends a five-member cluster in production.
+- **Timing defaults.** etcd uses a 100 ms heartbeat interval and a 1000 ms election timeout by default.
+- **Losing quorum.** If a majority of members fail, "Kubernetes cannot make any changes to its current state", so no new pods can be scheduled.
+
+---
+
+> ℹ️ An earlier version of this page said Borg relies on Chubby and that Chubby's master lease is "typically 12 seconds". The paper describes a master lease of "a few seconds", and 12 s is the default extension of a client's session lease. It also mentioned Netflix's Titus platform running on etcd. We couldn't source the Borg and Titus claims, so we removed them.
 
 ## 🎯 System Design Interview Takeaways
-1. **Explain Fencing Tokens**: Whenever designing a system with an active-passive leader (e.g., Primary Database, Cluster Scheduler), explain how to prevent the **Stale Master / Split-Brain** problem using monotonically incrementing **Fencing Tokens**.
-2. **Coarse vs Fine-Grained Consensus**: If an interviewer asks you to scale a distributed database, *do not* run Paxos/Raft for every row read/write! Explain that consensus should be used for **coarse-grained metadata / leader election**, while the elected leader coordinates high-speed local data writes.
-3. **The Odd-Number Node Rule**: Always configure consensus clusters (ZooKeeper, etcd, Chubby) with odd node counts ($2F + 1$, e.g., 3 or 5 nodes). A 3-node cluster can tolerate 1 failure; a 5-node cluster can tolerate 2 failures. Adding a 4th node adds cost without increasing failure tolerance!
+1. **Use a consensus service, don't build one.** Chubby, ZooKeeper and etcd exist so other systems can elect leaders and store small, critical metadata safely.
+2. **Leases make leader reads cheap.** While a leader's lease is valid, no other leader can exist, so it can answer reads alone.
+3. **Fence stale leaders.** A sequencer or fencing token lets downstream servers reject a former leader that doesn't know it has lost its lock.
+4. **Run an odd number of members.** Adding a fourth member to a three-member cluster costs more and tolerates no extra failure.

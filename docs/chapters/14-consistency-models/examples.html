@@ -22,161 +22,83 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/quorum-lab.html">Quorum overlap &amp; stale read lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-consistency-models">Real-World Production Deep Dives: Consistency Models</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/quorum-lab.html">Quorum overlap &amp; stale read lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-consistency-models">Real-World Case Studies: Consistency Models</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Amazon/Netflix</strong> navigate consistency models, contrasting strict Linearizability via TrueTime with Eventual &amp; Session Consistency in distributed applications.</p>
+<p>The consistency spectrum as real products expose it: Spanner at the strong end, Azure Cosmos DB with five selectable levels, and DynamoDB's per-request choice between eventual and strong reads.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-google-uses-linearizability-spanner-truetime--external-consistency">🏢 Deep Dive 1: How Google Uses Linearizability (Spanner TrueTime &amp; External Consistency)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-google-spanner-external-consistency">🏢 Deep Dive 1: Google Spanner, External Consistency</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett">Spanner: Google's Globally-Distributed Database</a> (Corbett et al., OSDI 2012). Everything in this section comes from the paper.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Google Cloud Spanner.</li>
-<li><strong>Guarantee</strong>: <strong>External Consistency (Strict Serializability / Linearizability)</strong>.</li>
-<li><strong>The Real-World Requirement</strong>: In Google AdWords financial systems, if Customer A deposits money at 12:00:00.000 PM, and Customer B initiates a payment at 12:00:00.001 PM anywhere else in the world, Customer B <em>must</em> observe Customer A's deposit. Causal or eventual consistency is unacceptable.</li>
-</ul>
-<h3 id="2-the-core-problem-why-wall-clocks-break-in-distributed-systems">2. The Core Problem: Why Wall Clocks Break in Distributed Systems</h3>
-<ul>
-<li>Standard server clocks synchronize via NTP (Network Time Protocol).</li>
-<li><strong>Clock Drift</strong>: Due to CPU crystal thermal fluctuations and network jitter, standard NTP clocks drift by <strong>100ms to 250ms</strong> across data centers.</li>
-<li>If Server 1's clock is 50ms fast and Server 2's clock is 50ms slow, assigning timestamps based on local clocks reverses the perceived order of cause and effect:
-Transaction 2 can receive an earlier timestamp than Transaction 1, corrupting financial balances!</li>
-</ul>
-<h3 id="3-googles-solution-the-truetime-hardware-api">3. Google's Solution: The TrueTime Hardware API</h3>
-<pre><code>[ Google Data Center Node ]
-             │
-             ▼
-   [ TrueTime API Engine ]
-   ├── GPS Receivers (Antennas on Data Center Roofs)
-   └── Rubidium Atomic Clocks (Atomic drift is negligible)
-             │
-             ▼
-   TrueTime.now() returns time interval: [earliest, latest]
-             │
-   Uncertainty Window: ε = (latest - earliest) / 2  (ε &lt; 7ms)
-</code></pre>
-<h4 id="a-the-truetime-invariant">A. The TrueTime Invariant</h4>
-<p>Instead of returning a single discrete time, <code>TrueTime.now()</code> returns an uncertainty interval:</p>
-<div class="math-block">[t.earliest, t.latest] where t.latest - t.earliest = 2ε</div>
-<ul>
-<li>Because Google maintains atomic clocks in every data center, the maximum uncertainty <span class="math-inline">ε</span> is mathematically bounded to <strong>less than 7 milliseconds</strong>.</li>
-</ul>
-<h4 id="b-the-truetime-commit-wait-rule">B. The TrueTime Commit Wait Rule</h4>
-<p>To guarantee strict linearizability without cross-datacenter locking between readers and writers:</p>
-<ol>
-<li>When a transaction <span class="math-inline">T<sub>1</sub></span> prepares to commit, the coordinator requests <code>TrueTime.now()</code>.</li>
-<li>It picks an absolute commit timestamp <span class="math-inline">s ≥ t<sub>1</sub>.latest</span>.</li>
-<li><strong>The Commit Wait</strong>: The coordinator delays responding to the client until it is physically certain that the absolute real-world time has passed <span class="math-inline">s</span>:</li>
-</ol>
-<div class="math-block">Wait until TrueTime.now().earliest > s</div>
-<ol start="4">
-<li><strong>The Mathematical Guarantee</strong>: Any subsequent transaction <span class="math-inline">T<sub>2</sub></span> that begins anywhere on Earth will receive a timestamp <span class="math-inline">s<sub>2</sub> &gt; s<sub>1</sub></span>. Causality is physically preserved worldwide!</li>
-</ol>
-<hr />
-<h2 id="deep-dive-2-how-netflix--amazon-use-eventual--session-consistency">📦 Deep Dive 2: How Netflix &amp; Amazon Use Eventual &amp; Session Consistency</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
-<ul>
-<li><strong>Applications</strong>: Netflix User Profiles / &quot;My List&quot;, Amazon Customer Reviews.</li>
-<li><strong>Workload</strong>: Hundreds of millions of read requests per second globally.</li>
-<li><strong>The Pragmatic Choice</strong>: Sacrificing linearizability to achieve single-digit millisecond latency worldwide.</li>
-</ul>
-<h3 id="2-consistency-spectrum-in-practice">2. Consistency Spectrum in Practice</h3>
-<pre><code>[ Linearizability ]  &lt;-- Google Spanner (Strict order, high latency)
-        │
-        ▼
-[ Sequential Consistency ]
-        │
-        ▼
-[ Causal Consistency ]  &lt;-- Comment threads / reply chains
-        │
-        ▼
-[ Read-Your-Writes / Session Consistency ] &lt;-- Netflix Profiles, Shopping Carts
-        │
-        ▼
-[ Eventual Consistency ] &lt;-- Global review counters, viewer statistics
-</code></pre>
-<h4 id="a-session-consistency-read-your-writes">A. Session Consistency (Read-Your-Writes)</h4>
-<p>Under pure eventual consistency, a user might add a movie to &quot;My List&quot;, refresh the page, and not see it because their read hit a read replica that has not caught up.</p>
-<ul>
-<li><strong>Netflix's Solution</strong>:
-<ul>
-<li>When a user mutates their profile, Netflix sets an encrypted session cookie containing the transaction version or timestamp.</li>
-<li>Subsequent read requests carry this cookie. The edge proxy checks the replica's replication watermark:
-<ul>
-<li>If the replica has processed past that watermark, it serves the read locally.</li>
-<li>If the replica is lagging, the proxy routes the read directly to the primary database or waits for the local replica to catch up, guaranteeing <strong>Read-Your-Writes Consistency</strong> for the authenticated user while all other users see eventual consistency.</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<h4 id="b-monotonic-read-consistency">B. Monotonic Read Consistency</h4>
-<ul>
-<li>Prevents the &quot;time travel&quot; anomaly: a user reads from Replica A and sees comment #5. On their next click, their request hits Replica B which is lagging, and comment #5 disappears.</li>
-<li>Implemented by pinning user sessions to specific database replicas using sticky routing hashes.</li>
-</ul>
-<h4 id="c-bounded-staleness-in-viewing-history">C. Bounded Staleness in Viewing History</h4>
-<ul>
-<li>For video bookmarking, Netflix uses <strong>Bounded Staleness</strong>.</li>
-<li>The viewing position on your TV might lag your tablet by at most <strong>2 to 5 seconds</strong>. A 2-second difference in video playback offset is completely acceptable to the human eye, but eliminates the need for expensive distributed locks.</li>
+<li><strong>The guarantee.</strong> Spanner's timestamps &quot;reflect serialization order&quot;, and that order &quot;satisfies external consistency (or equivalently, linearizability): if a transaction T1 commits before another transaction T2 starts, then T1's commit timestamp is smaller than T2's.&quot;</li>
+<li><strong>How.</strong> TrueTime gives each server an interval guaranteed to contain the real time. Its uncertainty is &quot;typically a sawtooth function of time, varying from about 1 to 7 ms&quot;. Before making a commit visible, the coordinator waits until the commit timestamp is definitely in the past (&quot;commit wait&quot;), so no later transaction can get an earlier timestamp.</li>
 </ul>
 <hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<h2 id="deep-dive-2-azure-cosmos-db-five-levels-you-can-choose">🌐 Deep Dive 2: Azure Cosmos DB, Five Levels You Can Choose</h2>
+<blockquote>
+<p><strong>Sources:</strong> Microsoft Learn, <a href="https://learn.microsoft.com/en-us/azure/cosmos-db/consistency-levels">Consistency levels in Azure Cosmos DB</a> and <a href="https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-manage-consistency">Manage consistency levels</a>. Everything in this section comes from those pages.</p>
+</blockquote>
+<p>&quot;From strongest to weakest, the levels are: Strong, Bounded staleness, Session, Consistent prefix, Eventual.&quot;</p>
 <table>
 <thead>
 <tr>
-<th>Consistency Model</th>
-<th>Real-World System</th>
-<th>Latency Cost</th>
-<th>Disaster Behavior</th>
-<th>Use Case</th>
+<th style="text-align:left">Level</th>
+<th style="text-align:left">What the docs promise</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Linearizability</strong></td>
-<td>Google Spanner, etcd</td>
-<td>High (30-100ms)</td>
-<td>Halts on partition</td>
-<td>Bank balances, master election</td>
+<td style="text-align:left"><strong>Strong</strong></td>
+<td style="text-align:left">&quot;a linearizability guarantee&quot;: reads return &quot;the most recent committed version of an item&quot;</td>
 </tr>
 <tr>
-<td><strong>Causal Consistency</strong></td>
-<td>MongoDB (Causal Sessions)</td>
-<td>Medium (10-25ms)</td>
-<td>Accepts local writes</td>
-<td>Chat replies, forum threads</td>
+<td style="text-align:left"><strong>Bounded staleness</strong></td>
+<td style="text-align:left">the lag between regions &quot;is always less than a specified amount&quot;: K versions or T time, &quot;whichever is reached first&quot;</td>
 </tr>
 <tr>
-<td><strong>Read-Your-Writes</strong></td>
-<td>Netflix Profile Service, Amazon</td>
-<td>Low (2-5ms)</td>
-<td>Local routing</td>
-<td>User settings, shopping cart</td>
+<td style="text-align:left"><strong>Session</strong></td>
+<td style="text-align:left">within one client session, &quot;read-your-writes, and write-follows-reads guarantees&quot;</td>
 </tr>
 <tr>
-<td><strong>Eventual Consistency</strong></td>
-<td>DNS, Cassandra, DynamoDB</td>
-<td>Minimal (&lt;1ms)</td>
-<td>Always available</td>
-<td>View counts, analytics</td>
+<td style="text-align:left"><strong>Consistent prefix</strong></td>
+<td style="text-align:left">writes in one multi-document transaction &quot;are always visible together&quot;</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Eventual</strong></td>
+<td style="text-align:left">a read may hit a replica that is &quot;lagging and could return stale or no data&quot;</td>
 </tr>
 </tbody>
 </table>
+<ul>
+<li><strong>Session is the default.</strong> It works with a session token. &quot;After every write operation, the client receives an updated Session Token&quot;, and reads only use a replica that has caught up to that token. If an app runs on several servers and doesn't pass the token along, reads can be inconsistent &quot;for a while&quot;.</li>
+<li><strong>Bounded staleness has floors.</strong> For multi-region accounts the minimum is &quot;100,000 write operations or 300 seconds&quot;.</li>
+<li><strong>Stronger costs more.</strong> Strong and bounded staleness read from two replicas, so their &quot;read throughput ... is half that of the other consistency levels&quot;, and each such read costs twice as much.</li>
+</ul>
 <hr />
+<h2 id="deep-dive-3-amazon-dynamodb-choose-per-read">⚡ Deep Dive 3: Amazon DynamoDB, Choose per Read</h2>
+<blockquote>
+<p><strong>Source:</strong> AWS docs, <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a>. Everything in this section comes from it.</p>
+</blockquote>
+<ul>
+<li>&quot;Eventually consistent is the default read consistent model for all read operations.&quot; Such a read &quot;might not reflect the results of a recently completed write operation&quot;.</li>
+<li>Setting <code>ConsistentRead</code> to true returns &quot;the most up-to-date data, reflecting the updates from all prior write operations that were successful.&quot;</li>
+<li>&quot;Eventually consistent reads are half the cost of strongly consistent reads.&quot;</li>
+<li>Strong reads work on tables and local secondary indexes only: &quot;All reads from GSIs and streams are eventually consistent.&quot;</li>
+</ul>
+<hr />
+<blockquote>
+<p>ℹ️ An earlier version of this page claimed NTP clocks drift &quot;100ms to 250ms&quot; across data centers, and described Netflix pinning sessions to replicas and letting bookmarks lag &quot;2 to 5 seconds&quot;. We couldn't find sources for those claims, so we replaced them with the documented Cosmos DB and DynamoDB behaviour.</p>
+</blockquote>
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Explain the Anomaly Prevented</strong>: Never just define consistency models in the abstract. Always explain the concrete user bug it prevents:
-<ul>
-<li><em>Linearizability</em> prevents two users buying the same concert seat simultaneously.</li>
-<li><em>Read-Your-Writes</em> prevents a user updating their profile and seeing their old photo after refreshing.</li>
-<li><em>Causal Consistency</em> prevents an answer appearing before its question in a chat app.</li>
-</ul>
-</li>
-<li><strong>TrueTime Concept in Interviews</strong>: If asked how to achieve globally distributed ACID transactions without slow two-phase locking, cite Google Spanner's <strong>TrueTime commit-wait mechanism</strong>.</li>
-<li><strong>Session Consistency via Sticky Routing</strong>: Explain that you can achieve strong consistency perception for a single user using lightweight session tokens or sticky routing, without imposing global linearizability across the entire database cluster.</li>
+<li><strong>Name the anomaly each level prevents.</strong> Session consistency in Cosmos DB, for example, guarantees you read your own writes. Eventual consistency doesn't.</li>
+<li><strong>Strong consistency costs real money.</strong> Cosmos DB halves read throughput and DynamoDB doubles read cost for the stronger option.</li>
+<li><strong>Session guarantees need plumbing.</strong> If requests from one user can hit different app servers, the session token (or equivalent) must travel with them.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">

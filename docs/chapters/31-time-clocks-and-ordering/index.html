@@ -28,14 +28,14 @@
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> (TrueTime API bounding clock uncertainty with atomic clocks) and <strong>Amazon</strong> (Dynamo Vector Clocks for shopping carts) manage distributed time, in <a href="../../chapters/31-time-clocks-and-ordering/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Lamport clocks</strong>, <strong>Google TrueTime</strong> and <strong>Amazon Dynamo</strong>'s vector clocks order events, in <a href="../../chapters/31-time-clocks-and-ordering/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <hr />
 <h2 id="the-30-second-version">🧒 The 30-second version</h2>
 <p>In a single computer, finding out what happened first is trivial: you check the CPU clock.</p>
 <p>In a distributed system across 1,000 servers, <strong>physical wall clocks cannot be trusted</strong>:</p>
 <ul>
-<li>Network Time Protocol (NTP) synchronizes clocks over the internet, but network jitter and quartz crystal temperature variations cause clocks to drift by <strong>100ms to 250ms</strong>.</li>
+<li>Clocks drift between synchronizations. Even Google's Spanner, with GPS and atomic clock references, budgets for drift of up to <strong>200 microseconds per second</strong>, about <strong>6 ms</strong> over its 30-second sync interval (<a href="https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett">Spanner paper</a>).</li>
 <li>A server clock can abruptly jump backwards when NTP adjusts for leap seconds.</li>
 <li>If Server A's clock is 50ms fast and Server B's clock is 50ms slow, assigning timestamps based on wall clocks will reverse the apparent order of cause and effect: a bank withdrawal could appear to occur <em>before</em> the deposit that funded it!</li>
 </ul>
