@@ -22,200 +22,75 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/simulator.html">Cache hit &amp; outage simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-caching-patterns">Real-World Production Deep Dives: Caching Patterns</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/simulator.html">Cache hit &amp; outage simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-caching-patterns">Real-World Case Studies: Caching Patterns</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Meta</strong> and <strong>Netflix</strong> implement caching at scale, exploring Meta TAO graph caching and Netflix EVCache cluster architectures.</p>
+<p>Three cache designs: Facebook's TAO sits in the read and write path of the social graph, Netflix's EVCache keeps copies in every availability zone, and Bigtable layers two caches inside each server.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-meta-uses-caching-tao-the-social-graph-distributed-cache">👥 Deep Dive 1: How Meta Uses Caching (TAO: The Social Graph Distributed Cache)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-facebook-tao-a-cache-that-owns-the-read-and-write-path">👥 Deep Dive 1: Facebook TAO, a Cache That Owns the Read and Write Path</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://www.usenix.org/conference/atc13/technical-sessions/presentation/bronson">TAO: Facebook's Distributed Data Store for the Social Graph</a> (Bronson et al., USENIX ATC 2013). Everything in this section comes from the paper.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Meta TAO (The Associative Object store).</li>
-<li><strong>Scale</strong>: Serves over <strong>1 billion reads per second</strong> for the Facebook/Instagram social graph.</li>
-<li><strong>Data Model</strong>: Models the world as <strong>Objects</strong> (nodes: users, posts, photos, comments) and <strong>Associations</strong> (edges: friendships, likes, tagged-in).</li>
-<li><strong>Cache Hit Ratio</strong>: Greater than <strong>99.8%</strong>, shielding the underlying sharded MySQL database tier from over 999 out of every 1,000 read queries.</li>
-</ul>
-<h3 id="2-the-core-problem-at-meta-scale">2. The Core Problem at Meta Scale</h3>
-<ul>
-<li>Social networks have extreme read/write asymmetry (&gt;99% reads).</li>
-<li>Fetching a single Facebook user profile requires traversing thousands of graph edges (friends, recent posts, liked pages, check-ins).</li>
-<li>Executing SQL joins across thousands of sharded MySQL databases would cause catastrophic latency (seconds per page view) and collapse database servers.</li>
-</ul>
-<h3 id="3-metas-architecture-two-tier-master-follower-cache">3. Meta's Architecture: Two-Tier Master-Follower Cache</h3>
-<pre><code>[ Web Server (Client) ]
-           │
-           ▼
-[ Follower Cache Tier (Local Region) ] ── (99.8% Cache Hits Served Locally!)
-           │
-           │ (Cache Miss or Write)
-           ▼
-[ Leader Cache Tier (Data Center Hosting Primary DB) ]
-           │
-           ▼ (Write-Through)
-[ Sharded MySQL Database Tier ]
-</code></pre>
-<h4 id="a-read-through-caching-pattern">A. Read-Through Caching Pattern</h4>
-<ul>
-<li>TAO uses a <strong>Read-Through</strong> architecture.</li>
-<li>When an application server requests an association (e.g., <code>get_friends(user_123)</code>), it asks the local <strong>Follower Cache</strong>:
-<ul>
-<li><strong>Cache Hit</strong>: Follower cache returns the edge list in under <strong>1 millisecond</strong>.</li>
-<li><strong>Cache Miss</strong>: The Follower cache itself fetches the record from the <strong>Leader Cache</strong> (or database), populates its local cache memory, and returns the result to the web server.</li>
-</ul>
-</li>
-</ul>
-<h4 id="b-the-write-through-invariant-with-invalidation">B. The Write-Through Invariant with Invalidation</h4>
-<ul>
-<li>Writes (e.g., user clicks &quot;Like&quot;) must be durable:
-<ol>
-<li>The client sends the write to the local Follower cache.</li>
-<li>The Follower cache proxies the write directly to the <strong>Leader Cache</strong> for that shard.</li>
-<li>The Leader cache writes through to the underlying <strong>MySQL primary database</strong>.</li>
-<li>Once MySQL commits, the Leader cache updates its own in-memory state and sends an asynchronous <strong>Invalidation Message</strong> down to all Follower caches via a dedicated pub/sub backbone.</li>
-</ol>
-</li>
-</ul>
-<h4 id="c-point-in-time-read-consistency">C. Point-in-Time Read Consistency</h4>
-<ul>
-<li>To prevent users from seeing stale data immediately after posting a comment, TAO provides <strong>Read-After-Write Consistency (Session Consistency)</strong>:
-<ul>
-<li>If a user performs a write, the web server caches a short-lived version token in the user's session cookie.</li>
-<li>Subsequent reads from that user are routed directly to the Leader cache (or wait until the local Follower has received the invalidation message), ensuring users always see their own updates immediately.</li>
-</ul>
-</li>
+<li><strong>Scale.</strong> TAO &quot;runs on thousands of machines&quot; and &quot;can process a billion reads and millions of writes each second&quot;.</li>
+<li><strong>Data model.</strong> &quot;TAO objects are typed nodes, and TAO associations are typed directed edges between objects.&quot; For example, a user and a post are objects, and a &quot;like&quot; is an association between them.</li>
+<li><strong>Not a lookaside cache.</strong> Instead of the application reading the database and filling the cache itself, TAO's fixed API lets Facebook &quot;move the control logic into the cache itself&quot;.</li>
+<li><strong>Two tiers.</strong> To add servers without one giant tier, TAO splits &quot;the cache into two levels: a leader tier and multiple follower tiers&quot;. Followers serve reads and pass misses and writes to the leader for that data.</li>
+<li><strong>Consistency.</strong> TAO &quot;explicitly favors availability and per-machine efficiency over strong consistency&quot;. After a write, the leader &quot;enqueues invalidation messages to each corresponding follower&quot;. The follower that sent the write is updated straight away, which gives &quot;read-after-write consistency within a single tier&quot;.</li>
+<li><strong>Hot items.</strong> Some objects are read &quot;orders of magnitude more often than other objects&quot;. Their hit rate is high enough that TAO also caches them on the client.</li>
 </ul>
 <hr />
-<h2 id="deep-dive-2-how-netflix-uses-caching-evcache-distributed-in-memory-fleet">🎬 Deep Dive 2: How Netflix Uses Caching (EVCache: Distributed In-Memory Fleet)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-2-netflix-evcache-a-replicated-memcached">🎬 Deep Dive 2: Netflix EVCache, a Replicated memcached</h2>
+<blockquote>
+<p><strong>Sources:</strong> the <a href="https://github.com/Netflix/EVCache">EVCache README</a> and <a href="https://github.com/Netflix/EVCache/wiki">wiki</a>, and the <a href="https://github.com/Netflix/rend">Rend README</a>, on Netflix's GitHub. Everything in this section comes from those pages.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Netflix <strong>EVCache</strong> (Elastic, Replicated, Clustered Memcached).</li>
-<li><strong>Scale</strong>: Thousands of AWS EC2 instances running in-memory cache nodes across multiple AWS regions.</li>
-<li><strong>Data Volume</strong>: Tens of terabytes of hot data in RAM, handling <strong>tens of millions of operations per second</strong> with median read latencies <strong>under 1 millisecond</strong>.</li>
-</ul>
-<h3 id="2-the-core-problem-at-netflix-scale">2. The Core Problem at Netflix Scale</h3>
-<ul>
-<li>Standard open-source Memcached is a single-node in-memory cache without native replication or cross-datacenter synchronization.</li>
-<li>If an AWS Availability Zone experienced network degradation or an EC2 instance rebooted, thousands of cached subscriber sessions were wiped, creating a massive <strong>Cache Stampede (Thundering Herd)</strong> on downstream Cassandra databases.</li>
-</ul>
-<h3 id="3-netflixs-architecture-evcache-cluster-architecture">3. Netflix's Architecture: EVCache Cluster Architecture</h3>
-<pre><code>[ Netflix Microservice (e.g., Recommendation Service) ]
-           │
-   EVCache Java Client
-   ├── Zone-Aware Ketama Consistent Hash Ring
-   ├── Probabilistic Early Expiration (Stampede Protection)
-   └── Parallel Read-Aside Fallback
-           │
-      ┌────┴────────────────────────┐
-      ▼ (Local Zone)                ▼ (Cross-Zone Async Replication)
-[ EVCache Node A (us-east-1a) ]  [ EVCache Node B (us-east-1b) ]
-   └── Rend Proxy                   └── Rend Proxy
-         ├── Memcached (RAM)              ├── Memcached (RAM)
-         └── RocksDB (Local NVMe SSD)      └── RocksDB (Local NVMe SSD)
-</code></pre>
-<h4 id="a-cache-aside-with-zone-aware-ketama-hashing">A. Cache-Aside with Zone-Aware Ketama Hashing</h4>
-<ul>
-<li>Netflix uses the <strong>Cache-Aside (Lazy Loading)</strong> pattern:
-<ol>
-<li>The microservice asks the EVCache client for the key.</li>
-<li>If hit, returns data.</li>
-<li>If miss, the microservice queries Cassandra, writes the result back into EVCache with a TTL, and returns.</li>
-</ol>
-</li>
-<li><strong>Zone-Aware Routing</strong>: The EVCache client maintains consistent hashing rings for each AWS Availability Zone. A service in <code>us-east-1a</code> reads strictly from the cache node in <code>us-east-1a</code>, avoiding cross-AZ network latency and bandwidth transfer costs.</li>
-</ul>
-<h4 id="b-the-rend-high-performance-hybrid-proxy">B. The &quot;Rend&quot; High-Performance Hybrid Proxy</h4>
-<ul>
-<li>High RAM costs made storing cold items in pure memory expensive.</li>
-<li>Netflix engineered <strong>Rend</strong>, a custom C/Go server proxy sitting in front of storage engines on each cache node:
-<ul>
-<li><strong>Hot Data</strong>: Kept in volatile <strong>Memcached</strong> (RAM) for sub-millisecond access.</li>
-<li><strong>Warm Data</strong>: Kept in local <strong>RocksDB on NVMe SSDs</strong>, allowing single cache nodes to store terabytes of data at one-tenth the cost of pure RAM instances.</li>
-</ul>
-</li>
-</ul>
-<h4 id="c-preventing-cache-stampedes-via-probabilistic-early-expiration">C. Preventing Cache Stampedes via Probabilistic Early Expiration</h4>
-<p>When a popular cache key (e.g., the homepage banner for <em>Stranger Things</em>) expires, thousands of concurrent requests miss simultaneously and slam the database.</p>
-<ul>
-<li>Netflix uses <strong>Probabilistic Early Expiration (Optimal Probabilistic Cache Refresh)</strong>:
-<ul>
-<li>As a key approaches its expiration time, the EVCache client computes an algorithmically randomized probability based on remaining TTL and current read volume:</li>
-</ul>
-</li>
-</ul>
-<div class="math-block">Δ · β · \log(random())</div>
-<ul>
-<li>A single random worker thread triggers a background refresh <em>before</em> the key physically expires, refreshing the cache smoothly with zero latency spike or database stampede!</li>
+<li><strong>What it is.</strong> EVCache is short for <strong>Ephemeral Volatile Cache</strong>: data lives only as long as its TTL, and &quot;can disappear any time&quot;. It is &quot;a memcached &amp; spymemcached based caching solution that is mainly used for AWS EC2 infrastructure&quot;, used through a Java client.</li>
+<li><strong>A copy in every zone.</strong> Writes go to every availability zone, so &quot;data is replicated across both the zones&quot;. Reads come from the local zone, which avoids cross-zone traffic and &quot;improves the latency&quot;. The number of copies varies: &quot;some clusters run with 2, others with 9&quot;.</li>
+<li><strong>Falling back.</strong> If the local copy misses, clients can optionally fall back to other zones. That &quot;will incur an additional cost but typically is a lot smaller than going to the source of truth.&quot;</li>
+<li><strong>Bigger caches on SSD.</strong> Rend is a Go proxy that sits &quot;on the same server as both a memcached process and an SSD-backed L2 cache&quot;, so a node can serve from memory first and from SSD second.</li>
 </ul>
 <hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<h2 id="deep-dive-3-bigtable-two-cache-levels-in-each-server">🏢 Deep Dive 3: Bigtable, Two Cache Levels in Each Server</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://research.google/pubs/bigtable-a-distributed-storage-system-for-structured-data/">Bigtable: A Distributed Storage System for Structured Data</a> (Chang et al., OSDI 2006). Everything in this section comes from the paper.</p>
+</blockquote>
+<p>&quot;To improve read performance, tablet servers use two levels of caching&quot;:</p>
 <table>
 <thead>
 <tr>
-<th>Architectural Dimension</th>
-<th>Meta TAO</th>
-<th>Netflix EVCache</th>
+<th style="text-align:left">Cache</th>
+<th style="text-align:left">What it holds</th>
+<th style="text-align:left">Helps when</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Caching Pattern</strong></td>
-<td>Read-Through &amp; Write-Through</td>
-<td>Cache-Aside (Lazy Loading)</td>
+<td style="text-align:left"><strong>Scan Cache</strong></td>
+<td style="text-align:left">The key-value pairs returned by the SSTable interface</td>
+<td style="text-align:left">An application &quot;tends to read the same data repeatedly&quot;</td>
 </tr>
 <tr>
-<td><strong>Data Model</strong></td>
-<td>Social Graph Nodes &amp; Edges (Objects/Assocs)</td>
-<td>Arbitrary Serialized Binary/JSON Key-Value</td>
-</tr>
-<tr>
-<td><strong>Topology</strong></td>
-<td>2-Tier Master-Follower Hierarchical Tree</td>
-<td>Sharded Cluster with Cross-AZ / Cross-Region Replication</td>
-</tr>
-<tr>
-<td><strong>Stampede Defense</strong></td>
-<td>Request coalescing at Leader cache tier</td>
-<td>Probabilistic early expiration in client library</td>
-</tr>
-<tr>
-<td><strong>Persistence Layer</strong></td>
-<td>Sharded MySQL database</td>
-<td>Multi-Region Apache Cassandra / DynamoDB</td>
+<td style="text-align:left"><strong>Block Cache</strong></td>
+<td style="text-align:left">SSTable blocks read from the file system</td>
+<td style="text-align:left">An application reads &quot;data that is close to the data they recently read&quot;</td>
 </tr>
 </tbody>
 </table>
 <hr />
+<blockquote>
+<p>ℹ️ An earlier version of this page gave TAO a &quot;99.8%&quot; hit rate and &quot;under 1 millisecond&quot; reads and applied it to Instagram, expanded EVCache as &quot;Elastic, Replicated, Clustered Memcached&quot;, and described RocksDB on NVMe at &quot;one-tenth the cost&quot; and probabilistic early expiration at Netflix. The sources above don't support any of that, so we removed it.</p>
+</blockquote>
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Cache-Aside vs Read-Through Tradeoff</strong>:
-<ul>
-<li>Recommend <strong>Cache-Aside</strong> when the application does not need strict cache consistency and cache failures should not prevent direct database access.</li>
-<li>Recommend <strong>Read-Through/Write-Through</strong> when you want to encapsulate caching logic away from application code and simplify data access layers.</li>
-</ul>
-</li>
-<li><strong>Always Address the Cache Stampede</strong>: In any caching design interview, explicitly explain how you prevent the Thundering Herd problem using either <strong>Mutex locks / Singleflight</strong> or <strong>Probabilistic Early Refresh</strong>.</li>
-<li><strong>Cache Eviction vs Expiration</strong>: Clarify that <strong>TTL (Expiration)</strong> prevents stale data, while <strong>Eviction (LRU/LFU)</strong> protects the cache from running out of RAM when memory limits are reached.</li>
+<li><strong>Lookaside vs. owning the path.</strong> In a lookaside (cache-aside) design the application fills the cache on a miss. TAO instead puts the cache in front of every read and write, which lets it keep the cache and database in step.</li>
+<li><strong>Tier your cache to keep each tier small.</strong> TAO's leader and follower tiers limit how many servers must talk to each other.</li>
+<li><strong>Replicate across failure zones.</strong> EVCache keeps a copy per zone, so losing a zone doesn't empty the cache, and reads stay local.</li>
+<li><strong>Cache at more than one level.</strong> Bigtable caches both decoded rows and raw disk blocks, because different access patterns benefit from each.</li>
 </ol>
-<hr />
-<h2 id="deep-dive-3-how-google-uses-caching-multi-tier-bigtable-block-cache--near-cache">🏢 Deep Dive 3: How Google Uses Caching (Multi-Tier Bigtable Block Cache &amp; Near Cache)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
-<ul>
-<li><strong>System</strong>: Google Bigtable Block Cache &amp; Web Search In-Memory Cache.</li>
-<li><strong>Scale</strong>: Hundreds of millions of queries per second across Google Search, YouTube, and Google Cloud Bigtable.</li>
-</ul>
-<h3 id="2-architecture-multi-tier-hierarchical-caching">2. Architecture: Multi-Tier Hierarchical Caching</h3>
-<ul>
-<li><strong>L1 Application Near-Cache</strong>: In-memory heap cache on frontend workers holding frequently requested user session and configuration objects (sub-millisecond access).</li>
-<li><strong>L2 Distributed Block Cache</strong>: Bigtable Tablet Servers maintain a compressed in-memory block cache for 64KB SSTable blocks:
-<ul>
-<li>When a query misses L1, it checks the Tablet Server's in-memory block cache before touching persistent Colossus SSD storage.</li>
-<li><strong>Cache Hit Ratio</strong>: Over 95% of Bigtable point queries are served directly from RAM without disk I/O.</li>
-</ul>
-</li>
-</ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>

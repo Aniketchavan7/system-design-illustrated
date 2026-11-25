@@ -1,124 +1,46 @@
-# Real-World Production Deep Dives: Content Delivery Networks (CDNs)
+# Real-World Case Studies: Content Delivery Networks
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
-> Deep-dive architectural dissections of how **Netflix** and **Cloudflare/Google** deliver massive digital media at global scale, comparing Netflix's bespoke Open Connect ISP hardware network with Anycast cloud edge CDNs.
-
----
-
-## 🎬 Deep Dive 1: How Netflix Uses CDNs (Open Connect: Custom Hardware Inside ISPs)
-
-### 1. Production Context & Scale
-- **System**: Netflix **Open Connect**.
-- **Traffic Volume**: Delivers over **15% of all downstream internet traffic globally**; peak traffic exceeds **100+ Terabits per second**.
-- **The Decision**: Netflix completely phased out commercial third-party CDNs (Akamai, Limelight, Level 3) in 2012 to build its own dedicated hardware CDN.
-
-### 2. The Core Problem at Netflix Scale: Why Commercial CDNs Failed
-1. **Financial Ruin**: Paying commercial CDNs per-gigabyte bandwidth fees for high-definition and 4K video streams would cost hundreds of millions of dollars annually.
-2. **Backbone Congestion**: Transit links between commercial CDN data centers and local residential Internet Service Providers (Comcast, Verizon, Deutsche Telekom, Airtel) frequently suffered peering congestion, leading to video rebuffering during prime time.
-
-### 3. Netflix's Architecture: Custom Open Connect Appliances (OCAs)
-
-```
-[ Central Netflix Control Plane (AWS Cloud) ]
-                 │
-  BGP Steering & Predictive Pre-Positioning
-                 │
-                 ▼
-[ Local Internet Service Provider (e.g., Comcast / Orange) ]
-  ┌─────────────────────────────────────────────────────────┐
-  │ Local ISP Data Center                                   │
-  │                                                         │
-  │  [ Netflix Open Connect Appliance (OCA) Rack ]          │
-  │     ├── Custom FreeBSD OS                               │
-  │     ├── 200TB+ NVMe Flash Storage                       │
-  │     ├── 100Gbps Direct Network Interface Cards (NIC)    │
-  │     └── Zero-Copy Kernel Disk-to-Socket Streaming       │
-  │                           │                             │
-  │                           │ Local Fiber Loop (<5ms RTT) │
-  │                           ▼                             │
-  │  [ Subscriber Living Room (Smart TV 4K Stream) ]        │
-  └─────────────────────────────────────────────────────────┘
-```
-
-#### A. Free Hardware Provided to ISPs
-- Netflix manufactures custom, purpose-built storage appliances called **Open Connect Appliances (OCAs)** and ships them **free of charge** directly to qualifying ISPs and Internet Exchange Points (IXPs) worldwide.
-- **Why ISPs Love It**: By serving 95%+ of Netflix video traffic directly from an OCA inside the ISP's local data center, the ISP saves millions of dollars in upstream internet transit bandwidth fees.
-
-#### B. Overnight Predictive Pre-Positioning
-- Video traffic is heavily cyclical: peak usage occurs between 8:00 PM and 11:00 PM, while networks sit virtually idle between 2:00 AM and 5:00 AM.
-- **The Pre-Positioning Pipeline**:
-  - Machine learning models in AWS analyze viewing patterns and predict which titles (e.g., the new season of *Stranger Things*) will be watched tomorrow in each metropolitan area.
-  - During the early morning hours, the AWS control plane streams new titles over reserved backbone lines to local OCAs.
-  - By prime time, the video chunks are already sitting on the local OCA's flash drives. **No internet backbone traffic is consumed during peak viewing hours!**
-
-#### C. Custom FreeBSD Zero-Copy Streaming
-- OCAs run an optimized flavor of **FreeBSD** with custom Nginx forks.
-- Video delivery uses the Linux/FreeBSD zero-copy system call (`sendfile` / asynchronous TLS in kernel space):
-  - Video bytes are transferred directly from NVMe storage controllers to the 100Gbps network interface card buffer without copying bytes into CPU user-space memory, allowing a single 2U server rack to stream over **100 Gbps** continuously.
+> Two ways to get content close to users: put servers inside the ISP (Netflix Open Connect, Google Global Cache), or run a large edge network and layer caches inside it (Cloudflare).
 
 ---
 
-## 🌐 Deep Dive 2: How Cloudflare & Google Use CDNs (Global Anycast Edge Networks)
+## 🎬 Deep Dive 1: Netflix Open Connect, Appliances Inside ISPs
 
-### 1. Production Context & Scale
-- **Cloudflare**: Operates an Anycast edge network spanning over **330 cities across 120+ countries**, handling >55 million HTTP requests per second.
-- **Google Global Cache (GGC)**: Deploys edge caching nodes inside residential ISPs for YouTube, Google Play Store updates, and web assets.
+> **Source:** Netflix's [Open Connect site](https://openconnect.netflix.com/en/), including its [appliances](https://openconnect.netflix.com/en/appliances/) and [peering](https://openconnect.netflix.com/en/peering/) pages. Everything in this section comes from those pages.
 
-### 2. The Core Problem
-- Unlike Netflix (which delivers large, predictable, immutable multi-megabyte video files), general-purpose CDNs must deliver **millions of tiny, dynamic, volatile web assets** (HTML, API JSON responses, JavaScript bundles, CSS).
-- Dynamic API requests cannot be statically cached and must traverse to the origin server as quickly as possible.
-
-### 3. Cloudflare's Architecture: Anycast Edge & Tiered Caching
-
-```
-[ User in Sydney ]
-        │
-   Anycast DNS / BGP Routing
-        │
-        ▼
-[ Cloudflare Sydney Edge PoP ]
-   ├── Edge Cache (SSD / NVMe) ── (Hit? Serve in 2ms!)
-   └── Workers (V8 JavaScript Runtime at the Edge)
-        │ (Miss)
-        ▼
-[ Tiered Cache: Regional Hub (Tokyo/Singapore) ]
-        │ (Miss)
-        ▼
-   [ Argo Smart Routing ]  <-- Bypasses public internet congestion
-        │
-        ▼
-[ Origin Server (AWS us-east-1) ]
-```
-
-#### A. Anycast BGP Routing
-- All Cloudflare edge servers advertise the exact same IP addresses via Border Gateway Protocol (BGP).
-- The internet's routing infrastructure directs user packets to the nearest operational Cloudflare Point of Presence (PoP) in their local city, terminating TCP and TLS handshakes within single-digit milliseconds.
-
-#### B. Tiered Caching
-- If an edge server in a smaller city experiences a cache miss, asking the origin server directly across the Pacific Ocean wastes bandwidth and adds 200ms latency.
-- Cloudflare uses **Tiered Caching**: edge nodes query larger centralized **Regional Tiered Caches** located at major internet hubs before querying the origin, dramatically increasing overall cache hit ratios.
-
-#### C. Argo Smart Routing (The Waze for the Internet)
-- The public internet is prone to packet loss, fiber cuts, and routing inefficiencies.
-- Cloudflare continuously routes millions of synthetic probes across its internal private backbone.
-- If the public route between Sydney and Virginia is experiencing packet drops, **Argo Smart Routing** dynamically routes traffic through alternative uncongested Cloudflare data centers, cutting origin fetch latency by **over 30%**.
+- **Free appliances for ISPs.** Open Connect Appliances (OCAs) "are provided to qualifying ISP partners at no charge". The ISP supplies "a small amount of data center rack space, power, and connectivity", and Netflix handles setup and monitoring. Netflix says it partners "with over a thousand ISPs".
+- **Two ways to connect.** Appliances "can be embedded in your ISP network", or the ISP can peer with Netflix at internet exchange points, where traffic comes "from Netflix appliances that are located in local IXPs".
+- **Content arrives ahead of demand.** Netflix "pre-fills them with the appropriate content for your geographical location", and the ISP enables "nightly content fills and updates".
+- **What's inside.** OCAs "are based on commodity PC components, assembled in custom cases". They run FreeBSD and the NGINX web server. A storage appliance delivers about 200 Gbps with up to 120 TB of storage. A lower-cost global appliance delivers about 80 Gbps with up to 60 TB.
 
 ---
 
-## ⚖️ Comparative Architecture Matrix
+## 🌐 Deep Dive 2: Cloudflare, Tiered Caching and Smart Routing
 
-| Architectural Dimension | Netflix Open Connect | Cloudflare / Google Edge CDN |
-|---|---|---|
-| **Primary Workload** | Massive, immutable video media files (MBs to GBs) | Small static assets + dynamic API reverse proxying |
-| **Physical Deployment** | Custom hardware installed directly inside ISP racks | Centralized Edge PoPs connected to IXPs via BGP |
-| **Pre-Warming Strategy** | Predictive off-peak overnight pre-positioning | Reactive on-demand cache population + Tiered Cache |
-| **Edge Compute** | None (Dedicated to zero-copy raw byte delivery) | Rich (Cloudflare Workers / V8 Isolate edge execution) |
-| **Bandwidth Cost Structure** | CapEx on hardware; zero ISP transit fees | OpEx on network bandwidth and transit contracts |
+> **Sources:** Cloudflare's [network page](https://www.cloudflare.com/network/), [Tiered Cache docs](https://developers.cloudflare.com/cache/how-to/tiered-cache/), [Argo Smart Routing docs](https://developers.cloudflare.com/argo-smart-routing/) and [Argo product page](https://www.cloudflare.com/application-services/products/argo-smart-routing/), read in November 2026. Everything in this section comes from those pages.
+
+- **Size.** Cloudflare lists data centers in 348 cities in more than 100 countries, and says its network routes "an average of 115 million HTTP requests per second".
+- **Tiered caching.** With Tiered Cache, "the lower-tier must ask an upper-tier to see if it has the content. If the upper-tier does not have the content, only the upper-tier can ask the origin for content." That shields the origin and raises cache hit ratios. Smart Tiered Cache "dynamically selects the single closest upper tier for each of your website's origins".
+- **Routing around congestion.** For requests that must reach the origin, Argo Smart Routing "routes your web traffic across the most efficient network path, avoiding congestion", using real-time congestion data. Cloudflare's own figure is "30% (on average) faster web app performance".
 
 ---
+
+## 🔍 Deep Dive 3: Google Global Cache, Google Content from Inside the ISP
+
+> **Source:** Google's [Google Global Cache help page](https://support.google.com/interconnect/answer/9058809). Everything in this section comes from it.
+
+- "Google Global Cache (GGC) allows ISPs to serve certain Google content from within their own networks."
+- "Google provides the GGC hardware." The ISP provides rack space, power and a network connection.
+- "Typically between 70-90% of cacheable traffic can be served from GGC."
+
+---
+
+> ℹ️ An earlier version of this page said Netflix delivers "15% of all downstream internet traffic" at "100+ Terabits per second", serves "95%+" of its traffic from OCAs, and "completely phased out" Akamai, Limelight and Level 3 in 2012. It also gave older Cloudflare figures. Netflix's Open Connect site doesn't state any of those, so we removed them and updated Cloudflare's numbers from its current pages.
 
 ## 🎯 System Design Interview Takeaways
-1. **Propose ISP Colocation for Video/Gaming**: When designing video streaming (YouTube/Netflix) or game patch download systems (Steam/Epic), suggest placing caching appliances directly within partner ISP networks rather than relying solely on cloud regions.
-2. **Explain Predictive Pre-Positioning**: Mention off-peak pre-warming. Pushing content to edge caches during the night flattens the network utilization curve and eliminates daytime backbone spikes.
-3. **Dynamic Content Acceleration**: If asked how CDNs speed up non-cacheable API calls, explain that CDNs accelerate dynamic requests by terminating TCP/TLS at the edge near the user and maintaining pre-warmed persistent connections to the origin over optimized routing paths (Argo Smart Routing).
+1. **For large, predictable content, go inside the ISP.** Netflix and Google both place caches in ISP networks, so popular content never crosses the wider internet.
+2. **Fill caches before demand.** Open Connect pre-fills appliances nightly, so peak-hour traffic is served from what's already there.
+3. **Layer your caches.** Cloudflare's tiered caching means only an upper tier talks to the origin, so a miss at the edge doesn't always become an origin request.
+4. **CDNs help uncacheable requests too.** Routing around congestion (Argo) speeds up requests that must reach the origin.

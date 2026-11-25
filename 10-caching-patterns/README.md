@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-world case studies**: how **Google** & **Netflix** approach this, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Facebook TAO**, **Netflix EVCache** and **Bigtable** cache data, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## 🧒 The 30-second version
 
