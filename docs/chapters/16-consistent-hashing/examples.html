@@ -22,147 +22,58 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/hashing-lab.html">Consistent hashing ring lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-consistent-hashing">Real-World Production Deep Dives: Consistent Hashing</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/hashing-lab.html">Consistent hashing ring lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-consistent-hashing">Real-World Case Studies: Consistent Hashing</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Discord</strong> and <strong>Amazon/Netflix</strong> implement consistent hashing with virtual nodes to distribute millions of concurrent real-time connections and cache keys without thundering herds.</p>
+<p>Consistent hashing with virtual nodes in Amazon's Dynamo and Apache Cassandra, and how Discord made ring lookups fast enough to reconnect millions of users.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-discord-uses-consistent-hashing-managing-100m-real-time-concurrents">🎮 Deep Dive 1: How Discord Uses Consistent Hashing (Managing 100M+ Real-Time Concurrents)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-amazon-dynamo-virtual-nodes">📦 Deep Dive 1: Amazon Dynamo, Virtual Nodes</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">Dynamo: Amazon's Highly Available Key-value Store</a> (DeCandia et al., SOSP 2007). Everything in this section comes from the paper.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Discord Gateway Fleet.</li>
-<li><strong>Scale</strong>: Hundreds of millions of monthly active users, sustaining over <strong>100 million concurrent WebSocket connections</strong> worldwide.</li>
-<li><strong>Data Model</strong>: Real-time voice and chat servers called <strong>Guilds</strong> (some massive communities like Midjourney or Fortnite contain millions of members).</li>
-</ul>
-<h3 id="2-the-core-problem-at-discord-scale">2. The Core Problem at Discord Scale</h3>
-<ul>
-<li>Each Discord guild is managed by an in-memory stateful Elixir/Erlang process or Rust service.</li>
-<li>If a user sends a message in Guild A, all other connected members of Guild A must receive the message in real-time.</li>
-<li><strong>The Catastrophic Failure Mode</strong>:
-<ul>
-<li>In a standard modulus hash <code>hash(guild_id) % N</code>:</li>
-<li>If a single gateway server crashed or a new server was provisioned during peak hours, <span class="math-inline">N</span> changed to <span class="math-inline">N+1</span> or <span class="math-inline">N-1</span>.</li>
-<li>Almost 100% of guilds were remapped to different servers simultaneously! Millions of WebSocket connections disconnected and reconnected at once, creating a catastrophic <strong>Thundering Herd</strong> that crashed Discord's entire core infrastructure.</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-discords-architecture-consistent-hashing-ring">3. Discord's Architecture: Consistent Hashing Ring</h3>
-<pre><code>                  [ 32-Bit Hash Ring (0 to 2^32 - 1) ]
-                               ┌─────────┐
-                         Node A│    0    │Node C
-                              ┌┴─────────┴┐
-                             ╱             ╲
-                            │   Guild X     │
-                            │   maps to     │
-                            │   Node B      │
-                             ╲             ╱
-                              └┬─────────┬┘
-                         Node B│  2^31   │Node D
-                               └─────────┘
-</code></pre>
-<h4 id="a-the-consistent-hash-ring-mechanics">A. The Consistent Hash Ring Mechanics</h4>
-<ul>
-<li>Discord projects both <strong>Server Nodes</strong> and <strong>Guild IDs</strong> onto a 32-bit (or 64-bit) circular hash space (<span class="math-inline">[0, 2<sup>32</sup>-1]</span>).</li>
-<li>A guild is assigned to the first server node encountered moving clockwise around the ring:</li>
-</ul>
-<div class="math-block">Target Node = \min({n ∈ Ring | hash(n) ≥ hash(guild_id)})</div>
-<h4 id="b-minimizing-rebalance-impact">B. Minimizing Rebalance Impact</h4>
-<ul>
-<li>When Discord adds a new server node to the cluster:
-<ul>
-<li>Only the guilds that fall between the new node and its immediate predecessor are remapped (<span class="math-inline">(1) / (N)</span> fraction of guilds).</li>
-<li>The remaining <span class="math-inline">(N-1) / (N)</span> of guilds remain completely undisturbed on their existing servers.</li>
-</ul>
-</li>
-<li>When an auto-scaling event occurs, only a tiny sliver of users reconnect, eliminating cascading gateway collapses.</li>
-</ul>
-<hr />
-<h2 id="deep-dive-2-how-amazon-dynamo--netflix-evcache-use-virtual-nodes-vnodes">📦 Deep Dive 2: How Amazon Dynamo &amp; Netflix EVCache Use Virtual Nodes (Vnodes)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
-<ul>
-<li><strong>Systems</strong>: Amazon DynamoDB and Netflix EVCache.</li>
-<li><strong>Challenge</strong>: The &quot;Hotspot&quot; and Non-Uniform Distribution problem in simple consistent hashing.</li>
-</ul>
-<h3 id="2-the-core-problem-why-simple-consistent-hashing-fails-in-production">2. The Core Problem: Why Simple Consistent Hashing Fails in Production</h3>
-<p>In theory, consistent hashing distributes keys evenly. In practice, with small numbers of physical servers (e.g., 5 to 20 servers):</p>
+<li><strong>The idea.</strong> Instead of placing each server at one point on the ring, &quot;each node gets assigned to multiple points in the ring&quot;. Dynamo calls these &quot;virtual nodes&quot;.</li>
+<li><strong>Why it helps.</strong> The paper lists three advantages:
 <ol>
-<li><strong>Clustering / Hash Variance</strong>: Random hashing leads to non-uniform intervals on the ring. One unlucky server might be assigned 60% of the key space, while another server sits virtually idle.</li>
-<li><strong>Heterogeneous Hardware</strong>: In cloud environments, server instances have varying CPU and RAM capacities. A simple ring treats a 64-core machine identically to an 8-core machine.</li>
-<li><strong>Cascading Domino Failure</strong>: If Node 2 crashes, Node 3 absorbs <em>100%</em> of Node 2's load. If this sudden doubling of traffic overwhelms Node 3, Node 3 crashes too, dumping both loads onto Node 4. The entire cluster collapses like falling dominoes.</li>
+<li>If a node becomes unavailable, &quot;the load handled by this node is evenly dispersed across the remaining available nodes.&quot;</li>
+<li>When a node joins or returns, it &quot;accepts a roughly equivalent amount of load from each of the other available nodes.&quot;</li>
+<li>The number of virtual nodes per server &quot;can be decided based on its capacity, accounting for heterogeneity in the physical infrastructure.&quot;</li>
 </ol>
-<h3 id="3-the-solution-virtual-nodes-vnodes">3. The Solution: Virtual Nodes (Vnodes)</h3>
-<pre><code>[ Physical Server 1 ] ──&gt; Maps to: Node1_vnode1, Node1_vnode2 ... Node1_vnode256
-[ Physical Server 2 ] ──&gt; Maps to: Node2_vnode1, Node2_vnode2 ... Node2_vnode256
-[ Physical Server 3 ] ──&gt; Maps to: Node3_vnode1, Node3_vnode2 ... Node3_vnode256
-
-                        [ Interleaved Hash Ring ]
-  Node1_vnode17 ──&gt; Node3_vnode84 ──&gt; Node2_vnode03 ──&gt; Node1_vnode99 ...
-</code></pre>
-<h4 id="a-the-mechanics-of-virtual-nodes">A. The Mechanics of Virtual Nodes</h4>
-<ul>
-<li>Instead of placing each physical server onto the ring once, each physical server is mapped to <strong><span class="math-inline">V</span> virtual positions</strong> (typically <span class="math-inline">V = 128</span> to <span class="math-inline">256</span>) using independent hash salts:</li>
-</ul>
-<div class="math-block">hash("Server1#vnode1"), hash("Server1#vnode2"), …</div>
-<ul>
-<li>Virtual nodes of different physical servers are uniformly interleaved across the entire circle.</li>
-</ul>
-<h4 id="b-the-law-of-large-numbers-uniform-spread">B. The Law of Large Numbers (Uniform Spread)</h4>
-<ul>
-<li>By expanding 10 physical machines into <span class="math-inline">10 × 256 = 2,560</span> virtual nodes, the variance of the key distribution shrinks to less than <strong>1-2%</strong>, achieving near-perfect mathematical balance.</li>
-<li><strong>Capacity Weighting</strong>: If Server A has twice the RAM of Server B, Amazon assigns Server A 512 virtual nodes and Server B 256 virtual nodes.</li>
-</ul>
-<h4 id="c-smooth-failure-dispersion-no-domino-effect">C. Smooth Failure Dispersion (No Domino Effect)</h4>
-<ul>
-<li>When a physical server crashes, its 256 virtual nodes are scattered all around the ring.</li>
-<li>Its load is distributed evenly across <strong>all remaining servers in the cluster</strong> (each absorbs only a tiny <span class="math-inline">1/(N-1)</span> fraction of the load). The domino failure mode is mathematically eliminated!</li>
+</li>
 </ul>
 <hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
-<table>
-<thead>
-<tr>
-<th>Architectural Dimension</th>
-<th>Discord Gateway</th>
-<th>Amazon DynamoDB / Cassandra</th>
-<th>Google Maglev</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ring Granularity</strong></td>
-<td>Virtual Nodes / Hash Ring in Rust</td>
-<td>128–256 Vnodes per physical node</td>
-<td>Fixed Lookup Table (<span class="math-inline">M = 65,537</span>)</td>
-</tr>
-<tr>
-<td><strong>Lookup Performance</strong></td>
-<td>Binary Search (Red-Black Tree: <span class="math-inline">O(\log V)</span>)</td>
-<td>In-Memory Sorted Array / Binary Search</td>
-<td>Direct Array Index: <span class="math-inline">O(1)</span></td>
-</tr>
-<tr>
-<td><strong>Statefulness</strong></td>
-<td>Stateful WebSocket connections</td>
-<td>Persistent database partitions on disk</td>
-<td>Stateless L4 TCP packet steering</td>
-</tr>
-<tr>
-<td><strong>Rebalance Protocol</strong></td>
-<td>Dynamic gossip broadcast</td>
-<td>Streaming partition repair</td>
-<td>Pre-computed permutation tables</td>
-</tr>
-</tbody>
-</table>
+<h2 id="deep-dive-2-apache-cassandra-tokens-on-a-ring">🗄️ Deep Dive 2: Apache Cassandra, Tokens on a Ring</h2>
+<blockquote>
+<p><strong>Source:</strong> Apache Cassandra docs, <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html">Dynamo architecture</a>. Everything in this section comes from it.</p>
+</blockquote>
+<ul>
+<li>&quot;Cassandra partitions data over storage nodes using a special form of hashing called consistent hashing&quot;, and &quot;maps every node to one or more tokens on a continuous hash ring.&quot;</li>
+<li>&quot;Virtual nodes solve the problem by assigning multiple tokens in the token ring to each physical node&quot;, which spreads each node's share of the data over many small ranges.</li>
+</ul>
 <hr />
+<h2 id="deep-dive-3-discord-making-ring-lookups-fast">🎮 Deep Dive 3: Discord, Making Ring Lookups Fast</h2>
+<blockquote>
+<p><strong>Sources:</strong> Stanislav Vishnevskiy, <a href="https://discord.com/blog/how-discord-scaled-elixir-to-5-000-000-concurrent-users">&quot;How Discord Scaled Elixir to 5,000,000 Concurrent Users&quot;</a> (July 2017), and the <a href="https://github.com/discord/ex_hash_ring">ex_hash_ring</a> README. Everything in this section comes from those.</p>
+</blockquote>
+<ul>
+<li><strong>What the ring does.</strong> &quot;When a session connects, it has to lookup the remote node for each guild it is interested in&quot;, using a consistent hash ring.</li>
+<li><strong>The problem.</strong> A session server holds up to 500,000 sessions, and the average user is in 5 guilds. When many users reconnected at once, the process owning the ring &quot;would start to get so busy that it would fail to keep up&quot;. After a crash, the lookups alone took &quot;about 30 seconds&quot;.</li>
+<li><strong>The fixes.</strong> Copying the ring into an ETS table cut a lookup to about 7 μs, or 17.5 seconds in total. Putting the ring in a read-only shared heap (mochiglobal, later Discord's FastGlobal) cut a lookup to &quot;0.3us, bringing the total time down to 750ms&quot;.</li>
+<li><strong>Scale at the time.</strong> &quot;Nearly five million concurrent users and millions of events per second.&quot;</li>
+<li><strong>Open source.</strong> Discord's ring library, ex_hash_ring, has a &quot;configurable replica count for virtual nodes&quot; (512 by default in the current version) and is &quot;in use at Discord&quot;.</li>
+</ul>
+<hr />
+<blockquote>
+<p>ℹ️ An earlier version of this page said Discord sustains &quot;over 100 million concurrent WebSocket connections&quot;, claimed 256 virtual nodes keep imbalance &quot;less than 1-2%&quot;, and described Netflix EVCache's use of virtual nodes. The sources don't support those figures, so we removed them.</p>
+</blockquote>
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Always Mention Virtual Nodes</strong>: If an interviewer asks you to design a distributed cache (Memcached/Redis) or storage ring, never stop at basic consistent hashing. Immediately explain that <strong>Virtual Nodes (vnodes)</strong> are required to prevent hot segments and cascading domino failures.</li>
-<li><strong>Quantify the Movement Invariant</strong>: Explicitly state that when scaling from <span class="math-inline">N</span> to <span class="math-inline">N+1</span> nodes, consistent hashing rebalances only <strong><span class="math-inline">K/N</span> keys</strong> (where <span class="math-inline">K</span> is total keys), compared to <span class="math-inline">K × (N) / (N+1)</span> in standard modulus hashing.</li>
-<li><strong>Handling Hot Keys</strong>: Remind the interviewer that consistent hashing distributes keys evenly, but <em>not</em> read volume for a single viral key (e.g., celebrity post). Viral keys require local replication or near-cache layers.</li>
+<li><strong>Consistent hashing limits movement.</strong> Adding or removing a server moves only the keys next to it on the ring, not almost all keys as <code>hash(key) % N</code> does.</li>
+<li><strong>Use virtual nodes.</strong> They spread a failed server's load across many servers, and let bigger machines take more of the ring.</li>
+<li><strong>The lookup path matters too.</strong> Discord's ring was correct but too slow under reconnect storms. Make lookups cheap and local.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">

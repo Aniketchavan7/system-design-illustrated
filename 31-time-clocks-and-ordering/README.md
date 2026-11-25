@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-world case studies**: how **Google** (TrueTime API bounding clock uncertainty with atomic clocks) and **Amazon** (Dynamo Vector Clocks for shopping carts) manage distributed time, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Lamport clocks**, **Google TrueTime** and **Amazon Dynamo**'s vector clocks order events, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 
@@ -13,7 +13,7 @@
 In a single computer, finding out what happened first is trivial: you check the CPU clock. 
 
 In a distributed system across 1,000 servers, **physical wall clocks cannot be trusted**:
-- Network Time Protocol (NTP) synchronizes clocks over the internet, but network jitter and quartz crystal temperature variations cause clocks to drift by **100ms to 250ms**.
+- Clocks drift between synchronizations. Even Google's Spanner, with GPS and atomic clock references, budgets for drift of up to **200 microseconds per second**, about **6 ms** over its 30-second sync interval ([Spanner paper](https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett)).
 - A server clock can abruptly jump backwards when NTP adjusts for leap seconds.
 - If Server A's clock is 50ms fast and Server B's clock is 50ms slow, assigning timestamps based on wall clocks will reverse the apparent order of cause and effect: a bank withdrawal could appear to occur *before* the deposit that funded it!
 
