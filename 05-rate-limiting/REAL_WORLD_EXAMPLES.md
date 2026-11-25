@@ -1,6 +1,6 @@
 # Real-World Production Deep Dives: Rate Limiting
 
-> ⚠️ **Partly source-checked.** Deep Dive 1 (Stripe) is checked against Stripe's own post. The others summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked.** Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
 > How **Stripe**, **Google**, and **Netflix** approach distributed rate limiting, protect against cascading failures, and enforce concurrency limits.
 
@@ -63,78 +63,70 @@ Stripe's API serves many users at once. One user who sends too much traffic, by 
 > ℹ️ An earlier version of this page described a "usage" tier and a fraud or card-testing tier, and showed `X-RateLimit-*` headers on every response. The source doesn't support any of that, so we removed it.
 ---
 
-## 🎬 Deep Dive 2: How Netflix & Google Handle Rate Limiting (Adaptive Concurrency Limits)
+## 🎬 Deep Dive 2: How Netflix Adapts Concurrency Limits
 
-### 1. Production Context & Scale
-- **Companies**: Netflix (Edge & Inter-service RPC) and Google (Site Reliability Engineering & gRPC).
-- **The Epiphany**: **Static Rate Limits are Inherently Broken in Dynamic Clouds.**
-  - If you set a static limit of 10,000 QPS, what happens when a database node crashes and backend capacity drops to 6,000 QPS? The rate limiter still permits 10,000 QPS, causing a catastrophic cascading collapse.
-  - What happens if you scale up the cluster to handle 25,000 QPS? The static limit blocks legitimate traffic unnecessarily.
+> **Source:** the README of Netflix's open-source [`concurrency-limits`](https://github.com/Netflix/concurrency-limits) library. Everything in this section comes from it.
 
-### 2. Netflix's Architecture: Adaptive Concurrency Limits (TCP Vegas & Little's Law)
-Netflix open-sourced the `concurrency-limits` library, replacing arbitrary static RPS limits with mathematical feedback loops inspired by TCP congestion control.
+### 1. The idea
+Instead of a fixed "N requests per second", the library argues that "we should be thinking in terms of concurrent requests where we apply queuing theory". It describes itself as a Java library that "implements and integrates concepts from TCP congestion control to auto-detect concurrency limits for services". A service's concurrency limit is treated like a TCP congestion window: it grows while things are healthy and shrinks when requests start queueing.
 
-```
-[ Inbound Request Stream ]
-             │
-             ▼
-[ Netflix Adaptive Concurrency Limiter ]
-   ├── Measures Current Latency (RTT)
-   ├── Compares with Baseline Latency (No-Load RTT)
-   │
-   ├── If RTT <= Baseline: Increase Concurrency Limit (+1)
-   └── If RTT > Threshold: Decrease Concurrency Limit (Backoff)
-             │
-             ▼
-[ Microservice Business Logic ]
-```
+### 2. Little's Law
+The README states the relationship as:
 
-#### The Algorithm Mechanics (Little's Law)
-According to Little's Law:
-$$L = \lambda \times W$$
-$$\text{Concurrency} = \text{Throughput} \times \text{Latency}$$
+$$\text{Limit} = \text{Average RPS} \times \text{Average Latency}$$
 
-1. The service continuously monitors request round-trip time (RTT).
-2. It tracks the **Minimum RTT** observed during low-traffic periods (the physical baseline latency of the system).
-3. If current RTT begins to climb significantly above baseline, the system has entered **queueing delay** (congestion).
-4. The limiter dynamically contracts the permitted concurrency limit:
-   $$\text{Limit}_{t+1} = \text{Limit}_t \times \beta \quad (\text{Multiplicative Decrease})$$
-5. When RTT recovers, it gradually increases the limit:
-   $$\text{Limit}_{t+1} = \text{Limit}_t + \alpha \quad (\text{Additive Increase})$$
+For example, a service handling 200 requests per second at 50 ms each has about 200 × 0.05 = **10 requests in flight** on average. (This worked example is ours, not the README's.)
 
-#### Traffic Prioritization
-When throttling is active, Netflix drops low-priority background traffic first:
-- **Priority 1 (Critical)**: Video playback start, license verification (Never dropped).
-- **Priority 2 (User Interactive)**: Search queries, browsing UI.
-- **Priority 3 (Background)**: Viewing history bookmarks, analytics beacons (Dropped immediately).
+### 3. Two limit algorithms
+- **Vegas** estimates how many requests are waiting in a queue as `L * (1 - minRTT/sampleRtt)`, where `minRTT` is the fastest latency seen (roughly, latency with no queue) and `sampleRtt` is the latest measurement. At the end of each sampling window it raises the limit **by 1** if the queue is below `alpha` (typically 2–3) and lowers it **by 1** if the queue is above `beta` (typically 4–6).
+- **Gradient2** compares a long-term and a short-term exponential average of latency. When they diverge for a while, it treats that as a queue building up and "aggressively reduces the limit". It exists to address the bias and drift of relying on minimum latency alone.
+
+### 4. Where it plugs in
+- **gRPC** server and client interceptors. The server rejects excess requests with `Status.UNAVAILABLE`.
+- A **servlet filter** that rejects with **HTTP 429 Too Many Requests**.
+- An **executor** (`BlockingAdaptiveExecutor`) that sizes its thread pool to the current limit and blocks when the limit is reached.
+
+### 5. Reserving capacity for important traffic
+The limit can be split into percentage partitions by request type. The README's example guarantees **live traffic 90%** and **batch traffic 10%** of the limit, and requests in neither group "may only use excess capacity".
+
+> ℹ️ An earlier version of this page listed Netflix's load-shedding priorities (playback and licence checks never dropped, bookmarks and analytics dropped first) and said the limit shrinks multiplicatively. We couldn't confirm the priority list from a source we could read, and the library's Vegas algorithm changes the limit by one at a time, so we removed both. Netflix describes its gateway-level shedding in ["Keeping Netflix Reliable Using Prioritized Load Shedding"](https://netflixtechblog.com/keeping-netflix-reliable-using-prioritized-load-shedding-6cc827b02f94) (2020). A sourced summary of that post would be a welcome contribution.
 
 ---
 
-## 🏢 Deep Dive 3: How Google SRE Uses Client-Side Throttling
+## 🏢 Deep Dive 3: How Google Throttles Requests at the Client
 
-Google SRE solves the problem of a struggling server being killed by client retries. Google implemented **Client-Side Throttling** inside the gRPC client stub.
+> **Source:** Alejandro Forero Cuervo, ["Handling Overload"](https://sre.google/sre-book/handling-overload/), chapter 21 of *Site Reliability Engineering* (Google, O'Reilly 2016). Everything in this section comes from that chapter.
 
-### The Formula
-Clients track the number of requests they sent in the last 2 minutes (`requests`) and the number of requests accepted by the server without error (`accepts`).
-Clients compute the probability of dropping their own request before sending it:
+When a backend is overloaded, rejecting a request still costs it work. If clients keep sending, the backend spends its capacity saying "no". Google's answer is **adaptive throttling**: once a client sees that "a significant portion of its recent requests have been rejected due to 'out of quota' errors", it starts rejecting some requests itself, so they "fail locally without even reaching the network".
 
-$$P_{\text{drop}} = \max\left(0, \frac{\text{requests} - K \times \text{accepts}}{\text{requests} + 1}\right)$$
+### The formula
+Each client task keeps two counts "for the last two minutes of its history":
 
-- Where $K$ is the multiplier (typically $K = 2.0$ or $1.5$).
-- **How it behaves**:
-  - If the server accepts all requests, $\text{requests} \approx \text{accepts}$, so $\text{requests} - 2(\text{accepts}) < 0 \implies P_{\text{drop}} = 0$ (no throttling).
-  - If the server starts failing requests due to overload, $P_{\text{drop}}$ automatically increases. The client itself discards requests locally with zero network load on the struggling server!
+- `requests`: requests the application tried to send
+- `accepts`: requests the backend accepted
+
+The client rejects a new request locally with probability:
+
+$$P_{\text{reject}} = \max\left(0, \frac{\text{requests} - K \times \text{accepts}}{\text{requests} + 1}\right)$$
+
+- While the backend accepts everything, `requests` stays below `K × accepts`, so the probability is 0.
+- As the backend rejects more, `requests` outgrows `K × accepts` and the client drops more of its own traffic.
+
+### Choosing K
+The chapter says "we generally prefer the 2x multiplier". A **lower** K throttles more aggressively. With K = 1.1, only about one request is rejected by the backend for every 10 it accepts. A **higher** K throttles less: it wastes more backend work but spreads the backend's state to clients faster. The decision uses only local information, with "no additional dependencies or latency penalties".
+
+> ℹ️ An earlier version said this runs "inside the gRPC client stub". The chapter doesn't say where it is implemented, only that clients do it, so we removed that.
 
 ---
 
 ## ⚖️ Comparative Architecture Matrix
 
-| Architectural Dimension | Stripe (rate limiters + load shedders) | Netflix (Adaptive Concurrency Limits) | Google (Client-Side Adaptive Throttling) |
+| Architectural Dimension | Stripe (rate limiters + load shedders) | Netflix (`concurrency-limits`) | Google (adaptive throttling) |
 |---|---|---|---|
-| **Location** | In front of the API servers | Ingress Gateway + Embedded Service Interceptor | Client SDK / gRPC Transport Stub |
-| **Limiting Dimension** | Requests per second per user, requests in flight, then fleet and worker load | Dynamic In-flight Concurrency based on RTT | Request vs Accept ratio over sliding window |
-| **Storage Dependency** | Redis (token buckets and request counts) | In-memory atomic counters (zero external dependencies) | In-memory local client metrics |
-| **Responsiveness** | Static thresholds updated via configuration | Autonomic, continuous adaptation to real-time load | Client-side self-policing protects downstream servers |
+| **Location** | In front of the API servers | Inside each service (gRPC interceptor, servlet filter or executor) | In each client task |
+| **Limiting Dimension** | Requests per second per user, requests in flight, then fleet and worker load | Requests in flight, limit adjusted from measured latency | Ratio of requests to accepts over the last two minutes |
+| **Storage Dependency** | Redis (token buckets and request counts) | None: each service measures its own latency | None: each client keeps its own counts |
+| **Responsiveness** | Fixed limits per user; load shedders react to system load | Limit moves every sampling window | Rejection probability rises as backend rejections rise |
 
 ---
 
