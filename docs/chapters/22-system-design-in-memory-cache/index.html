@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="22---system-design-distributed-in-memory-cache-redis-cluster">22 - System Design: Distributed In-Memory Cache (Redis Cluster)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="22---system-design-distributed-in-memory-cache-redis-cluster">22 - System Design: Distributed In-Memory Cache (Redis Cluster)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Disk storage operates in milliseconds (<span class="math-inline">1–10 ms</span>), whereas main memory (RAM) operates in nanoseconds (<span class="math-inline">100 ns</span>) and local network transfers take sub-milliseconds (<span class="math-inline">0.5 ms</span>). A distributed in-memory cache bridges this <span class="math-inline">10,000×</span> speed gap. Designing a production-grade distributed cache like <strong>Redis Cluster</strong> or <strong>Memcached</strong> requires understanding single-threaded I/O multiplexing (<code>epoll</code>), <span class="math-inline">O(1)</span> LRU memory eviction, 16,384-slot hash sharding, and durability persistence via point-in-time snapshots (RDB) and append-only logs (AOF).</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/22-system-design-in-memory-cache/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/22-system-design-in-memory-cache/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

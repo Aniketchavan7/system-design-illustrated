@@ -499,7 +499,7 @@ def chapter_outputs(rows):
 
             actions = ['<a href="../../library.html">Back to topic library</a>']
             if source == "README.md":
-                actions.append('<a href="examples.html">FAANG case studies</a>')
+                actions.append('<a href="examples.html">Case studies</a>')
             else:
                 actions.append('<a href="index.html">Back to chapter</a>')
             if folder in MODULE_LABS:

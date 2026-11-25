@@ -1,5 +1,7 @@
 # Payment systems in production
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 ## Stripe · Idempotency and ledger reconciliation
 
 Stripe reported **$1.9 trillion in total volume for 2025**. Its February 2024 engineering article reports **greater than 99.999% Stripe API availability** over the preceding Black Friday through Cyber Monday period. The availability figure describes that event window. [2025 annual letter](https://stripe.com/annual-updates/2025) · [Stripe Ledger engineering write-up](https://stripe.dev/blog/ledger-stripe-system-for-tracking-and-validating-money-movement)

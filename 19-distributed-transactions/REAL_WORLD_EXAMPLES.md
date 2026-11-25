@@ -1,5 +1,7 @@
 # Real-World Production Deep Dives: Distributed Transactions
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 > Deep-dive architectural dissections of how **Google** and **Uber/Netflix** execute distributed transactions, comparing Google's two-phase locking snapshot isolation (Percolator & Spanner) with the asynchronous Saga Pattern.
 
 ---

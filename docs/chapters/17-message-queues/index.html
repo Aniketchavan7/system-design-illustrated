@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/queue-lab.html">Queue backlog &amp; drain simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="17---message-queues--distributed-commit-logs">17 - Message Queues &amp; Distributed Commit Logs</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../learn/queue-lab.html">Queue backlog &amp; drain simulator</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="17---message-queues--distributed-commit-logs">17 - Message Queues &amp; Distributed Commit Logs</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Synchronous HTTP/REST calls bind microservices in rigid temporal coupling—if a downstream billing or notification service is slow or down, the upstream checkout service blocks, exhausts thread pools, and crashes. Asynchronous messaging decouples producers from consumers in both time and space. While traditional <strong>Message Queues</strong> (RabbitMQ, SQS) delete messages upon consumer acknowledgment, <strong>Distributed Commit Logs</strong> (Apache Kafka, Redpanda) store ordered, immutable streams of events on disk, allowing multiple independent consumer groups to read and replay data at their own pace.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/17-message-queues/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/17-message-queues/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

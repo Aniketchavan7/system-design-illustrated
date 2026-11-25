@@ -1,5 +1,7 @@
 # Real-World Production Deep Dives: Consistency Models
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 > Deep-dive architectural dissections of how **Google** and **Amazon/Netflix** navigate consistency models, contrasting strict Linearizability via TrueTime with Eventual & Session Consistency in distributed applications.
 
 ---

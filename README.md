@@ -1,62 +1,47 @@
 <div align="center">
 
-# 🧠 System Design Illustrated
+# System Design Illustrated
 
-[![GitHub Stars](https://img.shields.io/github/stars/Aniketchavan7/system-design-illustrated?style=for-the-badge&logo=github&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/stargazers)
-[![CI](https://img.shields.io/github/actions/workflow/status/Aniketchavan7/system-design-illustrated/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI&color=7aa2f7&labelColor=1a1b26)](https://github.com/Aniketchavan7/system-design-illustrated/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-7aa2f7?style=for-the-badge&labelColor=1a1b26)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-7aa2f7?style=for-the-badge&logo=github&labelColor=1a1b26)](./CONTRIBUTING.md)
-[![Community Driven](https://img.shields.io/badge/Community-Open_Source-7aa2f7?style=for-the-badge&logo=git&labelColor=1a1b26)](./CONTRIBUTING.md)
-[![Reddit](https://img.shields.io/badge/Reddit-Discussions_&_Feedback-FF4500?style=for-the-badge&logo=reddit&logoColor=white&labelColor=1a1b26)](./COMMUNITY.md)
-[![Author](https://img.shields.io/badge/Author-Aniket_Chavan-7dcfff?style=for-the-badge&logo=github&labelColor=1a1b26)](https://github.com/Aniketchavan7)
+**Learn system design by changing the numbers and watching what breaks.**
 
-> ⭐ **If you find this visual reference helpful for interview preparation or distributed systems engineering, please consider starring the repository!**
+45 plain-English modules, interactive labs, and runnable Python demos. Free, no sign-up, nothing to install.
+
+**[Open the course →](https://aniketchavan7.github.io/system-design-illustrated/)** &nbsp;·&nbsp; [Traffic simulator](https://aniketchavan7.github.io/system-design-illustrated/learn/simulator.html) &nbsp;·&nbsp; [Topic library](https://aniketchavan7.github.io/system-design-illustrated/library.html) &nbsp;·&nbsp; [Flashcards](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html)
+
+[![CI](https://img.shields.io/github/actions/workflow/status/Aniketchavan7/system-design-illustrated/ci.yml?branch=main&label=CI)](https://github.com/Aniketchavan7/system-design-illustrated/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+<a href="https://aniketchavan7.github.io/system-design-illustrated/learn/simulator.html"><img src="./assets/readme-simulator.png" alt="The traffic simulator: sliders for incoming requests, servers, per-server capacity, failed servers and cache hit rate, with the resulting backend capacity and shortfall" width="100%"></a>
 
 </div>
 
----
+## Why this one
 
-**A free system design course for beginners, interview candidates, and working engineers**, one concept per folder, with everyday analogies, step-by-step pictures, worked examples with real numbers, runnable code, and a quick self-check at the end.
+Most system design material tells you the answer. Here you can take a server offline, drop the cache hit rate, or double a traffic burst, and watch what happens to the numbers. Every module works through a real example with concrete figures, and the figures in the text come from a `demo.py` you can run yourself.
 
-> You do **not** need a computer-science degree to read this. If a module uses a word before explaining it, that's a bug — please open an issue.
+You don't need a computer-science degree. If a module uses a word before explaining it, that's a bug: please [open an issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/new/choose).
 
-> 🗂️ **Interactive Study Flashcards**: Practice all 45 modules with 3D flashcards, review tracking, ELI5 summaries, and FAANG case studies directly in your browser: **[Launch Flashcards App (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html)** or open [local `index.html`](./index.html).
+## What's inside
 
----
+| | |
+| :--- | :--- |
+| 🧭 **[Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)** | Six short lessons that follow one website as it grows, from a single request to surviving a regional outage, then a capstone. Progress saves in your browser. |
+| 🎛️ **Interactive labs** | [Traffic and cache simulator](https://aniketchavan7.github.io/system-design-illustrated/learn/simulator.html) · [DNS cache](https://aniketchavan7.github.io/system-design-illustrated/learn/dns-lab.html) · [Consistent hashing vs. modulo](https://aniketchavan7.github.io/system-design-illustrated/learn/hashing-lab.html) · [Quorum reads](https://aniketchavan7.github.io/system-design-illustrated/learn/quorum-lab.html) · [Queue backlog](https://aniketchavan7.github.io/system-design-illustrated/learn/queue-lab.html) |
+| 📚 **[45 modules](#-master-syllabus)** | Each one goes analogy → picture → worked numbers → trade-offs → interview questions → self-check. |
+| 🐍 **Runnable demos** | Every module has a zero-dependency `demo.py`. Run `python demo.py` in any module folder. |
+| 🗂️ **[Flashcards](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html)** | All 45 modules as review cards in the browser. |
+| 📐 **References** | [Back-of-the-envelope cheat sheet](./CHEATSHEET.md) · [Decision flowcharts](./DECISION_FLOWCHARTS.md) · [`calculate.py`](./calculate.py) capacity calculator |
+| 🧪 **Practice** | [Timed mock interviews and rubrics](./STUDY_GUIDE.md#timed-mock-interviews) · [Event-driven order processing lab](./labs/order-processing/) · [Multi-region recovery](./advanced/multi-region-recovery.md) · [Auth](./advanced/authentication-and-authorization.md) |
 
-**[Start the free Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/)**. Follow six short lessons, experiment with DNS caching and backend outages, then take the capstone. Your lesson progress and capstone results save in your browser.
+## Where to start
 
-Use the [book-to-course reading map](./advanced/resource-reading-map.md) to find exercises for each chapter of Kleppmann and Xu.
+- **New to system design?** Take the [Trail Notes course](https://aniketchavan7.github.io/system-design-illustrated/), then read Part 0 and Part 1 below in order.
+- **Interview coming up?** Follow the [study guide](./STUDY_GUIDE.md): it has a first-pass plan and timed mock interviews.
+- **Reading Kleppmann or Alex Xu?** The [book-to-course reading map](./advanced/resource-reading-map.md) pairs each chapter with modules and exercises.
 
-## 🧭 How to use this repo
+In each module, read **🧒 The 30-second version** first. If it clicks, keep going; if not, re-read the analogy and look at the picture. Run the demo, then finish with **✅ Check yourself**.
 
-Start with the [study guide](./STUDY_GUIDE.md) for a first pass, interview prep, or production reliability. Every reading and diagram is available on GitHub without an account.
-
-1. **Go in order** within a part. Each module builds on the ones before it.
-2. In every module, read **🧒 The 30-second version** first. If that clicks, keep going. If not, re-read the analogy, then look at the picture.
-3. **Run the code.** Every module has a standalone, zero-dependency `demo.py` you can execute immediately with `python demo.py`.
-4. **Study Real-World Production Case Studies.** Every single module contains a dedicated `REAL_WORLD_EXAMPLES.md` connecting the pattern to documented production systems and illustrative designs.
-5. Finish with **✅ Check yourself**. If you can answer the questions without peeking, you've got it.
-6. **Verify with the Automated Test Suite.** Run the module demos, calculator, Markdown checks, and flashcard checks locally with `python run_tests.py` or `python -m pytest`.
-
----
-
-## ⚡ Master Tools & Quick References
-
-| Resource | Description | Direct Link |
-| :--- | :--- | :---: |
-| 🗂️ **Interactive Flashcard Web App** | 3D study cards with review tracking, ELI5s, and FAANG case studies | [Launch Flashcards (GitHub Pages)](https://aniketchavan7.github.io/system-design-illustrated/flashcards.html) · [Local App](./index.html) |
-| 📐 **Back-of-the-Envelope Master Cheat Sheet** | Powers of 2, Latency numbers, QPS conversions, 5-step sizing formulas, SLA nines | [Open Cheat Sheet](./CHEATSHEET.md) |
-| 🔀 **Master Architectural Decision Flowcharts** | Interactive visual decision trees for Databases, Consistency, Caching, Protocols, and Sagas | [Open Flowcharts](./DECISION_FLOWCHARTS.md) |
-| 🧮 **Interactive Capacity Calculator** | Standalone zero-dependency Python CLI tool for QPS, bandwidth, storage & cache sizing | [View Script (`calculate.py`)](./calculate.py) |
-| 🧪 **Automated CI Test Suite** | 100+ tests validating all 45 module demos, CLI calculator, Markdown, and flashcard data | [View Workflow (`ci.yml`)](./.github/workflows/ci.yml) · `python run_tests.py` |
-
-## Practice and advanced topics
-
-- [Timed interviews and scoring rubrics](./STUDY_GUIDE.md#timed-mock-interviews)
-- [Event-driven order processing lab](./labs/order-processing/)
-- [Multi-region failover and disaster recovery](./advanced/multi-region-recovery.md)
-- [Authentication and authorization](./advanced/authentication-and-authorization.md)
+> **About the case studies.** Each module has a `REAL_WORLD_EXAMPLES.md` describing how companies such as Google, Netflix and Stripe approach the pattern. Most of these aren't source-checked yet, so treat specific numbers as unverified. Help checking them is very welcome: see [issue #9](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
 ### 🚦 Status legend
 
@@ -194,9 +179,9 @@ All explanations here are written from scratch in plain language, synthesizing t
 
 ---
 
-## 🏢 Real-World Production Case Studies (Google, Netflix, Meta, Amazon, Stripe)
+## 🏢 Real-world case studies
 
-Each module includes a `REAL_WORLD_EXAMPLES.md` companion with production examples or illustrative applications.
+Each module includes a `REAL_WORLD_EXAMPLES.md` companion. Most aren't source-checked yet; see [issue #9](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
 | Module | Core Topic | Production Deep Dives & Architectures | Link |
 | :--- | :--- | :--- | :---: |
@@ -204,7 +189,7 @@ Each module includes a `REAL_WORLD_EXAMPLES.md` companion with production exampl
 | **02** | Domain Name System (DNS) | **Google Public DNS** caching and anycast · **Route 53** failover · **Netflix** capacity planning | [Read Deep Dive](./02-domain-name-system/REAL_WORLD_EXAMPLES.md) |
 | **03** | Load Balancing | **Google** Maglev · **Netflix** client-side balancing and overload protection | [Read Deep Dive](./03-load-balancing/REAL_WORLD_EXAMPLES.md) |
 | **04** | API Gateways & Proxies | **Netflix** Zuul 2/3 Async EventLoop Gateway vs **Google** Envoy Service Mesh & xDS Control Plane | [Read Deep Dive](./04-api-gateways-and-proxies/REAL_WORLD_EXAMPLES.md) |
-| **05** | Rate Limiting | **Stripe** 4-Tier Distributed Rate Limiter vs **Netflix** Adaptive Concurrency Limits (Little's Law) | [Read Deep Dive](./05-rate-limiting/REAL_WORLD_EXAMPLES.md) |
+| **05** | Rate Limiting | **Stripe** rate limiters and load shedders (source-checked) vs **Netflix** Adaptive Concurrency Limits (Little's Law) | [Read Deep Dive](./05-rate-limiting/REAL_WORLD_EXAMPLES.md) |
 | **06** | SQL vs NoSQL Databases | **Google** Spanner (TrueTime Relational ACID) vs **Netflix** Polyglot Cassandra & Aurora | [Read Deep Dive](./06-relational-and-non-relational-databases/REAL_WORLD_EXAMPLES.md) |
 | **07** | Database Replication | **Google** Spanner Multi-Paxos Quorums vs **Netflix** Multi-Region Active-Active Cassandra | [Read Deep Dive](./07-database-replication/REAL_WORLD_EXAMPLES.md) |
 | **08** | Database Partitioning | **Google** Bigtable Tablet Splitting vs **Uber** Schemaless Sharded MySQL | [Read Deep Dive](./08-database-partitioning/REAL_WORLD_EXAMPLES.md) |
@@ -258,20 +243,15 @@ Each module includes a `REAL_WORLD_EXAMPLES.md` companion with production exampl
 
 ---
 
-## 🤝 Open Source Community: Build & Learn Together
+## 🤝 Contributing
 
-> **"This is an open source project. We are happy to accept changes, catch mistakes, and allow everyone to share their own knowledge. It is built for people to use as well as develop together."**
+Corrections are the most useful contribution: a wrong number, an unclear sentence, or a case study claim without a source. Small PRs are welcome, and every contributor is credited.
 
-System design is not a static dogma—it is an evolving, collaborative discipline. No single engineer or organization has all the answers. This project is built and maintained by developers worldwide who want to make distributed systems accessible to everyone.
-
-### How You Can Participate & Share Knowledge
-- 🐛 **Found a Mistake, Typo, or Inaccuracy?** Open an issue using our [Mistake Report Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=1_fix_mistake.md) or submit a PR. Catching mistakes makes the curriculum better for everyone.
+- 🔎 **Source-check a case study:** pick a module from [issue #9](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
+- 🐛 **Found a mistake, typo, or inaccuracy?** Open an issue using our [Mistake Report Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=1_fix_mistake.md) or submit a PR. Catching mistakes makes the curriculum better for everyone.
 - 🏢 **Share Your Production War Stories:** Add your team's real-world architectural case study to any module's `REAL_WORLD_EXAMPLES.md` via our [Case Study Template](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=2_share_case_study.md).
 - 💡 **Propose New Topics or Labs:** Have an idea for a modern system design topic (e.g. Vector DBs, CRDTs, edge computing)? [Propose a new module](https://github.com/Aniketchavan7/system-design-illustrated/issues/new?template=3_suggest_module.md).
-- 💬 **Discuss & Share Feedback on Reddit:** Share your interview debriefs, debate tradeoffs, and discuss lessons in [r/systemdesign](https://www.reddit.com/r/systemdesign/). See our [Community Guide](./COMMUNITY.md) for subreddits and topic ideas.
 - 📖 **Review Our Guidelines:** Read [CONTRIBUTING.md](./CONTRIBUTING.md) for step-by-step PR instructions and our [Code of Conduct](./CODE_OF_CONDUCT.md).
-
-All contributors who fix a typo, suggest a diagram, or write a case study will be proudly credited!
 
 ---
 

@@ -23,6 +23,9 @@
     </nav>
   </header>
   <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="metrics-monitoring-in-production">Metrics monitoring in production</h1>
+<blockquote>
+<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+</blockquote>
 <h2 id="google--monarch">Google · Monarch</h2>
 <p>Google's 2020 paper describes Monarch as a multi-tenant, in-memory time-series database. Its regional architecture keeps collection close to sources, and a global query plane integrates results. The paper reports ingesting terabytes of time-series data per second at the time of publication. <a href="https://research.google/pubs/monarch-googles-planet-scale-in-memory-time-series-database/">Google's Monarch paper</a></p>
 <p>Which parts of a query can execute near regional data? Counts can be added across regions. A percentile needs mergeable data such as histogram buckets with compatible boundaries.</p>

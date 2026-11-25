@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** (TrueTime API bounding clock uncertainty with atomic clocks) and **Amazon** (Dynamo Vector Clocks for shopping carts) manage distributed time are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google** (TrueTime API bounding clock uncertainty with atomic clocks) and **Amazon** (Dynamo Vector Clocks for shopping carts) manage distributed time, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

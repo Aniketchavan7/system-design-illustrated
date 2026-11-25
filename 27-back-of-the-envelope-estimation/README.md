@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** (Jeff Dean's latency rules) & **Netflix** (capacity planning for 260M subscribers) execute real-world estimations are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google** (Jeff Dean's latency rules) & **Netflix** (capacity planning for 260M subscribers) execute real-world estimations, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

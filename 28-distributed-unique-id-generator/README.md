@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Twitter** (Snowflake), **Discord**, and **Instagram** generate billions of unique IDs per day are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Twitter** (Snowflake), **Discord**, and **Instagram** generate billions of unique IDs per day, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

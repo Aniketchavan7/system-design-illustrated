@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: See **Google Public DNS**, **Route 53**, and **Netflix** examples in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: see **Google Public DNS**, **Route 53**, and **Netflix** examples in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## 🧒 The 30-second version
 

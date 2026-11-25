@@ -1,71 +1,66 @@
 # Real-World Production Deep Dives: Rate Limiting
 
-> Deep-dive architectural dissections of how **Stripe**, **Google**, and **Netflix** implement distributed rate limiting, protect against cascading failures, and enforce concurrency limits.
+> ⚠️ **Partly source-checked.** Deep Dive 1 (Stripe) is checked against Stripe's own post. The others summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
+> How **Stripe**, **Google**, and **Netflix** approach distributed rate limiting, protect against cascading failures, and enforce concurrency limits.
 
 ---
 
-## 💳 Deep Dive 1: How Stripe Uses Rate Limiting (The 4-Tier Distributed Architecture)
+## 💳 Deep Dive 1: How Stripe Uses Rate Limiters and Load Shedders
 
-### 1. Production Context & Scale
-- **System**: Stripe Payment Processing API.
-- **Scale**: Hundreds of billions of dollars processed annually across millions of businesses.
-- **Availability Requirement**: Five-nines (99.999%). A 1-second outage halts global commerce for thousands of merchants.
-- **Attack Profile**: Black Friday traffic surges, script-kiddie card testing attacks (botnets attempting thousands of stolen credit card numbers per second), and misconfigured merchant retry loops.
+> **Source:** Paul Tarjan, ["Scaling your API with rate limiters"](https://stripe.com/blog/rate-limiters), Stripe engineering blog, 30 March 2017. Everything in this section comes from that post. Where it gives no number, neither do we.
 
-### 2. The Core Problem at Stripe Scale
-- A simple global rate limiter (e.g., "100 requests per second per IP") fails in real-world fintech:
-  - Legitimate enterprise platforms (e.g., Shopify, Amazon, Lyft) submit thousands of requests per second from single IP pools.
-  - Malicious actors rotate IP addresses across compromised IoT botnets to evade IP-based rate limiting.
-  - A flash crowd spike must never exhaust internal database connection pools.
+### 1. The problem
+Stripe's API serves many users at once. One user who sends too much traffic, by accident or on purpose, must not take the API down for everyone else. The post separates two kinds of protection:
 
-### 3. Stripe's Engineering Architecture: The 4-Tier Funnel
+- A **rate limiter** decides per *user*: "this user is sending too much."
+- A **load shedder** decides from the state of the *whole system*: "we are overloaded, drop the least important work first."
+
+### 2. The four limiters Stripe runs in production
 
 ```
-[ Inbound HTTP API Request ]
-             │
-             ▼
-[ Tier 1: Request Rate Limiter ]  <-- Hard Token Bucket per API Key
-             │ (Pass)
-             ▼
-[ Tier 2: Concurrency Rate Limiter ] <-- Limits concurrent in-flight calls
-             │ (Pass)
-             ▼
-[ Tier 3: Usage Rate Limiter ]      <-- Throttles heavy analytical queries
-             │ (Pass)
-             ▼
-[ Tier 4: Fraud & Abuse Limiter ]   <-- Heuristic & Card Testing Defense
-             │ (Pass)
-             ▼
-[ Stripe Core Payment Engine ]
+[ Inbound API request ]
+          │
+          ▼
+[ 1. Request rate limiter ]          N requests per second per user (token bucket)
+          │
+          ▼
+[ 2. Concurrent requests limiter ]   cap on requests in flight at once
+          │
+          ▼
+[ 3. Fleet usage load shedder ]      keeps part of the fleet free for critical requests
+          │
+          ▼
+[ 4. Worker utilization load shedder ] last line of defence on a busy box
+          │
+          ▼
+[ API servers ]
 ```
 
-#### Tier 1: Request Rate Limiter (Token Bucket per API Key)
-- Implemented using **Redis** clusters.
-- Each merchant API key is assigned a token bucket.
-- **Atomic Token Consumption via Lua Scripts**:
-  - Running separate `GET` and `SET` commands in Redis creates race conditions. Stripe executes a single atomic **Redis Lua Script** that calculates elapsed time, refills tokens up to bucket capacity, decrements a token, and returns the remaining allowance in under 1 millisecond.
+#### 1. Request rate limiter
+- Restricts each user to *N* requests per second. The post calls it "by far the most important one". It rejected millions of requests in the month the post was written.
+- It allows brief bursts above the cap, so a real spike such as a flash sale still gets through.
 
-#### Tier 2: Concurrency Rate Limiter
-- While the Request Rate Limiter controls *requests per second*, the Concurrency Limiter controls *simultaneous in-flight requests*.
-- Prevents database thread exhaustion: complex card charges take 200-500ms to verify with Visa/Mastercard. If a merchant sends 1,000 parallel requests, Tier 2 caps their simultaneous executions to 50, buffering or rejecting the excess with HTTP 429.
+#### 2. Concurrent requests limiter
+- Caps requests *in progress*, not requests per second. The post's example: "You can only have 20 API requests in progress at the same time."
+- It targets CPU-heavy endpoints, where many slow requests at once compete for resources. It triggered far less often: 12,000 requests in that month.
 
-#### Tier 3: Usage Rate Limiter
-- Merchants querying historical analytics or pulling thousands of PDF invoices consume orders of magnitude more database CPU than a lightweight balance check.
-- Tier 3 applies strict resource-cost limits specifically on data-heavy endpoints.
+#### 3. Fleet usage load shedder
+- Splits traffic into critical methods (for example, creating charges) and non-critical ones (for example, listing charges), and counts each type in a Redis cluster.
+- It reserves a share of the fleet for critical work. In the post's example, with 20% reserved, non-critical requests beyond their 80% allocation get **HTTP 503**.
 
-#### Tier 4: Fraud & Card Testing Rate Limiter
-- Monitors failed card authorizations across merchant accounts. If an entity triggers a threshold of invalid CVV/expiry combinations, their traffic is shunted into a CAPTCHA or dropped entirely, isolating the attack before it touches payment network rails.
+#### 4. Worker utilization load shedder
+- The "final line of defense". When a box runs short of free workers, it sheds the least critical traffic first. It starts with test-mode traffic and moves up through GETs and POSTs, keeping critical methods for last.
+- Shedding and recovery are deliberately slow, so the system doesn't "flap" between the two states. Only 100 requests were rejected by it in that month.
 
-#### Header Feedback Loop
-Stripe returns explicit rate limit headers on every response:
-```http
-HTTP/1.1 429 Too Many Requests
-Retry-After: 2
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1716480002
-```
+### 3. How it is built
+- **Algorithm:** "We use the token bucket algorithm to do rate limiting." Every Stripe user has a bucket. Each request takes a token, and tokens drip back in over time.
+- **Store:** "We implement our rate limiters using Redis."
+- **Fail open:** errors inside the limiter are caught so that a bug or outage in the limiter lets traffic through rather than blocking everyone.
+- **Rollout:** dark-launch each limiter first to watch what it *would* block, and keep a kill switch or feature flag to turn it off quickly.
+- **Status codes:** the post discusses choosing between **429 Too Many Requests** and **503 Service Unavailable**. It does not describe rate-limit response headers.
 
+> ℹ️ An earlier version of this page described a "usage" tier and a fraud or card-testing tier, and showed `X-RateLimit-*` headers on every response. The source doesn't support any of that, so we removed it.
 ---
 
 ## 🎬 Deep Dive 2: How Netflix & Google Handle Rate Limiting (Adaptive Concurrency Limits)
@@ -134,16 +129,16 @@ $$P_{\text{drop}} = \max\left(0, \frac{\text{requests} - K \times \text{accepts}
 
 ## ⚖️ Comparative Architecture Matrix
 
-| Architectural Dimension | Stripe (4-Tier Redis Token Bucket) | Netflix (Adaptive Concurrency Limits) | Google (Client-Side Adaptive Throttling) |
+| Architectural Dimension | Stripe (rate limiters + load shedders) | Netflix (Adaptive Concurrency Limits) | Google (Client-Side Adaptive Throttling) |
 |---|---|---|---|
-| **Location** | Edge Reverse Proxy & Ingress Layer | Ingress Gateway + Embedded Service Interceptor | Client SDK / gRPC Transport Stub |
-| **Limiting Dimension** | RPS per API Key + Concurrency count | Dynamic In-flight Concurrency based on RTT | Request vs Accept ratio over sliding window |
-| **Storage Dependency** | Distributed Redis Cluster with Lua scripts | In-memory atomic counters (zero external dependencies) | In-memory local client metrics |
+| **Location** | In front of the API servers | Ingress Gateway + Embedded Service Interceptor | Client SDK / gRPC Transport Stub |
+| **Limiting Dimension** | Requests per second per user, requests in flight, then fleet and worker load | Dynamic In-flight Concurrency based on RTT | Request vs Accept ratio over sliding window |
+| **Storage Dependency** | Redis (token buckets and request counts) | In-memory atomic counters (zero external dependencies) | In-memory local client metrics |
 | **Responsiveness** | Static thresholds updated via configuration | Autonomic, continuous adaptation to real-time load | Client-side self-policing protects downstream servers |
 
 ---
 
 ## 🎯 System Design Interview Takeaways
-1. **Never Propose a Single Global Limiter**: Always structure rate limiting as a tiered defense (Per-User Token Bucket -> Concurrency Cap -> Abuse / Fraud heuristic).
+1. **Never Propose a Single Global Limiter**: Structure it in layers, as Stripe does: per-user rate limit, then a concurrency cap, then load shedders that protect critical traffic when the whole system is busy.
 2. **Preventing Race Conditions**: Always mention that distributed token buckets in Redis must be implemented via **atomic Lua scripts** or Redis cell modules to prevent concurrent read-modify-write race conditions.
 3. **Adaptive Limits Impress Interviewers**: Differentiate yourself by explaining why static RPS limits fail during cascading failures and proposing latency-based adaptive concurrency limits (Little's Law / TCP Vegas).
