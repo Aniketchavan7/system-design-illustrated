@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="25---system-design-distributed-rate-limiter-stripe--cloudflare">25 - System Design: Distributed Rate Limiter (Stripe / Cloudflare)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="25---system-design-distributed-rate-limiter-stripe--cloudflare">25 - System Design: Distributed Rate Limiter (Stripe / Cloudflare)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In distributed architectures handling hundreds of thousands of requests per second, rate limiting is the primary defense line against brute-force attacks, web scraping, and denial-of-service traffic spikes. Scaling a rate limiter across a multi-server API gateway fleet introduces two critical distributed challenges: <strong>Race Conditions</strong> (concurrent requests bypassing limits via read-then-write cycles) and <strong>Synchronization Latency</strong> (every API request requiring a cross-network database call). Production distributed rate limiters solve this by executing <strong>Atomic Redis Lua Scripts</strong> with lazy token-refill formulas and local in-memory token batching.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/25-system-design-rate-limiter/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/25-system-design-rate-limiter/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

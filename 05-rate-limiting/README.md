@@ -14,16 +14,14 @@ A small bubble-tea shop has **one person making drinks**, and they can make abou
 - So the shop gives every customer **tokens**: you get 5 tokens, each drink costs 1, and you get one token back every 12 seconds. A kid who already spent all 5 has to wait. Everyone else is still served quickly.
 
 | In the shop | In the system |
-| :---
-
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** implement this in production are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
-
- | :--- |
+| :--- | :--- |
 | Customer | A client (user, API key or IP address) |
 | Ordering a drink | Sending a request |
 | Tokens in your pocket | Requests you're still allowed to make |
 | "Sorry, wait a bit" | HTTP `429 Too Many Requests` + a `Retry-After` header |
 | The drink-maker | Your servers and database: the limited resource you're protecting |
+
+> 🏢 **Real-world case studies**: how **Google** & **Netflix** approach this, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ## 🧩 The problem it solves
 

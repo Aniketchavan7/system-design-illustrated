@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** & **Netflix** evolved from single-machine monolithic scripts to global multi-region infrastructures are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google** & **Netflix** evolved from single-machine monolithic scripts to global multi-region infrastructures, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

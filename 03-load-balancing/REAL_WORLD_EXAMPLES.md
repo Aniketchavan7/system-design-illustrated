@@ -1,5 +1,7 @@
 # Load balancing in production
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 ## Google · Maglev
 
 Google's 2016 NSDI paper describes Maglev as a software network load balancer. Routers distribute packets to Maglev instances using equal-cost multipath routing. Each instance selects service endpoints and uses consistent hashing and connection tracking to reduce disruption to existing connections during failures. The paper reports that a single Maglev machine could saturate a **10 Gbps** link using small packets in the setup it evaluated. That is a historical packet-processing result for Maglev. [Google's 2016 Maglev paper](https://research.google/pubs/maglev-a-fast-and-reliable-software-network-load-balancer/)

@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/quorum-lab.html">Quorum overlap &amp; stale read lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="14---consistency-models-from-linearizable-to-eventual">14 - Consistency Models: From Linearizable to Eventual</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../learn/quorum-lab.html">Quorum overlap &amp; stale read lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="14---consistency-models-from-linearizable-to-eventual">14 - Consistency Models: From Linearizable to Eventual</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> In a distributed database, &quot;consistency&quot; does not mean a binary toggle between &quot;right&quot; and &quot;wrong.&quot; Instead, it is a formal contract between the storage engine and client applications governing the order, recency, and visibility of concurrent writes across replicas. While <strong>Linearizability</strong> guarantees the illusion of a single global register at the cost of high cross-region latency, weaker models like <strong>Causal Consistency</strong>, <strong>Read-Your-Own-Writes</strong>, and <strong>Eventual Consistency</strong> unlock massive throughput and fault tolerance by permitting controlled, predictable read anomalies.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/14-consistency-models/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/14-consistency-models/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

@@ -65,6 +65,8 @@ a:hover { color: var(--color-accent); }
   max-width: 9ch;
   font-size: clamp(4rem, 7.55vw, 8.5rem);
   letter-spacing: -.065em;
+  /* Tight tracking eats the word gap at display sizes ("Followthe"). */
+  word-spacing: .14em;
   line-height: .91;
 }
 .hero .lead { max-width: 31ch; margin-top: 1.6rem; }
@@ -233,7 +235,8 @@ a:hover { color: var(--color-accent); }
   font-family: var(--font-display);
   color: var(--color-ink);
   font-size: clamp(3.4rem, 7vw, 6.65rem);
-  font-variant-numeric: tabular-nums;
+  /* Proportional, not tabular: a lone figure gives its comma a full digit's width ("2 , 700"). */
+  font-variant-numeric: proportional-nums;
   letter-spacing: -.06em;
   line-height: .9;
 }
@@ -388,7 +391,7 @@ a:hover { color: var(--color-accent); }
   display: block;
   margin-top: var(--space-xs);
   font: 700 clamp(3.5rem, 9vw, 7rem)/.92 var(--font-display);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: proportional-nums;
   letter-spacing: -.055em;
 }
 .sim-metrics { margin: var(--space-lg) 0; }

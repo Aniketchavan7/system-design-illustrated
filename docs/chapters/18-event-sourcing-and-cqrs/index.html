@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="18---event-sourcing--cqrs-command-query-responsibility-segregation">18 - Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="18---event-sourcing--cqrs-command-query-responsibility-segregation">18 - Event Sourcing &amp; CQRS (Command Query Responsibility Segregation)</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> Traditional CRUD systems mutate state in place (<code>UPDATE users SET email = '...'</code>), destroying historical intent, temporal context, and audit trails. <strong>Event Sourcing</strong> persists every state mutation as an immutable, append-only domain event (<code>EmailUpdated</code>, <code>MoneyDeposited</code>). <strong>CQRS</strong> (Command Query Responsibility Segregation) structurally splits the architecture into two independent models: a write-optimized <strong>Command Side</strong> enforcing business invariants, and a read-optimized <strong>Query Side</strong> maintaining denormalized materialized projections. Together, they provide complete auditability, time-travel debugging, and unconstrained read scalability.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/18-event-sourcing-and-cqrs/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/18-event-sourcing-and-cqrs/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

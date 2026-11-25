@@ -1,5 +1,7 @@
 # Client–server networking in production
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 ## Google · QUIC deployment
 
 At SIGCOMM in 2017, Google researchers described an early deployment of QUIC on thousands of Google servers, including traffic from Chrome and YouTube. The design used an encrypted, multiplexed transport and allowed Google to iterate on transport behavior. The deployment figures describe the system studied in that paper. [Google's 2017 QUIC deployment paper](https://research.google/pubs/the-quic-transport-protocol-design-and-internet-scale-deployment/)

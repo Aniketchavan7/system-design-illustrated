@@ -22,13 +22,13 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../learn/hashing-lab.html">Consistent hashing ring lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="16---consistent-hashing--virtual-nodes">16 - Consistent Hashing &amp; Virtual Nodes</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../learn/hashing-lab.html">Consistent hashing ring lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="16---consistent-hashing--virtual-nodes">16 - Consistent Hashing &amp; Virtual Nodes</h1>
 <blockquote>
 <p><strong>Executive Summary:</strong> When scaling a distributed cache or partitioned database across <span class="math-inline">N</span> servers, traditional modulo hashing (<code>hash(key) % N</code>) causes catastrophic failure: adding or removing a single node remaps <span class="math-inline">≈ N / (N + 1)</span> of all keys (up to <span class="math-inline">80%–95%</span>), triggering total cache stampedes and database collapse. <strong>Consistent Hashing</strong> maps both servers and keys onto a circular hash ring <span class="math-inline">[0, 2<sup>32</sup> - 1]</span>. When a node joins or leaves, only <span class="math-inline">≈ 1 / N</span> of keys are relocated. By introducing <strong>Virtual Nodes (V-nodes)</strong>, load skew and hot spots are eliminated, distributing data with near-perfect uniformity.</p>
 </blockquote>
 <hr />
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/16-consistent-hashing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/16-consistent-hashing/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
 <h2 id="prerequisites-what-you-need-to-know-first">⏱️ Prerequisites: What You Need to Know First</h2>
 <p>To get the most out of this module, make sure you understand:</p>

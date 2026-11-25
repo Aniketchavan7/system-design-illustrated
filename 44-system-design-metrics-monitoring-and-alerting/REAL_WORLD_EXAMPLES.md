@@ -1,5 +1,7 @@
 # Metrics monitoring in production
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 ## Google · Monarch
 
 Google's 2020 paper describes Monarch as a multi-tenant, in-memory time-series database. Its regional architecture keeps collection close to sources, and a global query plane integrates results. The paper reports ingesting terabytes of time-series data per second at the time of publication. [Google's Monarch paper](https://research.google/pubs/monarch-googles-planet-scale-in-memory-time-series-database/)

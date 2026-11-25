@@ -4,7 +4,7 @@
 
 ---
 
-> 🏢 **Real-World Deep Dives**: Detailed case studies of how **Google** (Protocol Buffers standard across Borg RPCs) and **LinkedIn / Netflix** (Apache Avro Schema Registries) manage schema evolution are documented in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
+> 🏢 **Real-world case studies**: how **Google** (Protocol Buffers standard across Borg RPCs) and **LinkedIn / Netflix** (Apache Avro Schema Registries) manage schema evolution, in [REAL_WORLD_EXAMPLES.md](./REAL_WORLD_EXAMPLES.md).
 
 ---
 

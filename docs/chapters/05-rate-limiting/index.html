@@ -22,7 +22,7 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">FAANG case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="05--rate-limiting">05 · Rate limiting</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="examples.html">Case studies</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="05--rate-limiting">05 · Rate limiting</h1>
 <blockquote>
 <p><strong>Part 1 · Networking &amp; traffic</strong> · ⏱️ ~20 min read · Prerequisites: <a href="../../chapters/01-client-server-networking/index.html">01 · Client–server networking</a>, <a href="../../chapters/04-api-gateways-and-proxies/index.html">04 · API gateways</a></p>
 </blockquote>
@@ -34,17 +34,39 @@
 <li>Without a rule, a school bus arrives, 40 kids order at once, and everyone waits 8 minutes, including the regulars who just wanted one drink.</li>
 <li>So the shop gives every customer <strong>tokens</strong>: you get 5 tokens, each drink costs 1, and you get one token back every 12 seconds. A kid who already spent all 5 has to wait. Everyone else is still served quickly.</li>
 </ul>
-<p>| In the shop | In the system |
-| :---</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">In the shop</th>
+<th style="text-align:left">In the system</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Customer</td>
+<td style="text-align:left">A client (user, API key or IP address)</td>
+</tr>
+<tr>
+<td style="text-align:left">Ordering a drink</td>
+<td style="text-align:left">Sending a request</td>
+</tr>
+<tr>
+<td style="text-align:left">Tokens in your pocket</td>
+<td style="text-align:left">Requests you're still allowed to make</td>
+</tr>
+<tr>
+<td style="text-align:left">&quot;Sorry, wait a bit&quot;</td>
+<td style="text-align:left">HTTP <code>429 Too Many Requests</code> + a <code>Retry-After</code> header</td>
+</tr>
+<tr>
+<td style="text-align:left">The drink-maker</td>
+<td style="text-align:left">Your servers and database: the limited resource you're protecting</td>
+</tr>
+</tbody>
+</table>
 <blockquote>
-<p>🏢 <strong>Real-World Deep Dives</strong>: Detailed case studies of how <strong>Google</strong> &amp; <strong>Netflix</strong> implement this in production are documented in <a href="../../chapters/05-rate-limiting/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
+<p>🏢 <strong>Real-world case studies</strong>: how <strong>Google</strong> &amp; <strong>Netflix</strong> approach this, in <a href="../../chapters/05-rate-limiting/examples.html">REAL_WORLD_EXAMPLES.md</a>.</p>
 </blockquote>
-<p>| :--- |
-| Customer | A client (user, API key or IP address) |
-| Ordering a drink | Sending a request |
-| Tokens in your pocket | Requests you're still allowed to make |
-| &quot;Sorry, wait a bit&quot; | HTTP <code>429 Too Many Requests</code> + a <code>Retry-After</code> header |
-| The drink-maker | Your servers and database: the limited resource you're protecting |</p>
 <h2 id="the-problem-it-solves">🧩 The problem it solves</h2>
 <p>Your API runs happily at <strong>200 requests/second</strong>. Then:</p>
 <ul>

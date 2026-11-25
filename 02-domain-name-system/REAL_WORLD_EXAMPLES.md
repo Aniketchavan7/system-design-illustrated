@@ -1,5 +1,7 @@
 # DNS in production
 
+> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+
 ## Google Public DNS · Recursive caching and anycast
 
 Google documents two levels of DNS caching. A cache near the user contains popular names. A second pool partitions its cache by name so repeated queries for a name can reach the same cache. Google also documents the use of anycast for its resolver addresses. Multiple locations advertise the same address, and internet routing selects a reachable path. [Google Public DNS performance documentation](https://developers.google.com/speed/public-dns/docs/performance) · [Google Public DNS FAQ](https://developers.google.com/speed/public-dns/faq)
