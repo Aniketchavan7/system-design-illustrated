@@ -222,7 +222,7 @@ def clean_section(text, max_len=850):
 
 def clean_dive_label(header):
     lbl = re.sub(
-        r"^(?:🏢|🎬|💳|🌐|🍿|👥|🎮|📦|🛳️|🚙|🔬|⚓|🔗|🛡️|🐦|📺|\d+\.|Deep Dive \d+:?\s*How\s*|\s)+",
+        r"^(?:[^\w\s]+|\d+\.|Deep Dive \d+:?\s*(?:How\s+)?|\s)+",
         "",
         header,
     ).strip()
@@ -238,6 +238,8 @@ def clean_dive_label(header):
     else:
         lbl = re.sub(r"\s*\([^)]*$", "", lbl)
         lbl = lbl.split(":")[0].strip()
+        # "Uber Schemaless, Hashing into a Fixed Set of Shards" -> "Uber Schemaless"
+        lbl = lbl.split(", ")[0].strip()
 
     # Keep short without cutting mid-phrase or leaving trailing conjunctions
     words = lbl.split()
@@ -257,6 +259,8 @@ def clean_dive_label(header):
 
 def parse_dive(header, body):
     lbl = clean_dive_label(header)
+    # Source lines and "earlier version" notes belong on the full page, not the card.
+    body = re.sub(r"^> (?:\*\*Sources?:\*\*|ℹ️).*\n?", "", body, flags=re.MULTILINE)
     idx1 = body.find("### 1.")
     idx2 = body.find("### 2.")
     idx3 = body.find("### 3.")

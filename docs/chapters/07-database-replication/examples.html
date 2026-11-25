@@ -22,171 +22,84 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/quorum-lab.html">Quorum replication (N, W, R) lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-database-replication">Real-World Production Deep Dives: Database Replication</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../learn/quorum-lab.html">Quorum replication (N, W, R) lab</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-database-replication">Real-World Case Studies: Database Replication</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Netflix</strong> implement database replication across global regions, balancing multi-Paxos synchronous quorums with active-active Cassandra replication.</p>
+<p>Two opposite designs: Google Spanner replicates every write synchronously through a Paxos leader, while Amazon's Dynamo and Apache Cassandra let any replica accept writes and reconcile later.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-google-uses-replication-spanner-multi-paxos-synchronous-global-replication">🏢 Deep Dive 1: How Google Uses Replication (Spanner Multi-Paxos Synchronous Global Replication)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-google-spanner-synchronous-replication-with-paxos">🏢 Deep Dive 1: Google Spanner, Synchronous Replication with Paxos</h2>
+<blockquote>
+<p><strong>Sources:</strong> <a href="https://www.usenix.org/conference/osdi12/technical-sessions/presentation/corbett">Spanner: Google's Globally-Distributed Database</a> (Corbett et al., OSDI 2012); Google Cloud, <a href="https://docs.cloud.google.com/spanner/docs/replication">Spanner replication</a>. Everything in this section comes from those.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Google Cloud Spanner Replication Engine.</li>
-<li><strong>Footprint</strong>: Thousands of database shards replicated across 5 continents (North America, Europe, Asia-Pacific, South America).</li>
-<li><strong>SLA</strong>: Five-nines (99.999%) availability with zero data loss (<span class="math-inline">RPO = 0</span>) and automated failover (<span class="math-inline">RTO ≈ 0</span>).</li>
-</ul>
-<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
-<ul>
-<li><strong>Asynchronous Replication Risks Data Loss</strong>:
-<ul>
-<li>In standard master-slave async replication (e.g., standard MySQL), if a primary data center suffers a sudden power loss, committed transactions that had not yet replicated to replicas are permanently lost (<span class="math-inline">RPO &gt; 0</span>).</li>
-</ul>
-</li>
-<li><strong>Synchronous Replication Hurts Latency</strong>:
-<ul>
-<li>Waiting for <em>every</em> replica worldwide to acknowledge a write adds hundreds of milliseconds of cross-ocean fiber latency. If a single replica in Tokyo lags, writes in California freeze.</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-googles-architecture-multi-paxos-quorum-replication">3. Google's Architecture: Multi-Paxos Quorum Replication</h3>
-<pre><code>[ Client Write in Iowa Data Center ]
-                 │
-                 ▼
-     [ Paxos Group Leader (Iowa) ]
-                 │
-      ┌──────────┼──────────┐ (Parallel Paxos Proposal)
-      ▼          ▼          ▼
-[ Replica 1 ] [ Replica 2 ] [ Replica 3 ]   &lt;-- Full Replicas (Logs + Data)
-   (Iowa)    (S. Carolina)  (Belgium)
-      │          │
-      └────┬─────┘
-           ▼ (Quorum: 2 out of 3 Acks Received!)
-[ Commit &amp; Respond to Client in 35ms! ]
-           │
-           ▼ (Asynchronous catch-up)
-     [ Replica 3 ] (Belgium catches up without delaying client)
-</code></pre>
-<h4 id="a-paxos-groups-per-split">A. Paxos Groups per Split</h4>
-<ul>
-<li>Rather than running a single massive Paxos ring for the entire database, Spanner partitions tables into smaller chunks called <strong>splits</strong>.</li>
-<li>Each split is replicated across a dedicated <strong>Paxos Group</strong> of typically 3 to 7 replicas located in diverse geographic failure domains.</li>
-<li>A long-lived leader is elected per Paxos group via Paxos leases (typically 10-second renewal).</li>
-</ul>
-<h4 id="b-the-quorum-invariant">B. The Quorum Invariant</h4>
-<ul>
-<li>For a Paxos group of size <span class="math-inline">N = 2F + 1</span>, the leader requires acknowledgments from only a simple majority (<span class="math-inline">F + 1</span>) before declaring a write committed:</li>
-</ul>
-<div class="math-block">Quorum Size = ⌊ (N) / (2) ⌋ + 1</div>
-<ul>
-<li><strong>Latency Optimization</strong>: If <span class="math-inline">N=3</span> (two in the US, one in Europe), the leader commits as soon as the other US replica acknowledges. The transatlantic replica catches up asynchronously. Fast writes occur without sacrificing durability!</li>
-</ul>
-<h4 id="c-witness-replicas">C. Witness Replicas</h4>
-<ul>
-<li>In regions where storage costs must be minimized, Google deploys <strong>Witness Replicas</strong>. Witnesses participate in Paxos voting and leader elections but do not persist full database state on disk, cutting storage footprint while maintaining odd-numbered quorum requirements.</li>
+<li><strong>One Paxos group per tablet.</strong> &quot;Each spanserver implements a single Paxos state machine on top of each tablet.&quot; Writes go through that group's leader and are applied in order.</li>
+<li><strong>Long-lived leaders.</strong> &quot;Our Paxos implementation supports long-lived leaders with time-based leader leases, whose length defaults to 10 seconds.&quot; When a zone fails, leadership moves as those leases expire.</li>
+<li><strong>Replica count is a choice.</strong> Spanner's first customer, F1, &quot;uses five replicas spread across the United States&quot;.</li>
+<li><strong>Witness replicas (Cloud Spanner).</strong> Some replicas exist only to vote. Witness replicas &quot;participate in voting to commit writes&quot; and in leader election, but &quot;aren't eligible to become a leader replica&quot;, &quot;don't support reads&quot;, and &quot;don't maintain a full copy of data&quot;.</li>
 </ul>
 <hr />
-<h2 id="deep-dive-2-how-netflix-uses-replication-multi-region-active-active-cassandra-replication">🎬 Deep Dive 2: How Netflix Uses Replication (Multi-Region Active-Active Cassandra Replication)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-2-amazon-dynamo-and-apache-cassandra-leaderless-replication">🛒 Deep Dive 2: Amazon Dynamo and Apache Cassandra, Leaderless Replication</h2>
+<blockquote>
+<p><strong>Sources:</strong> Werner Vogels, <a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">&quot;Amazon's Dynamo&quot;</a> (October 2007, introducing DeCandia et al., SOSP 2007); Apache Cassandra docs, <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html">Dynamo architecture</a>. Everything in this section comes from those.</p>
+</blockquote>
+<p><strong>Dynamo</strong> is &quot;internal technology developed at Amazon to address the need for an incrementally scalable, highly-available key-value storage system&quot;. It aims to be &quot;always writeable&quot;: for example, the shopping cart &quot;must allow customers to add and remove items from their shopping cart even amidst network and server failures&quot;.</p>
 <ul>
-<li><strong>Deployment</strong>: True Active-Active multi-region deployment across three AWS regions:
+<li><strong>No fixed leader.</strong> Data is spread with consistent hashing, and a write can land on whichever replicas are reachable (&quot;sloppy quorum&quot;). If a replica is down, another node keeps the write and hands it over later (&quot;hinted handoff&quot;).</li>
+<li><strong>Conflicts are expected.</strong> Dynamo uses &quot;vector clocks in order to capture causality between different versions of the same object&quot;, and conflicting versions are reconciled later.</li>
+<li><strong>Tunable quorums.</strong> With N replicas, a write waits for W of them and a read for R. &quot;Setting R and W such that R + W &gt; N yields a quorum-like system.&quot;</li>
+</ul>
+<p><strong>Cassandra</strong> borrows the same ideas:</p>
 <ul>
-<li><code>us-east-1</code> (Virginia)</li>
-<li><code>us-west-2</code> (Oregon)</li>
-<li><code>eu-west-1</code> (Dublin)</li>
+<li><strong>Replicas per datacenter.</strong> &quot;NetworkTopologyStrategy requires a specified replication factor for each datacenter in the cluster.&quot;</li>
+<li><strong>Local quorums.</strong> With <code>LOCAL_QUORUM</code>, &quot;a majority of the replicas in the local datacenter ... must respond&quot;, so a write doesn't wait on another region.</li>
+<li><strong>Last write wins.</strong> &quot;Every mutation is timestamped (including deletes) and then the latest version of data is the 'winning' value.&quot; Because correctness &quot;does depend on these clocks&quot;, the docs say to run time synchronization such as NTP.</li>
+<li><strong>Repairing replicas.</strong> Hinted handoff in the write path and read repair in the read path help replicas converge.</li>
 </ul>
-</li>
-<li><strong>Goal</strong>: If a submarine internet cable cuts or an AWS region collapses, any surviving region must immediately serve 100% of global subscriber reads and writes with zero manual intervention.</li>
-</ul>
-<h3 id="2-the-core-problem-at-netflix-scale">2. The Core Problem at Netflix Scale</h3>
-<ul>
-<li>Global synchronous replication across AWS regions adds 70-150ms round-trip latency per write, which is unacceptable for responsive video UI interactions.</li>
-<li>Traditional single-primary replication requires manual failover during outages, risking split-brain scenarios where two databases both believe they are primary.</li>
-</ul>
-<h3 id="3-netflixs-architecture-asynchronous-multi-region-ring">3. Netflix's Architecture: Asynchronous Multi-Region Ring</h3>
-<pre><code>[ User in Los Angeles ]             [ User in Paris ]
-          │                                 │
-          ▼                                 ▼
-   [ Zuul (us-west-2) ]              [ Zuul (eu-west-1) ]
-          │ (Write with LOCAL_QUORUM)       │ (Write with LOCAL_QUORUM)
-          ▼                                 ▼
-[ Cassandra Node West ]             [ Cassandra Node EU ]
-          │                                 │
-          │ ─── Asynchronous Background ─── │
-          │     Inter-Region Replication     │
-          │                                 │
-          ▼                                 ▼
-[ Read Repair / Hinted Handoff / Last-Write-Wins Conflict Resolution ]
-</code></pre>
-<h4 id="a-networktopologystrategy--local_quorum">A. NetworkTopologyStrategy &amp; LOCAL_QUORUM</h4>
-<ul>
-<li>Netflix configures Cassandra using <code>NetworkTopologyStrategy</code> with a replication factor of 3 in each region (<code>us-east: 3, us-west: 3, eu-west: 3</code>).</li>
-<li><strong>Write Path</strong>: Netflix executes writes with consistency level <code>LOCAL_QUORUM</code>.
-<ul>
-<li>A write in <code>us-west-2</code> needs acknowledgment from only 2 out of the 3 local nodes in Oregon. The client receives a success response in <strong>&lt;4ms</strong>.</li>
-<li>The local coordinator node asynchronously streams mutation packets across the AWS inter-region backbone to peer coordinators in Virginia and Dublin.</li>
-</ul>
-</li>
-</ul>
-<h4 id="b-conflict-resolution-via-last-write-wins-lww">B. Conflict Resolution via Last-Write-Wins (LWW)</h4>
-<ul>
-<li>Because multiple regions accept concurrent writes for the same account simultaneously, write conflicts are inevitable.</li>
-<li>Cassandra resolves conflicts using <strong>Last-Write-Wins (LWW)</strong> based on microsecond-precision timestamps generated by the client:</li>
-</ul>
-<div class="math-block">Winning Record = \max(Timestamp_A, Timestamp_B)</div>
-<ul>
-<li><strong>NTP Synchronization</strong>: Netflix synchronizes server clocks using custom Amazon Time Sync microsecond NTP daemons to prevent clock drift from skewing LWW resolutions.</li>
-</ul>
-<h4 id="c-self-healing-hinted-handoff--read-repair">C. Self-Healing: Hinted Handoff &amp; Read Repair</h4>
-<ul>
-<li><strong>Hinted Handoff</strong>: If a replica in Dublin is temporarily unreachable due to network jitter, the Oregon coordinator stores a local &quot;hint&quot; on disk and replays the write once Dublin recovers.</li>
-<li><strong>Read Repair</strong>: During read queries, if Cassandra detects inconsistent values across replicas, it returns the latest value to the client while firing an asynchronous background repair write to update stale replicas.</li>
-</ul>
+<blockquote>
+<p>ℹ️ An earlier version of this page described Netflix's specific Cassandra regions, &quot;&lt;4ms&quot; writes and custom NTP daemons, and gave Spanner a five-nines SLA across &quot;5 continents&quot;. We couldn't find sources we could read for those details, so we described the general Dynamo and Cassandra mechanics from their own documentation instead.</p>
+</blockquote>
 <hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
+<h2 id="side-by-side">⚖️ Side by Side</h2>
 <table>
 <thead>
 <tr>
-<th>Architectural Dimension</th>
-<th>Google Cloud Spanner</th>
-<th>Netflix Cassandra Deployment</th>
+<th style="text-align:left"></th>
+<th style="text-align:left">Spanner</th>
+<th style="text-align:left">Dynamo / Cassandra</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Replication Type</strong></td>
-<td>Synchronous Paxos Quorum</td>
-<td>Asynchronous Multi-Region Gossip</td>
+<td style="text-align:left"><strong>Who accepts a write</strong></td>
+<td style="text-align:left">The Paxos leader for that tablet</td>
+<td style="text-align:left">Any replica the coordinator reaches</td>
 </tr>
 <tr>
-<td><strong>Consistency Guarantee</strong></td>
-<td>Strict Linearizability (External Consistency)</td>
-<td>Eventual Consistency (Tunable Quorum)</td>
+<td style="text-align:left"><strong>When a write is acknowledged</strong></td>
+<td style="text-align:left">When a Paxos majority has it</td>
+<td style="text-align:left">When W replicas (or a local quorum) have it</td>
 </tr>
 <tr>
-<td><strong>Write Latency</strong></td>
-<td>30-70ms (bound by majority quorum RTT)</td>
-<td>2-5ms (bound by local AZ network speed)</td>
+<td style="text-align:left"><strong>Conflicts</strong></td>
+<td style="text-align:left">Prevented: writes are ordered by the leader</td>
+<td style="text-align:left">Expected: resolved by vector clocks (Dynamo) or last-write-wins timestamps (Cassandra)</td>
 </tr>
 <tr>
-<td><strong>Conflict Handling</strong></td>
-<td>Prevented mathematically via TrueTime serialization</td>
-<td>Resolved after-the-fact via Last-Write-Wins</td>
-</tr>
-<tr>
-<td><strong>Disaster Recovery</strong></td>
-<td>Automatic <span class="math-inline">RTO ≈ 0</span>, <span class="math-inline">RPO = 0</span></td>
-<td>Automatic <span class="math-inline">RTO = 0</span>, <span class="math-inline">RPO &lt; replication lag</span></td>
+<td style="text-align:left"><strong>Main cost</strong></td>
+<td style="text-align:left">Write latency includes a round trip to a majority</td>
+<td style="text-align:left">Reads can see stale data unless R + W &gt; N</td>
 </tr>
 </tbody>
 </table>
 <hr />
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Explain the Latency vs Durability Tradeoff</strong>: Synchronous replication guarantees zero data loss (<span class="math-inline">RPO=0</span>) but taxes write latency with network RTTs. Asynchronous replication provides lightning-fast writes (&lt;5ms) but leaves a vulnerability window where unflushed data can be lost if a region burns down.</li>
-<li><strong>Quorum Invariant Formula</strong>: Memorize and state the quorum formula: <span class="math-inline">R + W &gt; N</span>. As long as read quorum plus write quorum exceeds total replica count, you are guaranteed to read the latest written version.</li>
-<li><strong>Masterless vs Primary-Follower</strong>: For active-active multi-region designs, recommend masterless architectures (Cassandra, DynamoDB global tables) with <code>LOCAL_QUORUM</code> writes and conflict resolution strategies (LWW or CRDTs).</li>
+<li><strong>State the quorum rule.</strong> With N replicas, choosing R + W &gt; N makes every read set overlap every write set. Cassandra's docs express the same rule as W + R &gt; RF.</li>
+<li><strong>Synchronous vs. asynchronous is a latency vs. data-loss trade-off.</strong> Waiting for a majority, as Spanner does, costs a round trip but survives losing a minority. Acknowledging locally is faster but can lose recent writes.</li>
+<li><strong>Last-write-wins needs good clocks.</strong> If you propose it, mention clock synchronization, as Cassandra's docs do.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">

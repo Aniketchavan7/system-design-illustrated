@@ -22,178 +22,55 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-database-partitioning--sharding">Real-World Production Deep Dives: Database Partitioning &amp; Sharding</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-database-partitioning-and-sharding">Real-World Case Studies: Database Partitioning and Sharding</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Uber/Netflix</strong> partition databases to scale to billions of records, prevent hot shards, and handle dynamic rebalancing.</p>
+<p>Three ways to split data: Bigtable splits sorted key ranges automatically, Uber's Schemaless hashes rows into a fixed set of shards, and Discord picks a composite partition key that bounds partition size.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-google-uses-partitioning-bigtable-tablet-splitting--range-partitioning">🏢 Deep Dive 1: How Google Uses Partitioning (Bigtable Tablet Splitting &amp; Range Partitioning)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-google-bigtable-range-partitioning-with-automatic-splits">🏢 Deep Dive 1: Google Bigtable, Range Partitioning with Automatic Splits</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://research.google/pubs/bigtable-a-distributed-storage-system-for-structured-data/">Bigtable: A Distributed Storage System for Structured Data</a> (Chang et al., OSDI 2006). Everything in this section comes from the paper.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Google Bigtable.</li>
-<li><strong>Data Volume</strong>: Exabytes of data distributed across hundreds of thousands of commodity machines.</li>
-<li><strong>Operations</strong>: Hundreds of millions of continuous read/write operations per second.</li>
-</ul>
-<h3 id="2-the-core-problem-at-google-scale">2. The Core Problem at Google Scale</h3>
-<ul>
-<li>Static hash sharding (e.g., <code>hash(key) % N</code>) fails when the volume of data grows dynamically:
-<ul>
-<li>If you double the number of servers, every single key must be rehashed and moved across the network, saturating data center switches.</li>
-<li>Hash sharding destroys range query efficiency: scanning keys from <code>user:1000</code> to <code>user:2000</code> requires querying every single shard in the cluster.</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-googles-architecture-dynamic-range-based-tablet-splitting">3. Google's Architecture: Dynamic Range-Based Tablet Splitting</h3>
-<pre><code>[ Table Sorted Lexicographically by Row Key ]
-┌─────────────────────────────────────────────────────────────┐
-│  &quot;aaa&quot; ──&gt; &quot;com.google.a&quot; ──&gt; &quot;com.google.m&quot; ──&gt; &quot;zzz&quot;      │
-└─────────────────────────────────────────────────────────────┘
-                               │
-                 Split into Tablets (~100MB - 200MB)
-                               │
-       ┌───────────────────────┼───────────────────────┐
-       ▼                       ▼                       ▼
- [ Tablet 1: &quot;a&quot; - &quot;g&quot; ] [ Tablet 2: &quot;h&quot; - &quot;p&quot; ] [ Tablet 3: &quot;q&quot; - &quot;z&quot; ]
-       │                       │                       │
-       ▼                       ▼                       ▼
- [ Tablet Server 1 ]     [ Tablet Server 2 ]     [ Tablet Server 3 ]
-</code></pre>
-<h4 id="a-lexicographically-sorted-row-keys">A. Lexicographically Sorted Row Keys</h4>
-<ul>
-<li>Bigtable maintains all rows in sorted alphabetical order by row key.</li>
-<li><strong>Range Queries are Localized</strong>: Scanning a contiguous range of keys reads from a single or small sequence of tablets, achieving maximum sequential disk I/O performance.</li>
-</ul>
-<h4 id="b-dynamic-tablet-splitting">B. Dynamic Tablet Splitting</h4>
-<ul>
-<li>A table starts as a single tablet.</li>
-<li>As rows are inserted and a tablet grows beyond <strong>100MB to 200MB</strong>, the hosting Tablet Server automatically splits the tablet into two equal halves at a middle row key.</li>
-<li>The Tablet Server updates the root metadata in Chubby/Colossus. The <strong>Master Server</strong> detects unbalanced server loads and migrates tablet leases to underutilized servers in the cluster without copying underlying storage files (since files reside in Google's Colossus distributed filesystem).</li>
-</ul>
-<h4 id="c-the-domain-reversal-pattern-preventing-hotspotting">C. The Domain-Reversal Pattern (Preventing Hotspotting)</h4>
-<p>When storing web crawler pages, sequential URLs like:</p>
-<ul>
-<li><code>http://google.com/search</code></li>
-<li><code>http://google.com/images</code></li>
-<li><code>http://google.com/maps</code>
-would all cluster onto the same tablet server, creating a massive write hotspot.</li>
-<li><strong>Google's Inverted Row Key Pattern</strong>:
-Google stores URLs with reversed domain names:
-<code>com.google/search</code>, <code>com.google/images</code>, <code>com.google/maps</code>.
-This clusters pages from the same site together for efficient sub-domain scans while naturally dispersing traffic from millions of distinct domains across the entire cluster.</li>
+<li><strong>Sorted ranges.</strong> &quot;Bigtable maintains data in lexicographic order by row key. The row range for a table is dynamically partitioned. Each row range is called a tablet.&quot;</li>
+<li><strong>Automatic splitting.</strong> &quot;Initially, each table consists of just one tablet. As a table grows, it is automatically split into multiple tablets, each approximately 100-200 MB in size by default.&quot;</li>
+<li><strong>Assignment.</strong> A master assigns tablets to tablet servers, and &quot;Bigtable uses Chubby to keep track of tablet servers&quot;.</li>
+<li><strong>Choosing row keys for locality.</strong> In the paper's web-page table, &quot;pages in the same domain are grouped together into contiguous rows by reversing the hostname components of the URLs&quot;: <code>maps.google.com/index.html</code> is stored under <code>com.google.maps/index.html</code>. This &quot;makes some host and domain analyses more efficient&quot;, because reading one site means scanning one contiguous range.</li>
 </ul>
 <hr />
-<h2 id="deep-dive-2-how-uber-uses-sharding-schemaless-sharded-mysql-architecture">🚙 Deep Dive 2: How Uber Uses Sharding (&quot;Schemaless&quot; Sharded MySQL Architecture)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-2-uber-schemaless-hashing-into-a-fixed-set-of-shards">🚙 Deep Dive 2: Uber Schemaless, Hashing into a Fixed Set of Shards</h2>
+<blockquote>
+<p><strong>Sources:</strong> Jakob Holdgaard Thomsen, <a href="https://www.uber.com/blog/schemaless-part-one-mysql-datastore/">&quot;Designing Schemaless, Uber Engineering's Scalable Datastore Using MySQL&quot;</a> and <a href="https://www.uber.com/blog/schemaless-part-two-architecture/">&quot;The Architecture of Schemaless&quot;</a> (January 2016). Everything in this section comes from those posts.</p>
+</blockquote>
 <ul>
-<li><strong>System</strong>: Uber &quot;Schemaless&quot; (built on top of sharded MySQL clusters).</li>
-<li><strong>Scale</strong>: Hundreds of millions of global ride trips, driver locations, and fare calculations.</li>
-<li><strong>Availability Requirement</strong>: Five-nines. Drivers and riders cannot be stranded due to database failovers.</li>
-</ul>
-<h3 id="2-the-core-problem-at-uber-scale">2. The Core Problem at Uber Scale</h3>
-<ul>
-<li>In 2014, Uber's Postgres database was crumbling under write load during peak commute hours. Secondary index updates and write amplification caused replication lag exceeding minutes.</li>
-<li>Commercial NoSQL databases lacked proven reliability and transactional tooling, while raw MySQL could not scale horizontally on a single instance.</li>
-</ul>
-<h3 id="3-ubers-architecture-schemaless-sharded-mysql">3. Uber's Architecture: Schemaless Sharded MySQL</h3>
-<pre><code>[ Inbound Ride Trip Event ]
-             │
-             ▼
-[ Uber Schemaless Routing Proxy ]
-   ├── Computes Shard ID: MurmurHash(trip_uuid) % 4096
-   ├── Locates Host for Shard in Routing Table
-   └── Dispatches Append-Only Mutation
-             │
-      ┌──────┴──────┐
-      ▼             ▼
-[ MySQL Shard 01 ] [ MySQL Shard 02 ] ... [ MySQL Shard 4096 ]
-  (Master)           (Master)
-    ├── Local Replication to 2 In-Rack Replicas
-    └── Append-Only Cell Data Model
-</code></pre>
-<h4 id="a-fixed-virtual-shards-4096-shards">A. Fixed Virtual Shards (4,096 Shards)</h4>
-<ul>
-<li>Uber established <strong>4,096 virtual shards</strong> partitioned across dozens of physical MySQL server pairs.</li>
-<li>Each trip is assigned a globally unique UUID. The routing proxy determines the shard:</li>
-</ul>
-<div class="math-block">Shard ID = MurmurHash3(trip_uuid) ±od{4096}</div>
-<ul>
-<li><strong>Zero Resharding Required</strong>: As data grew, Uber moved virtual shards across physical database servers without changing the hashing formula.</li>
-</ul>
-<h4 id="b-append-only-cell-model">B. Append-Only Cell Model</h4>
-<p>To completely eliminate row locks and database deadlocks:</p>
-<ul>
-<li>Schemaless never executes SQL <code>UPDATE</code> statements!</li>
-<li>Data is modeled as <strong>immutable cells</strong>:
-<ul>
-<li>Each cell has a <code>row_key</code> (e.g., <code>trip_uuid</code>), <code>column_name</code> (e.g., <code>status</code>), and <code>ref_key</code> (auto-incrementing version number: 1, 2, 3).</li>
-<li>When a ride changes status from <code>REQUESTED</code> to <code>DISPATCHED</code> to <code>COMPLETED</code>, Uber inserts a <strong>new cell version</strong> with an incremented <code>ref_key</code>.</li>
-<li>The latest state is simply the cell with the highest version number.</li>
-</ul>
-</li>
-</ul>
-<h4 id="c-secondary-indexing-via-async-triggers">C. Secondary Indexing via Async Triggers</h4>
-<ul>
-<li>Sharding by <code>trip_uuid</code> makes querying by <code>driver_uuid</code> impossible without querying all 4,096 shards (&quot;scatter-gather&quot;).</li>
-<li>Uber solves this by publishing mutation events to <strong>Kafka</strong> from MySQL binlogs. An indexing worker consumes the event and writes a secondary mapping <code>(driver_uuid -&gt; trip_uuid)</code> into a dedicated index shard.</li>
+<li><strong>Why.</strong> &quot;In early 2014, we were running out of database space due to flourishing trip growth.&quot; The new store &quot;needed to be able to linearly add capacity by adding more servers, a property our Postgres setup lacked.&quot;</li>
+<li><strong>Fixed shard count.</strong> &quot;We divide the data set into a fixed number of shards (typically configured to 4096), which we then map to storage nodes.&quot; A cell goes to a shard &quot;based on the row key of the cell&quot;. Adding capacity means remapping shards to nodes, not changing the shard count.</li>
+<li><strong>Append-only cells.</strong> Schemaless is &quot;append-only sharded MySQL with buffered writes&quot;. Data lives in cells, each &quot;a JSON blob referenced by a row key, a column name, and a reference key called ref key&quot;. To update a cell, &quot;you would write a new cell with a higher ref key&quot;.</li>
+<li><strong>Secondary indexes.</strong> Indexes over fields in the JSON are &quot;eventually consistent&quot;: the index entries are updated when a cell is written, but &quot;it does not happen in the same transaction&quot;. The post adds that &quot;most of the time the lag is well below 20ms&quot;.</li>
 </ul>
 <hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
-<table>
-<thead>
-<tr>
-<th>Architectural Dimension</th>
-<th>Google Bigtable</th>
-<th>Uber Schemaless</th>
-<th>Netflix Cassandra</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Partitioning Strategy</strong></td>
-<td>Range-Based (Lexicographical)</td>
-<td>Hash-Based (Virtual Shards)</td>
-<td>Hash-Based (Consistent Hash Ring)</td>
-</tr>
-<tr>
-<td><strong>Rebalancing Mechanism</strong></td>
-<td>Dynamic automated split &amp; lease move</td>
-<td>Manual/Automated virtual shard remapping</td>
-<td>Node addition distributes vnodes automatically</td>
-</tr>
-<tr>
-<td><strong>Range Query Support</strong></td>
-<td>First-class, highly efficient</td>
-<td>Poor (Requires scatter-gather)</td>
-<td>Only within single partition key</td>
-</tr>
-<tr>
-<td><strong>Hotspot Risk</strong></td>
-<td>High on monotonically increasing keys</td>
-<td>Low (Randomized uniform hashing)</td>
-<td>Low (Cryptographic hashing)</td>
-</tr>
-<tr>
-<td><strong>Underlying Engine</strong></td>
-<td>Google Colossus + SSTables</td>
-<td>Sharded MySQL InnoDB</td>
-<td>Custom Cassandra LSM Engine</td>
-</tr>
-</tbody>
-</table>
+<h2 id="deep-dive-3-discord-a-partition-key-that-bounds-partition-size">💬 Deep Dive 3: Discord, a Partition Key that Bounds Partition Size</h2>
+<blockquote>
+<p><strong>Sources:</strong> <a href="https://discord.com/blog/how-discord-stores-billions-of-messages">How Discord Stores Billions of Messages</a> (Stanislav Vishnevskiy, January 2017); <a href="https://discord.com/blog/how-discord-stores-trillions-of-messages">How Discord Stores Trillions of Messages</a> (Bo Ingram, March 2023). Everything in this section comes from those posts.</p>
+</blockquote>
+<ul>
+<li><strong>First attempt.</strong> Partitioning by <code>channel_id</code> alone made busy channels' partitions grow without limit, and Cassandra warned about &quot;partitions ... over 100MB in size&quot;. Large partitions &quot;put a lot of GC pressure on Cassandra&quot; and &quot;cannot be distributed around the cluster&quot;.</li>
+<li><strong>The fix: add a time bucket.</strong> They found that storing &quot;about 10 days of messages within a bucket&quot; kept partitions &quot;comfortably&quot; under 100 MB. The primary key became <code>((channel_id, bucket), message_id)</code>. Buckets &quot;had to be derivable from the message_id or a timestamp&quot;, which works because Discord's IDs are Snowflakes and therefore &quot;chronologically sortable&quot;.</li>
+<li><strong>Hot partitions later.</strong> By 2023, many people reading the same channel at once could &quot;hotspot a partition&quot;, raising latency for every query on those nodes. Discord added a layer of data services that route all requests for a channel to the same instance and coalesce them: &quot;If multiple users are requesting the same row at the same time, we'll only query the database once.&quot;</li>
+</ul>
+<blockquote>
+<p>ℹ️ An earlier version of this page said Schemaless picks shards with MurmurHash3 and builds indexes from MySQL binlogs via Kafka, said Bigtable holds &quot;exabytes&quot;, and said reversed URLs prevent hotspots. The sources don't support any of that, so we removed it.</p>
+</blockquote>
 <hr />
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Range vs Hash Partitioning Tradeoff</strong>:
-<ul>
-<li>Recommend <strong>Range Partitioning</strong> when the application requires efficient range scans (e.g., time-series data, alphabetized directories), but address the risk of write hotspots on sequential keys.</li>
-<li>Recommend <strong>Hash Partitioning</strong> for uniform write distribution across all nodes when point lookups are the dominant query pattern.</li>
-</ul>
-</li>
-<li><strong>The &quot;Scatter-Gather&quot; Trap</strong>: If you shard by <code>userId</code>, querying by <code>orderDate</code> requires sending the query to <em>every single shard</em> and aggregating results in memory. Explain how to avoid this via <strong>Global Secondary Indexes</strong> maintained asynchronously via message queues.</li>
-<li><strong>Virtual Shards</strong>: Always propose virtual shards (e.g., 4096 fixed logical shards) to simplify future physical rebalancing without rehashing keys.</li>
+<li><strong>Range vs. hash partitioning.</strong> Range partitioning (Bigtable) keeps neighbouring keys together for scans. Hashing into shards (Schemaless) spreads load evenly but makes range scans hit many shards.</li>
+<li><strong>Fix the shard count, move the shards.</strong> Schemaless maps rows to a fixed number of shards and remaps shards to machines as it grows, so a row's shard never changes.</li>
+<li><strong>Design the partition key around partition size.</strong> Discord added a time bucket to its key so no partition grows without bound.</li>
+<li><strong>Plan for hot keys.</strong> Even a good key can't stop many readers hitting one partition. Coalescing duplicate requests, as Discord does, is one answer.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">

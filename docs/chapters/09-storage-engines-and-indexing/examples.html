@@ -22,156 +22,54 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-storage-engines-and-indexing">Real-World Production Deep Dives: Storage Engines and Indexing</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-storage-engines-and-indexing">Real-World Case Studies: Storage Engines and Indexing</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Google</strong> and <strong>Meta/Netflix</strong> implement high-performance storage engines, contrasting LSM-Tree engines (LevelDB, RocksDB) with traditional B-Trees.</p>
+<p>One design, three generations: Bigtable's memtable-and-SSTable engine (based on the 1996 LSM-tree), LevelDB, which is &quot;similar in spirit&quot; to a Bigtable tablet, and RocksDB, which started as a fork of LevelDB.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-google-uses-storage-engines-leveldb--bigtable-lsm-trees">🏢 Deep Dive 1: How Google Uses Storage Engines (LevelDB &amp; Bigtable LSM-Trees)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-bigtables-write-path">🏢 Deep Dive 1: Bigtable's Write Path</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://research.google/pubs/bigtable-a-distributed-storage-system-for-structured-data/">Bigtable: A Distributed Storage System for Structured Data</a> (Chang et al., OSDI 2006). Everything in this section comes from the paper.</p>
+</blockquote>
 <ul>
-<li><strong>Invention</strong>: Google created <strong>LevelDB</strong> and the underlying Bigtable storage engine, which pioneered the Log-Structured Merge-tree (LSM-Tree) revolution in modern distributed systems.</li>
-<li><strong>Usage</strong>: Bigtable tablet servers, Chrome browser IndexedDB engine, and Google's internal web crawling databases.</li>
-<li><strong>Design Priority</strong>: Ultra-high write throughput, efficient disk space utilization, and zero random-write penalties on spinning disks and SSDs.</li>
-</ul>
-<h3 id="2-the-core-problem-at-google-scale-why-b-trees-failed-for-high-write-workloads">2. The Core Problem at Google Scale: Why B-Trees Failed for High-Write Workloads</h3>
-<ul>
-<li>Traditional relational storage engines (MySQL InnoDB, Postgres) use <strong>B+ Trees</strong>.</li>
-<li><strong>The Random I/O Bottleneck</strong>:
-<ul>
-<li>In a B+ Tree, inserting records with random keys requires finding the specific leaf page on disk, modifying it in memory, and writing it back to disk.</li>
-<li>Disk drives (and SSDs) are orders of magnitude slower at random I/O than sequential I/O.</li>
-<li><strong>Write Amplification</strong>: Updating a single 100-byte record forces the database to write an entire 16KB disk page to the Write-Ahead Log (WAL) and the tablespace file. At Google scale (millions of writes/sec), disks saturated immediately.</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-googles-engineering-architecture-the-lsm-tree-engine">3. Google's Engineering Architecture: The LSM-Tree Engine</h3>
-<pre><code>[ Inbound Write: key, value ]
-              │
-    ┌─────────┴─────────┐ (Simultaneous Write)
-    ▼                   ▼
-[ WAL (Sequential) ] [ MemTable (RAM SkipList) ]
-(Crash Recovery)        │
-                        ▼ (When MemTable reaches ~4MB)
-             [ Immutable MemTable ]
-                        │
-                        ▼ (Background Thread Flushes to Disk)
-             ┌──────────────────────┐
-             │ Level 0: SSTable.sst │  &lt;-- Sorted String Table
-             └──────────────────────┘
-                        │
-           Leveled Compaction (Merge Sort)
-                        ▼
-             ┌──────────────────────┐
-             │ Level 1: SSTables    │
-             └──────────────────────┘
-                        ▼
-             ┌──────────────────────┐
-             │ Level 2: SSTables    │
-             └──────────────────────┘
-</code></pre>
-<h4 id="a-the-write-path-100-sequential">A. The Write Path (100% Sequential)</h4>
-<ol>
-<li>Every write is appended sequentially to the <strong>Write-Ahead Log (WAL)</strong> on disk (guaranteeing durability with minimal disk head movement).</li>
-<li>The write is inserted into the <strong>MemTable</strong> (an in-memory concurrent skip list that keeps entries sorted by key).</li>
-<li>The client receives an instant acknowledgment! No random disk seeks occur on the write path.</li>
-</ol>
-<h4 id="b-sstables-sorted-string-tables">B. SSTables (Sorted String Tables)</h4>
-<ul>
-<li>When the MemTable reaches its capacity threshold (typically 4MB - 64MB), it is converted to an <strong>Immutable MemTable</strong>.</li>
-<li>A background thread flushes it to disk as an <strong>SSTable</strong> file at Level 0.</li>
-<li>An SSTable file consists of key-value pairs sorted in strict key order, appended with a trailing index block and a <strong>Bloom Filter</strong>.</li>
-</ul>
-<h4 id="c-the-read-path--bloom-filters">C. The Read Path &amp; Bloom Filters</h4>
-<p>To read a key:</p>
-<ol>
-<li>Search active <strong>MemTable</strong> in RAM.</li>
-<li>Search <strong>Immutable MemTable</strong> in RAM.</li>
-<li>Search disk SSTables from Level 0 down to Level <span class="math-inline">N</span>.</li>
-</ol>
-<ul>
-<li><strong>The Bloom Filter Optimization</strong>: Reading multiple SSTables on disk could cause high read latency. LevelDB maintains a compact <strong>in-memory Bloom Filter</strong> for every SSTable file. If the Bloom filter says a key is <em>not</em> present (with zero false negatives), LevelDB skips that disk file entirely, reducing disk reads to an average of <strong>1 seek per lookup</strong>.</li>
-</ul>
-<h4 id="d-leveled-compaction">D. Leveled Compaction</h4>
-<ul>
-<li>As SSTables accumulate in Level <span class="math-inline">i</span>, their aggregate size exceeds the level limit.</li>
-<li>A background compaction thread picks an SSTable from Level <span class="math-inline">i</span>, reads overlapping SSTables from Level <span class="math-inline">i+1</span>, performs an efficient <strong>multi-way merge sort</strong>, discards deleted/overwritten records, and writes new compacted SSTables to Level <span class="math-inline">i+1</span>.</li>
+<li><strong>Writes.</strong> Updates are &quot;committed to a commit log&quot;, and &quot;the recently committed ones are stored in memory in a sorted buffer called a memtable; the older updates are stored in a sequence of SSTables.&quot;</li>
+<li><strong>Compactions.</strong> When the memtable reaches a threshold it is frozen and written out as an SSTable (&quot;minor compaction&quot;). A &quot;merging compaction&quot; combines a few SSTables and the memtable into one. A merging compaction that rewrites everything into a single SSTable is a &quot;major compaction&quot;, and only that one removes deleted data for good.</li>
+<li><strong>Reads.</strong> A read uses &quot;a merged view of the sequence of SSTables and the memtable&quot;. To avoid touching every SSTable on disk, clients can ask for <strong>Bloom filters</strong>, which tell you whether an SSTable might contain the row and column you want. They're opt-in, per locality group.</li>
+<li><strong>Where the idea comes from.</strong> The paper says this design &quot;is analogous to the way that the Log-Structured Merge Tree stores updates to index data&quot;, citing O'Neil et al. (1996).</li>
 </ul>
 <hr />
-<h2 id="deep-dive-2-how-meta--netflix-use-storage-engines-rocksdb-in-production">🔬 Deep Dive 2: How Meta &amp; Netflix Use Storage Engines (RocksDB in Production)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-2-leveldb-levels-of-sorted-files">🗂️ Deep Dive 2: LevelDB, Levels of Sorted Files</h2>
+<blockquote>
+<p><strong>Sources:</strong> LevelDB <a href="https://github.com/google/leveldb/blob/main/doc/impl.md">implementation notes</a> and <a href="https://github.com/google/leveldb">README</a> (authors Sanjay Ghemawat and Jeff Dean). Everything in this section comes from those.</p>
+</blockquote>
 <ul>
-<li><strong>Origin</strong>: Meta (Facebook) forked Google's LevelDB to create <strong>RocksDB</strong>, optimizing it for multi-core server CPUs and ultra-fast NVMe flash storage.</li>
-<li><strong>Meta Scale</strong>: Backs MyRocks (MySQL on RocksDB) saving 50% storage space for Facebook's user databases; backs ZippyDB (distributed key-value store handling billions of QPS).</li>
-<li><strong>Netflix Scale</strong>: Embedded as the local state storage engine in <strong>Apache Flink</strong> and <strong>Netflix Mantis</strong> stream processing engines, maintaining stateful session counters across millions of concurrent video streams.</li>
+<li><strong>Lineage.</strong> &quot;The implementation of leveldb is similar in spirit to the representation of a single Bigtable tablet.&quot;</li>
+<li><strong>Writes.</strong> Updates go to a log file, with a copy in memory (the memtable). &quot;When the log file reaches a pre-determined size (approximately 4MB by default), it is converted to a sorted table&quot; in level 0.</li>
+<li><strong>Levels.</strong> Files in level 0 &quot;may contain overlapping keys&quot;, but files in other levels &quot;have distinct non-overlapping key ranges&quot;. Level 0 is compacted when it holds more than four files. Level L is compacted when it exceeds 10^L MB (10 MB for level 1, 100 MB for level 2, and so on).</li>
+<li><strong>Compaction.</strong> &quot;The compaction picks a file from level L and all overlapping files from the next level L+1&quot; and merges them. &quot;Compactions drop overwritten values&quot;. Deletion markers are dropped only when no deeper level could still hold the key.</li>
 </ul>
-<h3 id="2-the-core-innovations-in-rocksdb">2. The Core Innovations in RocksDB</h3>
-<ol>
-<li><strong>Threaded Multi-Queue Compaction</strong>:
-<ul>
-<li>Google LevelDB used a single background compaction thread. On modern 64-core cloud servers with fast NVMe drives, compaction fell behind write traffic (&quot;write stall&quot;).</li>
-<li>RocksDB introduced concurrent multi-threaded compactions, allowing independent levels and key ranges to compact in parallel.</li>
-</ul>
-</li>
-<li><strong>Column Families</strong>:
-<ul>
-<li>Provides logical partitioning within a single database instance. Each Column Family has its own MemTables and SSTables, but shares the same write-ahead log for atomic multi-family transactions.</li>
-</ul>
-</li>
-<li><strong>Prefix Bloom Filters</strong>:
-<ul>
-<li>Standard Bloom filters only support exact point lookups (<code>key == &quot;user_123&quot;</code>).</li>
-<li>RocksDB supports <strong>Prefix Bloom Filters</strong>, enabling fast range scans on compound keys (e.g., <code>scan(&quot;user_123:*&quot;)</code>).</li>
-</ul>
-</li>
-</ol>
 <hr />
-<h2 id="comparative-architecture-matrix-b-trees-vs-lsm-trees">⚖️ Comparative Architecture Matrix: B+ Trees vs LSM-Trees</h2>
-<table>
-<thead>
-<tr>
-<th>Architectural Dimension</th>
-<th>B+ Tree Engines (InnoDB / PostgreSQL)</th>
-<th>LSM-Tree Engines (LevelDB / RocksDB)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Primary Workload</strong></td>
-<td>Read-Heavy, Transactional, In-Place Updates</td>
-<td>Write-Heavy, Streaming Ingestion, Append-Only</td>
-</tr>
-<tr>
-<td><strong>Write Path</strong></td>
-<td>In-place random page writes (High Write Amplification)</td>
-<td>Sequential WAL append + MemTable (Low Write Amplification)</td>
-</tr>
-<tr>
-<td><strong>Read Path</strong></td>
-<td>Predictable 1-3 page reads via B+ tree depth</td>
-<td>Variable; relies heavily on Bloom filters &amp; cache</td>
-</tr>
-<tr>
-<td><strong>Disk Space Efficiency</strong></td>
-<td>30-50% page fragmentation overhead</td>
-<td>Highly compacted sequential blocks (saves 40-60% disk space)</td>
-</tr>
-<tr>
-<td><strong>Background Overhead</strong></td>
-<td>Minimal (page checkpointing / dirty page flushing)</td>
-<td>High background CPU &amp; I/O for continuous compactions</td>
-</tr>
-</tbody>
-</table>
+<h2 id="deep-dive-3-rocksdb-leveldb-tuned-for-flash">🔬 Deep Dive 3: RocksDB, LevelDB Tuned for Flash</h2>
+<blockquote>
+<p><strong>Source:</strong> the <a href="https://github.com/facebook/rocksdb/wiki/RocksDB-Overview">RocksDB Overview</a> wiki page. Everything in this section comes from it.</p>
+</blockquote>
+<ul>
+<li><strong>Origin.</strong> &quot;RocksDB started at Facebook as a storage engine for server workloads on various storage media&quot;, with &quot;the initial focus on fast storage (especially Flash storage)&quot;. &quot;The initial code was forked from open source leveldb 1.5.&quot;</li>
+<li><strong>Choose your trade-off.</strong> RocksDB offers several compaction styles: Level Style (the default), Universal Style, which &quot;typically results in lower write-amplification but higher space- and read-amplification&quot;, and FIFO Style, for cache-like data.</li>
+<li><strong>Other additions.</strong> Column families partition one database into several, compactions &quot;may occur in multiple threads&quot;, and a prefix extractor adds prefix hashes to the Bloom filter for prefix scans.</li>
+</ul>
+<blockquote>
+<p>ℹ️ An earlier version of this page said Google's LevelDB &quot;pioneered&quot; the LSM-tree, which predates it by more than a decade, and quoted MyRocks storage savings, ZippyDB throughput and Netflix's use of RocksDB in Flink and Mantis. None of the sources above cover those, so we removed them.</p>
+</blockquote>
 <hr />
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>When to Choose LSM-Trees</strong>: If designing a system with massive write ingestion (e.g., Time-Series Metrics, Messaging Logs, IoT Telemetry, Financial Ledgers), explicitly choose an <strong>LSM-tree storage engine (RocksDB, Cassandra, Bigtable)</strong> over a B+ Tree.</li>
-<li><strong>Explain Write Amplification</strong>: Impress interviewers by explaining <em>Write Amplification Factor (WAF)</em>: <span class="math-inline">WAF = (Bytes Written to Storage) / (Bytes Written by Application)</span>. LSM-trees minimize WAF during initial writes by converting random writes into sequential disk streams.</li>
-<li><strong>The Role of Bloom Filters</strong>: Always explain that Bloom filters in LSM-trees prevent disastrous read penalties by checking whether a key definitely does not exist in an SSTable before performing expensive disk I/O.</li>
+<li><strong>LSM-trees turn random writes into sequential ones.</strong> Buffer writes in memory, flush sorted files, and merge them in the background.</li>
+<li><strong>Compaction is the cost.</strong> Every byte may be rewritten several times as files merge (write amplification). RocksDB's compaction styles let you trade that against space and read cost.</li>
+<li><strong>Bloom filters keep reads cheap.</strong> They let a read skip files that definitely don't contain the key.</li>
 </ol>
 </article></main>
   <footer class="course-footer container">
