@@ -22,199 +22,52 @@
       <a href="../../flashcards.html">Flashcards</a>
     </nav>
   </header>
-  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-production-deep-dives-cache-eviction-and-invalidation">Real-World Production Deep Dives: Cache Eviction and Invalidation</h1>
+  <main id="main" class="container chapter-reader"><nav class="chapter-actions" aria-label="Chapter links"><a href="../../library.html">Back to topic library</a> · <a href="index.html">Back to chapter</a> · <a href="../../flashcards.html">Practice in Flashcards</a></nav><article><h1 id="real-world-case-studies-cache-eviction-and-invalidation">Real-World Case Studies: Cache Eviction and Invalidation</h1>
 <blockquote>
-<p>⚠️ <strong>Not yet source-checked.</strong> These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Add it to the tracking issue</a>. Sourced fixes are the most welcome contribution here.</p>
+<p>✅ <strong>Source-checked.</strong> Each deep dive names its source, and we kept only what that source says. Found an error, or something the source doesn't support? <a href="https://github.com/Aniketchavan7/system-design-illustrated/issues/9">Report it on the tracking issue</a>.</p>
 </blockquote>
 <blockquote>
-<p>Deep-dive architectural dissections of how <strong>Meta</strong> and <strong>Google</strong> solve the hardest problems in distributed caching: cache invalidation consistency, race condition prevention, and state-of-the-art eviction algorithms (W-TinyLFU).</p>
+<p>How Facebook keeps memcache consistent with its databases (leases, an invalidation pipeline and a standby &quot;Gutter&quot; pool), and how the Caffeine library decides which entries to keep with W-TinyLFU.</p>
 </blockquote>
 <hr />
-<h2 id="deep-dive-1-how-meta-handles-cache-invalidation-mcrouter-leases--the-invalidation-pipeline">👥 Deep Dive 1: How Meta Handles Cache Invalidation (mcrouter, Leases &amp; The Invalidation Pipeline)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
+<h2 id="deep-dive-1-facebook-memcache-keeping-caches-fresh">👥 Deep Dive 1: Facebook Memcache, Keeping Caches Fresh</h2>
+<blockquote>
+<p><strong>Source:</strong> <a href="https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala">Scaling Memcache at Facebook</a> (Nishtala et al., NSDI 2013). Everything in this section comes from the paper.</p>
+</blockquote>
+<p>Facebook's memcache deployment &quot;handles billions of requests per second and holds trillions of items&quot;.</p>
+<h3 id="leases-stale-sets-and-thundering-herds">Leases: stale sets and thundering herds</h3>
+<p>Leases solve two problems. A <strong>stale set</strong> happens when a slow client writes an outdated value back into the cache after a newer one was invalidated. A <strong>thundering herd</strong> happens when a popular key is invalidated and many clients hit the database at once.</p>
 <ul>
-<li><strong>System</strong>: Meta's Memcached Fleet &amp; mcrouter.</li>
-<li><strong>Scale</strong>: Thousands of Memcached servers holding petabytes of user data in RAM, handling billions of requests per second.</li>
-<li><strong>The Stakes</strong>: If a user deletes a photo or updates a privacy setting from &quot;Public&quot; to &quot;Friends Only&quot;, the cache <em>must</em> be invalidated globally. Serving stale data from cache violates user privacy and legal compliance.</li>
+<li>On a miss, memcached gives the client a lease: &quot;a 64-bit token bound to the specific key the client originally requested&quot;. The client must present it when it writes the value back. If the key was invalidated in the meantime, the lease is no longer valid and the stale write is rejected.</li>
+<li>Each server returns a token for a key &quot;only once every 10 seconds&quot;. Other clients asking in that window are told to wait briefly and retry, by which time &quot;the data is often present in cache&quot;.</li>
 </ul>
-<h3 id="2-the-core-problem-at-meta-scale-the-invalidation-race-condition">2. The Core Problem at Meta Scale: The Invalidation Race Condition</h3>
-<p>Consider a classic Cache-Aside race condition without coordination:</p>
-<ol>
-<li>Thread 1 reads key <code>user_100</code> from Cache -&gt; <strong>Cache Miss</strong>.</li>
-<li>Thread 1 queries Database -&gt; Gets old value (<code>v1</code>).</li>
-<li>Thread 2 updates Database with new value (<code>v2</code>).</li>
-<li>Thread 2 sends an Invalidation command to Cache -&gt; Key <code>user_100</code> is evicted.</li>
-<li>Thread 1 (which lagged due to a GC pause or network delay) finally writes its stale value <code>v1</code> into Cache!</li>
-</ol>
+<h3 id="invalidation-from-the-databases-commit-log">Invalidation from the database's commit log</h3>
+<p>&quot;We deploy invalidation daemons (named mcsqueal) on every database. Each daemon inspects the SQL statements that its database commits, extracts any deletes, and broadcasts these deletes&quot; to the memcache deployment. Because invalidations come from what the database actually committed, a web server crashing mid-request can't leave stale data behind. The web server that made a change also invalidates its own cluster directly, so the user sees their own write.</p>
+<h3 id="gutter-a-standby-pool-for-failed-servers">Gutter: a standby pool for failed servers</h3>
+<p>When a memcached server stops responding, its traffic goes to a small pool called Gutter, rather than straight to the database. &quot;Gutter accounts for approximately 1% of the memcached servers in a cluster&quot;, and &quot;entries in Gutter expire quickly&quot;. Requests are routed by <strong>mcrouter</strong>, a proxy that &quot;presents a memcached server interface and routes the requests/replies to/from other servers&quot;.</p>
+<hr />
+<h2 id="deep-dive-2-caffeine-choosing-what-to-keep-with-w-tinylfu">☕ Deep Dive 2: Caffeine, Choosing What to Keep with W-TinyLFU</h2>
+<blockquote>
+<p><strong>Sources:</strong> Einziger, Friedman and Manes, <a href="https://arxiv.org/abs/1512.00727">&quot;TinyLFU: A Highly Efficient Cache Admission Policy&quot;</a> (2015), and the Caffeine project's <a href="https://github.com/ben-manes/caffeine">README</a>, <a href="https://github.com/ben-manes/caffeine/wiki/Efficiency">Efficiency</a> and <a href="https://github.com/ben-manes/caffeine/wiki/Design">Design</a> pages. Everything in this section comes from those.</p>
+</blockquote>
+<p>Caffeine is an open-source Java cache &quot;using a Google Guava inspired API&quot;. Its README lists projects it powers, including Cassandra, Kafka, HBase and Solr.</p>
 <ul>
-<li><strong>Catastrophe</strong>: The cache now holds stale data <code>v1</code> <em>indefinitely</em> until the TTL expires or another write occurs.</li>
-</ul>
-<h3 id="3-metas-engineering-solution-leases--invalidation-daemons">3. Meta's Engineering Solution: Leases &amp; Invalidation Daemons</h3>
-<pre><code>[ Web Application Server ]
-           │
-           ▼
-     [ mcrouter ]  &lt;-- Memcached Routing Proxy
-           │
-     ┌─────┴───────────────────────┐
-     ▼                             ▼
-[ Memcached Server ]     [ MySQL Primary Database ]
-  └── Issues 64-bit Lease Token    │
-                                   ▼ (Database Commit)
-                        [ MySQL Binary Log (Binlog) ]
-                                   │
-                                   ▼
-                       [ Wormhole Invalidation Daemon ]
-                                   │
-                                   ▼ (Reliable Invalidation Broadcast)
-                        [ mcrouter / Memcached ]
-</code></pre>
-<h4 id="a-lease-tokens-defeating-stale-race-conditions">A. Lease Tokens (Defeating Stale Race Conditions)</h4>
-<ul>
-<li>When a client experiences a cache miss, the Memcached server does <em>not</em> merely return <code>NULL</code>.</li>
-<li>Instead, Memcached issues a <strong>64-bit Lease Token</strong> bound to that specific key:
-<ul>
-<li>If a database write occurs while the client is querying the DB, the cache invalidation cancels the active lease token on the server.</li>
-<li>When the slow client attempts to write <code>v1</code> back into the cache, it presents its expired lease token.</li>
-<li>Memcached <strong>rejects the write</strong>, preventing stale data from poisoning the cache!</li>
-</ul>
-</li>
-</ul>
-<h4 id="b-wormhole-asynchronous-binlog-invalidation-pipeline">B. Wormhole: Asynchronous Binlog Invalidation Pipeline</h4>
-<ul>
-<li>Application servers <em>never</em> invalidate remote caches directly over HTTP (web servers can crash midway, leaving stale caches).</li>
-<li>Meta engineered <strong>Wormhole</strong>, an asynchronous invalidation pipeline:
-<ol>
-<li>All database mutations commit to the <strong>MySQL Binary Log (WAL)</strong>.</li>
-<li>The Wormhole daemon tails the binlog on the database server.</li>
-<li>Whenever a row update is committed, Wormhole extracts the modified primary keys and publishes invalidation messages across high-speed internal network buses to <code>mcrouter</code> instances in all global regions.</li>
-<li>Median invalidation latency across worldwide regions is <strong>under 50 milliseconds</strong>.</li>
-</ol>
-</li>
-</ul>
-<h4 id="c-gutter-pools-mitigating-server-outages">C. Gutter Pools (Mitigating Server Outages)</h4>
-<ul>
-<li>If a Memcached server crashes, routing requests directly to MySQL would cause immediate database overload (&quot;thundering herd&quot;).</li>
-<li>Meta directs traffic for dead cache nodes to a dedicated <strong>Gutter Pool</strong> (a small backup cluster of cache machines). Gutter machines store entries with very short TTLs (e.g., 60 seconds), absorbing traffic spikes while the dead primary node reboots.</li>
+<li><strong>Admission, not just eviction.</strong> When the cache is full, TinyLFU compares the newcomer with the entry that would be evicted, and keeps whichever has &quot;the highest historic usage&quot;. A one-off scan can't push out entries that are used often.</li>
+<li><strong>A cheap frequency estimate.</strong> Frequencies are kept &quot;in a 4-bit CountMinSketch, which requires 8 bytes per cache entry to be accurate&quot;.</li>
+<li><strong>Forgetting old popularity.</strong> Every addition increments a counter. &quot;Once this counter reaches the sample size (W), we divide it and all other counters in the approximation sketch by 2&quot;, so yesterday's hits fade.</li>
+<li><strong>W-TinyLFU.</strong> New entries always land in a small LRU <strong>window</strong>. The window's victim then competes, through TinyLFU, for a place in the <strong>main cache</strong>, a segmented LRU with &quot;80% of the space ... allocated to hot items&quot;. In Caffeine 2.0 the window was &quot;1% of the total cache size&quot;. Current versions size it automatically with &quot;hill climbing&quot;, favouring a larger window for recency-heavy workloads.</li>
 </ul>
 <hr />
-<h2 id="deep-dive-2-how-google-uses-eviction-algorithms-caffeine--w-tinylfu">🏢 Deep Dive 2: How Google Uses Eviction Algorithms (Caffeine &amp; W-TinyLFU)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
-<ul>
-<li><strong>System</strong>: Caffeine Cache (powering Google Guava, Cassandra, Spring, and Google Cloud services).</li>
-<li><strong>The Challenge</strong>: Traditional eviction algorithms fail in modern high-throughput environments:
-<ul>
-<li><strong>LRU (Least Recently Used)</strong>: Suffers from &quot;Scan Pollution&quot;. If a background batch job reads 100,000 cold records sequentially, LRU evicts the entire working set of hot items.</li>
-<li><strong>LFU (Least Frequently Used)</strong>: Items that were popular yesterday (e.g., a viral video) remain locked in memory with sky-high frequency counters long after interest fades, preventing new trending items from entering the cache.</li>
-</ul>
-</li>
-</ul>
-<h3 id="2-googles-solution-window-tinylfu-w-tinylfu">2. Google's Solution: Window TinyLFU (W-TinyLFU)</h3>
-<pre><code>[ Inbound Read / Insert Key ]
-             │
-             ▼
-┌───────────────────────────┐
-│     Window Cache (LRU)    │  &lt;-- Holds 1% of capacity (Absorbs burst traffic)
-└───────────────────────────┘
-             │
-             ▼ (Item candidate for eviction from Window)
-   [ TinyLFU Admission Policy ]  &lt;-- 4-Bit Count-Min Sketch Frequency Filter
-             │
-      ┌──────┴──────────────────────┐
-      ▼ (Higher Frequency)          ▼ (Lower Frequency)
-┌───────────────────────────┐    [ Discarded from Cache ]
-│     Main Cache (SLRU)     │
-│ ├── Probationary (20%)    │
-│ └── Protected (79%)       │
-└───────────────────────────┘
-</code></pre>
-<h4 id="a-the-admission-policy-the-bouncer-pattern">A. The Admission Policy (The Bouncer Pattern)</h4>
-<ul>
-<li>Traditional caches always accept incoming items and evict the oldest.</li>
-<li>W-TinyLFU asks: <strong>&quot;Is the incoming item more likely to be accessed again than the least valuable item currently in the cache?&quot;</strong></li>
-<li>If the incoming item has lower historical frequency than the eviction candidate, it is rejected at the door, preserving hot memory.</li>
-</ul>
-<h4 id="b-4-bit-count-min-sketch-with-periodic-aging">B. 4-Bit Count-Min Sketch with Periodic Aging</h4>
-<ul>
-<li>Storing full integer counters for millions of keys in LFU would consume 4-8 bytes of metadata per key (multiplying RAM costs).</li>
-<li>Caffeine uses a <strong>Count-Min Sketch</strong> with 4-bit counters:
-<ul>
-<li>Consumes only <strong>8 bits of overhead per key</strong>.</li>
-<li>Maximum counter value is 15.</li>
-<li><strong>Periodic Aging</strong>: When total accesses reach a sample size (<span class="math-inline">W</span>), all 4-bit counters are right-shifted by 1 (<span class="math-inline">halved</span>). Historical frequency decays exponentially, allowing historical viral hits to make way for new trending data.</li>
-</ul>
-</li>
-</ul>
-<h4 id="c-segmented-lru-slru-in-the-main-cache">C. Segmented LRU (SLRU) in the Main Cache</h4>
-<ul>
-<li>Items that pass admission enter the <strong>Probationary Segment</strong> (20% of Main Cache).</li>
-<li>If accessed again while in Probation, they are promoted to the <strong>Protected Segment</strong> (80% of Main Cache), completely immune from eviction until capacity forces demotion back to Probation.</li>
-</ul>
-<hr />
-<h2 id="comparative-architecture-matrix">⚖️ Comparative Architecture Matrix</h2>
-<table>
-<thead>
-<tr>
-<th>Architectural Dimension</th>
-<th>Meta (mcrouter &amp; Wormhole)</th>
-<th>Google / Caffeine (W-TinyLFU)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Primary Domain</strong></td>
-<td>Distributed Remote Invalidation (L6/L7 Network)</td>
-<td>In-Memory Local Heap Eviction (Process RAM)</td>
-</tr>
-<tr>
-<td><strong>Consistency Strategy</strong></td>
-<td>Binlog tailing + 64-bit Lease Tokens</td>
-<td>Time-based TTL + High-precision Admission Policy</td>
-</tr>
-<tr>
-<td><strong>Eviction Algorithm</strong></td>
-<td>Standard LRU per Slab Allocation class</td>
-<td>Window TinyLFU (Probabilistic Count-Min Sketch)</td>
-</tr>
-<tr>
-<td><strong>Scan Resistance</strong></td>
-<td>Dependent on application TTL tuning</td>
-<td>Near-perfect scan resistance via admission filter</td>
-</tr>
-<tr>
-<td><strong>Failure Recovery</strong></td>
-<td>Gutter Pool absorbs dead node traffic</td>
-<td>Direct fallback to remote cache / persistent store</td>
-</tr>
-</tbody>
-</table>
-<hr />
+<blockquote>
+<p>ℹ️ An earlier version of this page credited Caffeine and W-TinyLFU to Google and said Caffeine &quot;powers Google Guava&quot;. Caffeine is an independent project whose API was inspired by Guava's. It also called Facebook's invalidation pipeline &quot;Wormhole&quot;, but the memcache paper describes the mcsqueal daemons. And it described Netflix's cross-region invalidation through Kafka with TTL jitter, which we couldn't source. We removed all three.</p>
+</blockquote>
 <h2 id="system-design-interview-takeaways">🎯 System Design Interview Takeaways</h2>
 <ol>
-<li><strong>Explain the Invalidation Race Condition</strong>: Differentiate yourself in an interview by sketching the race condition where a stale database read overwrites an invalidation. Propose <strong>Lease Tokens</strong> (or version timestamps) to solve it.</li>
-<li><strong>Never Invalidate Synchronously from Web Servers</strong>: Recommend asynchronous cache invalidation via database binlog CDC (Change Data Capture) pipelines like Debezium or Meta's Wormhole to ensure zero dropped invalidations on server crashes.</li>
-<li><strong>Caffeine / W-TinyLFU for In-Memory Caches</strong>: When designing application-level caching, cite <strong>Window TinyLFU</strong> over plain LRU to demonstrate modern knowledge of scan-resistant cache eviction.</li>
+<li><strong>Draw the stale-set race.</strong> A reader misses, reads the old value, a writer updates and invalidates, then the reader writes the old value back. Leases (or version checks) stop the last step.</li>
+<li><strong>Invalidate from the source of truth.</strong> Tailing what the database committed, as mcsqueal does, can't miss an update the way a crashed web server can.</li>
+<li><strong>Protect the database when a cache node dies.</strong> A small standby pool with short TTLs, like Gutter, absorbs the misses.</li>
+<li><strong>Eviction is also an admission decision.</strong> W-TinyLFU only admits a new entry if it's likely to be used more than the one it would replace.</li>
 </ol>
-<hr />
-<h2 id="deep-dive-3-how-netflix-handles-cache-invalidation-cross-region-kafka--ttl-jitter">🎬 Deep Dive 3: How Netflix Handles Cache Invalidation (Cross-Region Kafka &amp; TTL Jitter)</h2>
-<h3 id="1-production-context--scale">1. Production Context &amp; Scale</h3>
-<ul>
-<li><strong>System</strong>: Netflix EVCache Invalidation Pipeline.</li>
-<li><strong>Scale</strong>: Thousands of AWS EC2 instances replicated across 3 global AWS regions.</li>
-</ul>
-<h3 id="2-architecture-probabilistic-ttl-jitter--kafka-broadcasts">2. Architecture: Probabilistic TTL Jitter &amp; Kafka Broadcasts</h3>
-<ul>
-<li><strong>TTL Jitter</strong>: If 100,000 cached records are inserted with a static TTL of 3,600 seconds, they all expire at the exact same millisecond, triggering a massive <strong>Cache Stampede</strong>.
-<ul>
-<li>Netflix adds <strong>Randomized TTL Jitter</strong> (e.g., <span class="math-inline">TTL = 3600 ± random(0, 300)</span> seconds), smoothing cache expirations evenly across time.</li>
-</ul>
-</li>
-<li><strong>Cross-Region Invalidation</strong>:
-<ul>
-<li>When a user updates their password or subscription plan, the mutation emits an invalidation event to <strong>Apache Kafka</strong>.</li>
-<li>Kafka consumers in all peer AWS regions immediately evict the key from their local EVCache clusters in under 100 milliseconds.</li>
-</ul>
-</li>
-</ul>
 </article></main>
   <footer class="course-footer container">
     <a href="../../#lessons">All lessons</a>
