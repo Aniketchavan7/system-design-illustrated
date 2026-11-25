@@ -1,6 +1,6 @@
 # DNS in production
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked, with one gap.** We checked every claim against its linked source, except the Netflix tech blog post, which blocks automated reading. Treat that sentence as unverified until someone confirms it. Found an error, or can confirm the Netflix post? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
 ## Google Public DNS · Recursive caching and anycast
 

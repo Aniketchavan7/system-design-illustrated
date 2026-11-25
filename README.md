@@ -188,7 +188,7 @@ Each module includes a `REAL_WORLD_EXAMPLES.md` companion. Most aren't source-ch
 | **01** | Client–Server Networking | **Google** QUIC deployment · **Netflix** Zuul 2 gateway | [Read Deep Dive](./01-client-server-networking/REAL_WORLD_EXAMPLES.md) |
 | **02** | Domain Name System (DNS) | **Google Public DNS** caching and anycast · **Route 53** failover · **Netflix** capacity planning | [Read Deep Dive](./02-domain-name-system/REAL_WORLD_EXAMPLES.md) |
 | **03** | Load Balancing | **Google** Maglev · **Netflix** client-side balancing and overload protection | [Read Deep Dive](./03-load-balancing/REAL_WORLD_EXAMPLES.md) |
-| **04** | API Gateways & Proxies | **Netflix** Zuul 2/3 Async EventLoop Gateway vs **Google** Envoy Service Mesh & xDS Control Plane | [Read Deep Dive](./04-api-gateways-and-proxies/REAL_WORLD_EXAMPLES.md) |
+| **04** | API Gateways & Proxies | **Netflix** Zuul filter chain on Netty vs **Envoy** (built at Lyft) configured over xDS, as in Google Cloud Service Mesh (source-checked) | [Read Deep Dive](./04-api-gateways-and-proxies/REAL_WORLD_EXAMPLES.md) |
 | **05** | Rate Limiting | **Stripe** rate limiters and load shedders (source-checked) vs **Netflix** Adaptive Concurrency Limits (Little's Law) | [Read Deep Dive](./05-rate-limiting/REAL_WORLD_EXAMPLES.md) |
 | **06** | SQL vs NoSQL Databases | **Google** Spanner (TrueTime Relational ACID) vs **Netflix** Polyglot Cassandra & Aurora | [Read Deep Dive](./06-relational-and-non-relational-databases/REAL_WORLD_EXAMPLES.md) |
 | **07** | Database Replication | **Google** Spanner Multi-Paxos Quorums vs **Netflix** Multi-Region Active-Active Cassandra | [Read Deep Dive](./07-database-replication/REAL_WORLD_EXAMPLES.md) |

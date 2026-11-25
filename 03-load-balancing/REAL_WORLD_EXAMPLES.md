@@ -1,6 +1,6 @@
 # Load balancing in production
 
-> ⚠️ **Not yet source-checked.** These case studies summarize public engineering posts and talks, and some details may be simplified or wrong. Before you repeat a specific number or design in an interview, check it against the company's own write-up. Found an error, or a source that confirms a section? [Add it to the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9). Sourced fixes are the most welcome contribution here.
+> ✅ **Source-checked, with one gap.** We checked every claim against its linked source, except the 2020 Netflix tech blog post on load shedding, which blocks automated reading. Treat that sentence as unverified until someone confirms it. Found an error, or can confirm the Netflix post? [Report it on the tracking issue](https://github.com/Aniketchavan7/system-design-illustrated/issues/9).
 
 ## Google · Maglev
 
@@ -10,7 +10,7 @@ Google's 2016 NSDI paper describes Maglev as a software network load balancer. R
 
 ## Netflix · Routing and overload
 
-Netflix's original Zuul write-up describes using Ribbon for outbound client-side load balancing. Its November 2020 engineering post describes how Zuul shed lower-priority requests progressively under pressure to protect playback. The team reported that its streaming availability metric held steady during the incident shown in the post. [Netflix's original Zuul write-up](https://netflixtechblog.com/announcing-zuul-edge-service-in-the-cloud-ab3af5be08ee) · [Netflix's 2020 load-shedding write-up](https://netflixtechblog.com/keeping-netflix-reliable-using-prioritized-load-shedding-6cc827b02f94)
+Netflix's original Zuul design sends each request to the origin "using Apache HttpClient or Netflix Ribbon", Netflix's client-side load balancer ([Zuul 1 wiki](https://github.com/Netflix/zuul/wiki/How-it-Works)). Its November 2020 engineering post describes how Zuul shed lower-priority requests progressively under pressure to protect playback. The team reported that its streaming availability metric held steady during the incident shown in the post. [Netflix's 2020 load-shedding write-up](https://netflixtechblog.com/keeping-netflix-reliable-using-prioritized-load-shedding-6cc827b02f94)
 
 **Apply it to Trail Notes.** In the hypothetical lesson workload, protect the guide request first during a sustained capacity shortfall. Optional work, such as recommendations, may be a candidate for shedding. Decide which requests qualify and measure whether essential requests still meet their latency target.
 
